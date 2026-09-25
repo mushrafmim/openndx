@@ -230,9 +230,6 @@ brew install openndx/tap/ondx
 curl -fsSL https://raw.githubusercontent.com/openndx/openndx-core/main/scripts/install.sh | sh
 
 # Windows (PowerShell)
-scoop bucket add openndx https://github.com/openndx/scoop-bucket
-scoop install ondx
-# or
 irm https://raw.githubusercontent.com/openndx/openndx-core/main/scripts/install.ps1 | iex
 
 # Go developers
