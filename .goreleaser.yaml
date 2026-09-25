@@ -87,7 +87,7 @@ release:
 homebrew_casks:
   - name: ondx
     repository:
-      owner: openndx
+      owner: '{{ envOrDefault "GITHUB_REPOSITORY_OWNER" "openndx" }}'
       name: homebrew-tap
       token: '{{ envOrDefault "TAP_TOKEN" "" }}'
     directory: Casks
@@ -108,7 +108,7 @@ homebrew_casks:
 scoops:
   - name: ondx
     repository:
-      owner: openndx
+      owner: '{{ envOrDefault "GITHUB_REPOSITORY_OWNER" "openndx" }}'
       name: scoop-bucket
       # Same token as the Homebrew tap; it needs write access to both repos.
       token: '{{ envOrDefault "TAP_TOKEN" "" }}'
