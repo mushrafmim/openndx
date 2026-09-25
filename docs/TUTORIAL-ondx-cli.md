@@ -44,18 +44,9 @@ can verify with the GitHub CLI:
 gh attestation verify ondx_linux_amd64.tar.gz --repo openndx/openndx-core
 ```
 
-### Option C — Windows (Scoop or PowerShell script)
+### Option C — Windows (PowerShell script)
 
-With [Scoop](https://scoop.sh):
-
-```powershell
-scoop bucket add openndx https://github.com/openndx/scoop-bucket
-scoop install ondx
-```
-
-`scoop update ondx` picks up new releases.
-
-Without Scoop, run the PowerShell install script:
+Run the install script from PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/openndx/openndx-core/main/scripts/install.ps1 | iex

@@ -20,7 +20,7 @@ brew install openndx/tap/ondx
 # or
 curl -fsSL https://raw.githubusercontent.com/openndx/openndx-core/main/scripts/install.sh | sh
 # or, on Windows (PowerShell)
-scoop bucket add openndx https://github.com/openndx/scoop-bucket; scoop install ondx
+irm https://raw.githubusercontent.com/openndx/openndx-core/main/scripts/install.ps1 | iex
 # or
 go install github.com/openndx/openndx-core/cmd/ondx@latest
 ```
@@ -221,7 +221,7 @@ go test ./internal/cli/...
 
 ### Releases
 
-Pushing a `v*.*.*` tag runs `.github/workflows/release.yml`, whose `goreleaser` job builds `ondx` for linux/darwin/windows × amd64/arm64 per [`.goreleaser.yaml`](../../.goreleaser.yaml), creates the GitHub Release with the archives and `checksums.txt`, attests their build provenance, and updates the `openndx/homebrew-tap` cask and `openndx/scoop-bucket` manifest (both skipped for prereleases or when the `TAP_TOKEN` secret isn't set; the token needs write access to both repos). Dry-run it locally with `goreleaser release --snapshot --clean` (output in `dist/`).
+Pushing a `v*.*.*` tag runs `.github/workflows/release.yml`, whose `goreleaser` job builds `ondx` for linux/darwin/windows × amd64/arm64 per [`.goreleaser.yaml`](../../.goreleaser.yaml), creates the GitHub Release with the archives and `checksums.txt`, attests their build provenance, and updates the `openndx/homebrew-tap` cask (skipped for prereleases or when the `TAP_TOKEN` secret isn't set; the token needs write access to the tap repo). Dry-run it locally with `goreleaser release --snapshot --clean` (output in `dist/`).
 
 ### Project Structure
 
