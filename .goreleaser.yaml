@@ -87,9 +87,12 @@ release:
 homebrew_casks:
   - name: ondx
     repository:
-      owner: openndx
+      owner: '{{ envOrDefault "GITHUB_REPOSITORY_OWNER" "openndx" }}'
       name: homebrew-tap
-      token: '{{ envOrDefault "TAP_TOKEN" "" }}'
+      # Must be exactly {{ .Env.NAME }} — GoReleaser rejects any other template
+      # in token fields. release.yml always sets TAP_TOKEN (empty when the
+      # secret is missing), and skip_upload is checked before the token is read.
+      token: "{{ .Env.TAP_TOKEN }}"
     directory: Casks
     homepage: https://github.com/openndx/openndx-core
     description: OpenNDX management CLI
@@ -108,10 +111,10 @@ homebrew_casks:
 scoops:
   - name: ondx
     repository:
-      owner: openndx
+      owner: '{{ envOrDefault "GITHUB_REPOSITORY_OWNER" "openndx" }}'
       name: scoop-bucket
       # Same token as the Homebrew tap; it needs write access to both repos.
-      token: '{{ envOrDefault "TAP_TOKEN" "" }}'
+      token: "{{ .Env.TAP_TOKEN }}"
     directory: bucket
     homepage: https://github.com/openndx/openndx-core
     description: OpenNDX management CLI
