@@ -5,11 +5,13 @@
 #
 # Environment:
 #   ONDX_VERSION      Release tag to install (e.g. v0.3.0). Default: latest.
+#   ONDX_REPO         GitHub repo to download releases from, for forks/mirrors.
+#                     Default: openndx/openndx-core.
 #   ONDX_INSTALL_DIR  Where to put the binary. Default: /usr/local/bin if
 #                     writable, otherwise $HOME/.local/bin.
 set -eu
 
-REPO="openndx/openndx-core"
+REPO="${ONDX_REPO:-openndx/openndx-core}"
 VERSION="${ONDX_VERSION:-latest}"
 
 err() {

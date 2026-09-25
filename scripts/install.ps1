@@ -4,6 +4,8 @@
 #
 # Environment:
 #   ONDX_VERSION      Release tag to install (e.g. v0.3.0). Default: latest.
+#   ONDX_REPO         GitHub repo to download releases from, for forks/mirrors.
+#                     Default: openndx/openndx-core.
 #   ONDX_INSTALL_DIR  Where to put ondx.exe. Default: %LOCALAPPDATA%\Programs\ondx.
 #                     Added to the user PATH if it isn't there already.
 #
@@ -15,7 +17,7 @@
     # Invoke-WebRequest is much slower with the progress bar on Windows PowerShell 5.1.
     $ProgressPreference = 'SilentlyContinue'
 
-    $repo = 'openndx/openndx-core'
+    $repo = if ($env:ONDX_REPO) { $env:ONDX_REPO } else { 'openndx/openndx-core' }
     $version = if ($env:ONDX_VERSION) { $env:ONDX_VERSION } else { 'latest' }
 
     if ($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
