@@ -35,7 +35,7 @@ Build and publish Docker images to GitHub Container Registry when code is merged
 | `orchestration-engine-publish.yml`  | Orchestration Engine  | `ghcr.io/{owner}/orchestration-engine`         |
 | `policy-decision-point-publish.yml` | Policy Decision Point | `ghcr.io/{owner}/policy-decision-point`        |
 | `portal-backend-publish.yml`        | Portal Backend        | `ghcr.io/{owner}/portal-backend`               |
-| `release.yml`                       | All Services          | Builds all services with version tags          |
+| `release.yml`                       | All Services, `ondx`  | Builds all services + `ondx` CLI binaries with version tags |
 
 **Triggers:**
 
