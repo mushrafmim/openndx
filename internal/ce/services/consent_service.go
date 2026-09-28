@@ -200,13 +200,7 @@ func (s *ConsentService) GetConsentInternalView(ctx context.Context, consentID *
 
 	// Either PendingExpiresAt or GrantExpiresAt will be nil depending on status
 	// Check and update status to expired if necessary
-	if consentRecord.PendingExpiresAt != nil && time.Now().UTC().After(*consentRecord.PendingExpiresAt) && consentRecord.Status == string(models.StatusPending) {
-		consentRecord.Status = string(models.StatusExpired)
-		if err := s.db.WithContext(ctx).Save(&consentRecord).Error; err != nil {
-			return nil, fmt.Errorf("%w: %w", models.ErrConsentGetFailed, err)
-		}
-	} else if consentRecord.GrantExpiresAt != nil && time.Now().UTC().After(*consentRecord.GrantExpiresAt) && consentRecord.Status == string(models.StatusApproved) {
-		consentRecord.Status = string(models.StatusExpired)
+	if markExpiredIfStale(&consentRecord, time.Now().UTC()) {
 		if err := s.db.WithContext(ctx).Save(&consentRecord).Error; err != nil {
 			return nil, fmt.Errorf("%w: %w", models.ErrConsentGetFailed, err)
 		}
@@ -231,8 +225,87 @@ func (s *ConsentService) GetConsentPortalView(ctx context.Context, consentID str
 		return nil, fmt.Errorf("%w: %w", models.ErrConsentGetFailed, err)
 	}
 
+	// Surface the effective status so the portal never offers a decision on a stale request
+	if markExpiredIfStale(&consentRecord, time.Now().UTC()) {
+		if err := s.db.WithContext(ctx).Save(&consentRecord).Error; err != nil {
+			return nil, fmt.Errorf("%w: %w", models.ErrConsentGetFailed, err)
+		}
+	}
+
 	portalView := consentRecord.ToConsentResponsePortalView()
 	return &portalView, nil
+}
+
+// ListConsentsByOwner returns the owner's consent records (newest first), optionally filtered by status.
+// Stale pending/approved records of the owner are expired first so the returned statuses are accurate.
+func (s *ConsentService) ListConsentsByOwner(ctx context.Context, ownerID string, statuses []models.ConsentStatus, limit, offset int) (*models.ListConsentsResponse, error) {
+	if ownerID == "" {
+		return nil, fmt.Errorf("%w: ownerID is required", models.ErrConsentGetFailed)
+	}
+
+	if err := s.expireStaleConsentsByOwner(ctx, ownerID); err != nil {
+		return nil, fmt.Errorf("%w: %w", models.ErrConsentGetFailed, err)
+	}
+
+	query := s.db.WithContext(ctx).Model(&models.ConsentRecord{}).Where("owner_id = ?", ownerID)
+	if len(statuses) > 0 {
+		query = query.Where("status IN ?", statuses)
+	}
+	// New session so Count and Find below each start from the same filters without sharing statement state
+	query = query.Session(&gorm.Session{})
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, fmt.Errorf("%w: %w", models.ErrConsentGetFailed, err)
+	}
+
+	var records []models.ConsentRecord
+	if err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
+		return nil, fmt.Errorf("%w: %w", models.ErrConsentGetFailed, err)
+	}
+
+	consents := make([]models.ConsentSummaryView, 0, len(records))
+	for i := range records {
+		consents = append(consents, records[i].ToConsentSummaryView())
+	}
+
+	return &models.ListConsentsResponse{
+		Consents: consents,
+		Total:    total,
+		Limit:    limit,
+		Offset:   offset,
+	}, nil
+}
+
+// expireStaleConsentsByOwner marks the owner's pending and approved consents whose deadline has passed as expired
+func (s *ConsentService) expireStaleConsentsByOwner(ctx context.Context, ownerID string) error {
+	now := time.Now().UTC()
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.ConsentRecord{}).
+			Where("owner_id = ? AND status = ? AND pending_expires_at < ?", ownerID, models.StatusPending, now).
+			Updates(map[string]any{"status": models.StatusExpired, "updated_at": now}).Error; err != nil {
+			return fmt.Errorf("failed to expire pending consents: %w", err)
+		}
+		if err := tx.Model(&models.ConsentRecord{}).
+			Where("owner_id = ? AND status = ? AND grant_expires_at < ?", ownerID, models.StatusApproved, now).
+			Updates(map[string]any{"status": models.StatusExpired, "updated_at": now}).Error; err != nil {
+			return fmt.Errorf("failed to expire approved consents: %w", err)
+		}
+		return nil
+	})
+}
+
+// markExpiredIfStale sets the record's status to expired when its pending or grant deadline has passed.
+// Returns true when the record was changed and needs to be persisted.
+func markExpiredIfStale(record *models.ConsentRecord, now time.Time) bool {
+	switch {
+	case record.Status == string(models.StatusPending) && record.PendingExpiresAt != nil && now.After(*record.PendingExpiresAt):
+	case record.Status == string(models.StatusApproved) && record.GrantExpiresAt != nil && now.After(*record.GrantExpiresAt):
+	default:
+		return false
+	}
+	record.Status = string(models.StatusExpired)
+	return true
 }
 
 // UpdateConsentStatusByPortalAction updates the consent status based on user action from the consent portal
@@ -256,6 +329,18 @@ func (s *ConsentService) UpdateConsentStatusByPortalAction(ctx context.Context, 
 	}
 
 	currentTime := time.Now().UTC()
+
+	// Only a pending, unexpired request can be decided on. An expired request is persisted as
+	// such so the requester has to initiate a fresh one.
+	if markExpiredIfStale(&consentRecord, currentTime) {
+		if err := s.db.WithContext(ctx).Save(&consentRecord).Error; err != nil {
+			return fmt.Errorf("%w: %w", models.ErrConsentUpdateFailed, err)
+		}
+	}
+	if consentRecord.Status != string(models.StatusPending) {
+		return fmt.Errorf("%w: current status is %s", models.ErrConsentNotPending, consentRecord.Status)
+	}
+
 	consentRecord.UpdatedAt = currentTime
 	consentRecord.UpdatedBy = &req.UpdatedBy
 
