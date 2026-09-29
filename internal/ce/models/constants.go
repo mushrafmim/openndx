@@ -72,6 +72,7 @@ var (
 	ErrConsentExpiryFailed = errors.New("failed to check consent expiry")
 	ErrPortalRequestFailed = errors.New("failed to process consent portal request")
 	ErrConsentNotPending   = errors.New("consent is not pending")
+	ErrConsentAccessDenied = errors.New("consent belongs to a different owner")
 )
 
 // ConsentErrorCode represents an error code

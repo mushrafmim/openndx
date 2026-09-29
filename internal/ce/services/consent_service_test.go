@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,6 +40,11 @@ func setupTestService(t *testing.T) (*ConsentService, *gorm.DB) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
+	// Each connection to :memory: is a separate database, so pin the pool to one connection
+	// to let concurrent tests share the table
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 	require.NoError(t, db.Exec(consentRecordsDDL).Error)
 
 	svc, err := NewConsentService(db, "http://consent.example.com")
@@ -167,11 +173,101 @@ func TestGetConsentPortalView_ExpiresStalePending(t *testing.T) {
 	svc, db := setupTestService(t)
 	stale := insertConsent(t, db, "owner-1", "app-a", models.StatusPending, 2*time.Hour)
 
-	view, err := svc.GetConsentPortalView(context.Background(), stale.ConsentID.String())
+	view, err := svc.GetConsentPortalView(context.Background(), stale.ConsentID.String(), "owner-1")
 	require.NoError(t, err)
 	assert.Equal(t, models.StatusExpired, view.Status)
 	assert.Equal(t, stale.ConsentID.String(), view.ConsentID)
 	assert.Equal(t, string(models.StatusExpired), statusOf(t, db, stale.ConsentID))
+}
+
+func TestGetConsentPortalView_OtherOwnerCannotTriggerExpiry(t *testing.T) {
+	svc, db := setupTestService(t)
+	stale := insertConsent(t, db, "owner-1", "app-a", models.StatusPending, 2*time.Hour)
+
+	_, err := svc.GetConsentPortalView(context.Background(), stale.ConsentID.String(), "owner-2")
+	assert.ErrorIs(t, err, models.ErrConsentAccessDenied)
+	assert.Equal(t, string(models.StatusPending), statusOf(t, db, stale.ConsentID))
+}
+
+func TestUpdateConsentStatusByPortalAction_OtherOwnerIsDenied(t *testing.T) {
+	for name, age := range map[string]time.Duration{"fresh": time.Minute, "stale": 2 * time.Hour} {
+		t.Run(name, func(t *testing.T) {
+			svc, db := setupTestService(t)
+			pending := insertConsent(t, db, "owner-1", "app-a", models.StatusPending, age)
+
+			err := svc.UpdateConsentStatusByPortalAction(context.Background(), models.ConsentPortalActionRequest{
+				ConsentID: pending.ConsentID.String(),
+				OwnerID:   "owner-2",
+				Action:    models.ActionApprove,
+				UpdatedBy: "owner-2",
+			})
+			assert.ErrorIs(t, err, models.ErrConsentAccessDenied)
+			assert.Equal(t, string(models.StatusPending), statusOf(t, db, pending.ConsentID))
+		})
+	}
+}
+
+func TestUpdateConsentStatusByPortalAction_SecondDecisionIsRejected(t *testing.T) {
+	svc, db := setupTestService(t)
+	pending := insertConsent(t, db, "owner-1", "app-a", models.StatusPending, time.Minute)
+
+	req := models.ConsentPortalActionRequest{
+		ConsentID: pending.ConsentID.String(),
+		OwnerID:   "owner-1",
+		Action:    models.ActionApprove,
+		UpdatedBy: "owner-1",
+	}
+	require.NoError(t, svc.UpdateConsentStatusByPortalAction(context.Background(), req))
+
+	req.Action = models.ActionReject
+	err := svc.UpdateConsentStatusByPortalAction(context.Background(), req)
+	assert.ErrorIs(t, err, models.ErrConsentNotPending)
+	assert.Equal(t, string(models.StatusApproved), statusOf(t, db, pending.ConsentID))
+}
+
+func TestUpdateConsentStatusByPortalAction_ConcurrentDecisionsHaveSingleWinner(t *testing.T) {
+	svc, db := setupTestService(t)
+	pending := insertConsent(t, db, "owner-1", "app-a", models.StatusPending, time.Minute)
+
+	const attempts = 10
+	var wg sync.WaitGroup
+	errs := make([]error, attempts)
+	for i := range attempts {
+		action := models.ActionApprove
+		if i%2 == 1 {
+			action = models.ActionReject
+		}
+		wg.Go(func() {
+			errs[i] = svc.UpdateConsentStatusByPortalAction(context.Background(), models.ConsentPortalActionRequest{
+				ConsentID: pending.ConsentID.String(),
+				OwnerID:   "owner-1",
+				Action:    action,
+				UpdatedBy: "owner-1",
+			})
+		})
+	}
+	wg.Wait()
+
+	var winner *models.ConsentPortalAction
+	for i, err := range errs {
+		if err == nil {
+			require.Nil(t, winner, "more than one decision succeeded")
+			action := models.ActionApprove
+			if i%2 == 1 {
+				action = models.ActionReject
+			}
+			winner = &action
+			continue
+		}
+		assert.ErrorIs(t, err, models.ErrConsentNotPending)
+	}
+	require.NotNil(t, winner, "no decision succeeded")
+
+	expected := models.StatusApproved
+	if *winner == models.ActionReject {
+		expected = models.StatusRejected
+	}
+	assert.Equal(t, string(expected), statusOf(t, db, pending.ConsentID))
 }
 
 func TestUpdateConsentStatusByPortalAction_ApprovesPending(t *testing.T) {
@@ -180,6 +276,7 @@ func TestUpdateConsentStatusByPortalAction_ApprovesPending(t *testing.T) {
 
 	err := svc.UpdateConsentStatusByPortalAction(context.Background(), models.ConsentPortalActionRequest{
 		ConsentID: pending.ConsentID.String(),
+		OwnerID:   "owner-1",
 		Action:    models.ActionApprove,
 		UpdatedBy: "owner-1",
 	})
@@ -200,6 +297,7 @@ func TestUpdateConsentStatusByPortalAction_RejectsNonPending(t *testing.T) {
 
 			err := svc.UpdateConsentStatusByPortalAction(context.Background(), models.ConsentPortalActionRequest{
 				ConsentID: record.ConsentID.String(),
+				OwnerID:   "owner-1",
 				Action:    models.ActionApprove,
 				UpdatedBy: "owner-1",
 			})
@@ -215,6 +313,7 @@ func TestUpdateConsentStatusByPortalAction_ExpiredPendingCannotBeApproved(t *tes
 
 	err := svc.UpdateConsentStatusByPortalAction(context.Background(), models.ConsentPortalActionRequest{
 		ConsentID: stale.ConsentID.String(),
+		OwnerID:   "owner-1",
 		Action:    models.ActionApprove,
 		UpdatedBy: "owner-1",
 	})
