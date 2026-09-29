@@ -155,8 +155,8 @@ func (h *PortalHandler) GetConsent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get consent from service (context with timeout is propagated)
-	consent, err := h.consentService.GetConsentPortalView(r.Context(), consentID)
+	// Get consent from service; the service verifies the owner matches the authenticated subject (UID)
+	consent, err := h.consentService.GetConsentPortalView(r.Context(), consentID, ownerSubject)
 	if err != nil {
 		// Check if error is due to context cancellation or timeout
 		if r.Context().Err() != nil {
@@ -168,14 +168,12 @@ func (h *PortalHandler) GetConsent(w http.ResponseWriter, r *http.Request) {
 			utils.RespondWithError(w, http.StatusNotFound, models.ErrorCodeConsentNotFound, "Consent not found")
 			return
 		}
+		if errors.Is(err, models.ErrConsentAccessDenied) {
+			utils.RespondWithError(w, http.StatusForbidden, models.ErrorCodeForbidden, "Access denied: consent belongs to a different user")
+			return
+		}
 		slog.Error("Failed to get consent", "error", err)
 		utils.RespondWithError(w, http.StatusInternalServerError, models.ErrorCodeInternalError, "An unexpected error occurred")
-		return
-	}
-
-	// Verify that the consent owner matches the authenticated user's subject (UID)
-	if consent.OwnerID != ownerSubject {
-		utils.RespondWithError(w, http.StatusForbidden, models.ErrorCodeForbidden, "Access denied: consent belongs to a different user")
 		return
 	}
 
@@ -228,33 +226,10 @@ func (h *PortalHandler) UpdateConsent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// First, get the consent to verify ownership (context with timeout is propagated)
-	consent, err := h.consentService.GetConsentPortalView(r.Context(), consentID)
-	if err != nil {
-		// Check if error is due to context cancellation or timeout
-		if r.Context().Err() != nil {
-			slog.Warn("Request context cancelled during service call", "error", r.Context().Err())
-			utils.RespondWithError(w, http.StatusRequestTimeout, models.ErrorCodeInternalError, "Request timeout or cancelled")
-			return
-		}
-		if errors.Is(err, models.ErrConsentNotFound) {
-			utils.RespondWithError(w, http.StatusNotFound, models.ErrorCodeConsentNotFound, "Consent not found")
-			return
-		}
-		slog.Error("Failed to get consent", "error", err)
-		utils.RespondWithError(w, http.StatusInternalServerError, models.ErrorCodeInternalError, "An unexpected error occurred")
-		return
-	}
-
-	// Verify that the consent owner matches the authenticated user's subject (UID)
-	if consent.OwnerID != ownerSubject {
-		utils.RespondWithError(w, http.StatusForbidden, models.ErrorCodeForbidden, "Access denied: consent belongs to a different user")
-		return
-	}
-
-	// Update consent status
+	// Update consent status; the service verifies the owner matches the authenticated subject (UID)
 	updateReq := models.ConsentPortalActionRequest{
 		ConsentID: consentID,
+		OwnerID:   ownerSubject,
 		Action:    models.ConsentPortalAction(actionReq.Action),
 		UpdatedBy: ownerSubject,
 	}
@@ -268,6 +243,10 @@ func (h *PortalHandler) UpdateConsent(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, models.ErrConsentNotFound) {
 			utils.RespondWithError(w, http.StatusNotFound, models.ErrorCodeConsentNotFound, "Consent not found")
+			return
+		}
+		if errors.Is(err, models.ErrConsentAccessDenied) {
+			utils.RespondWithError(w, http.StatusForbidden, models.ErrorCodeForbidden, "Access denied: consent belongs to a different user")
 			return
 		}
 		if errors.Is(err, models.ErrConsentNotPending) {

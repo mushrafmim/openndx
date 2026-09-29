@@ -43,7 +43,8 @@ type CreateConsentRequest struct {
 // ConsentPortalActionRequest defines the structure for consent portal interactions
 type ConsentPortalActionRequest struct {
 	ConsentID string              `json:"consentId"`
-	Action    ConsentPortalAction `json:"action"` // "approve" or "reject"
+	OwnerID   string              `json:"ownerId"` // Subject of the caller; must match the consent's owner
+	Action    ConsentPortalAction `json:"action"`  // "approve" or "reject"
 	UpdatedBy string              `json:"updatedBy"`
 }
 
