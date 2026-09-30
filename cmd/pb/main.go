@@ -50,8 +50,38 @@ func main() {
 	}
 
 	// Create a mux for API routes
-	apiMux := http.NewServeMux()
-	v1Handler.SetupV1Routes(apiMux) // All /api/v1/... routes go here
+	mux := http.NewServeMux()
+
+	// Member endpoints
+	mux.Handle("GET /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllMembers)))
+	mux.Handle("POST /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.CreateMember)))
+	mux.Handle("GET /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetMember)))
+	mux.Handle("PUT /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateMember)))
+
+	// Schema endpoints
+	mux.Handle("GET /api/v1/schemas", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllSchemas)))
+	mux.Handle("POST /api/v1/schemas", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.CreateSchema)))
+	mux.Handle("GET /api/v1/schemas/{schemaId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetSchema)))
+	mux.Handle("PUT /api/v1/schemas/{schemaId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateSchema)))
+
+	// Schema submission endpoints
+	mux.Handle("GET /api/v1/schema-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllSchemaSubmissions)))
+	mux.Handle("POST /api/v1/schema-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.CreateSchemaSubmission)))
+	mux.Handle("GET /api/v1/schema-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetSchemaSubmission)))
+	mux.Handle("PUT /api/v1/schema-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateSchemaSubmission)))
+
+	// Application endpoints
+	mux.Handle("GET /api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllApplications)))
+	mux.Handle("POST /api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.CreateApplication)))
+	mux.Handle("GET /api/v1/applications/{applicationId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetApplication)))
+	mux.Handle("PUT /api/v1/applications/{applicationId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateApplication)))
+	mux.Handle("PUT /api/v1/applications/{applicationId}/policy", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateApplicationPolicy)))
+
+	// Application submission endpoints
+	mux.Handle("GET /api/v1/application-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllApplicationSubmissions)))
+	mux.Handle("POST /api/v1/application-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.CreateApplicationSubmission)))
+	mux.Handle("GET /api/v1/application-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetApplicationSubmission)))
+	mux.Handle("PUT /api/v1/application-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateApplicationSubmission)))
 
 	// Setup middleware chain
 	corsMiddleware := middleware.NewCORSMiddleware()
@@ -144,7 +174,7 @@ func main() {
 	// Apply middleware chain (CORS -> JWT Auth -> Authorization) to the API mux ONLY
 	protectedAPIHandler := corsMiddleware(
 		jwtAuthMiddleware.AuthenticateJWT(
-			authorizationMiddleware.AuthorizeRequest(apiMux),
+			authorizationMiddleware.AuthorizeRequest(mux),
 		),
 	)
 
@@ -153,7 +183,7 @@ func main() {
 
 	// Register public routes directly on the top-level mux
 	// These routes will bypass the audit middleware
-	topLevelMux.Handle("/health", utils.PanicRecoveryMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	topLevelMux.Handle("GET /health", utils.PanicRecoveryMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		type DBHealth struct {
 			Status   string `json:"status"`
 			Error    string `json:"error,omitempty"`
@@ -201,7 +231,7 @@ func main() {
 		utils.RespondWithJSON(w, statusCode, status)
 	})))
 
-	topLevelMux.Handle("/debug", utils.PanicRecoveryMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	topLevelMux.Handle("GET /debug", utils.PanicRecoveryMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		utils.RespondWithJSON(w, http.StatusOK, map[string]string{
 			"service":    "portal-backend",
 			"version":    Version,
@@ -212,7 +242,7 @@ func main() {
 		})
 	})))
 
-	topLevelMux.Handle("/debug/db", utils.PanicRecoveryMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	topLevelMux.Handle("GET /debug/db", utils.PanicRecoveryMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
@@ -279,7 +309,7 @@ func main() {
 	// MUST be protected at network level (VPC, firewall, service mesh, etc.)
 	// See README.md "Deployment Security" section for required security measures.
 	// DO NOT expose this service directly to public internet without proper network isolation.
-	topLevelMux.Handle("/internal/api/v1/", http.StripPrefix("", apiMux))
+	topLevelMux.Handle("GET /internal/api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetApplicationIdByClientId)))
 
 	// Start server
 	port := os.Getenv("PORT")

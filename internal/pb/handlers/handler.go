@@ -117,263 +117,10 @@ func NewV1Handler(db *gorm.DB) (*V1Handler, error) {
 	}, nil
 }
 
-// SetupV1Routes configures all V1 API routes
-func (h *V1Handler) SetupV1Routes(mux *http.ServeMux) {
-	// Schema routes
-	mux.Handle("/api/v1/schemas", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleSchemas)))
-	mux.Handle("/api/v1/schemas/", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleSchemas)))
-
-	// SchemaSubmission routes
-	mux.Handle("/api/v1/schema-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleSchemaSubmissions)))
-	mux.Handle("/api/v1/schema-submissions/", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleSchemaSubmissions)))
-
-	// Application routes
-	mux.Handle("/internal/api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleInternalApplications)))
-	mux.Handle("/internal/api/v1/applications/", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleInternalApplications)))
-	mux.Handle("/api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleApplications)))
-	mux.Handle("/api/v1/applications/", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleApplications)))
-
-	// ApplicationSubmission routes
-	mux.Handle("/api/v1/application-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleApplicationSubmissions)))
-	mux.Handle("/api/v1/application-submissions/", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleApplicationSubmissions)))
-
-	// Member routes
-	mux.Handle("/api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleMembers)))
-	mux.Handle("/api/v1/members/", utils.PanicRecoveryMiddleware(http.HandlerFunc(h.handleMembers)))
-}
-
-// handleMembers handles member-related routes
-func (h *V1Handler) handleMembers(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/members")
-	parts := strings.Split(strings.Trim(path, "/"), "/")
-
-	// Handle collection endpoint: GET /api/v1/members and POST /api/v1/members
-	if len(parts) == 1 && parts[0] == "" {
-		switch r.Method {
-		case http.MethodGet:
-			idpUserId := r.URL.Query().Get("idpUserId")
-			email := r.URL.Query().Get("email")
-			h.getAllMembers(w, r, &idpUserId, &email)
-		case http.MethodPost:
-			h.createMember(w, r)
-		default:
-			utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		}
-		return
-	}
-
-	if len(parts) < 1 || parts[0] == "" {
-		utils.RespondWithError(w, http.StatusBadRequest, "Member ID is required")
-		return
-	}
-
-	memberId := parts[0]
-
-	// Handle base member endpoint: GET /api/v1/members/:memberId and PUT /api/v1/members/:memberId
-	if len(parts) == 1 {
-		switch r.Method {
-		case http.MethodGet:
-			h.getMember(w, r, memberId)
-		case http.MethodPut:
-			h.updateMember(w, r, memberId)
-		default:
-			utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		}
-		return
-	}
-
-	utils.RespondWithError(w, http.StatusNotFound, "Endpoint not found")
-}
-
-// handleSchemas handles schema-related routes
-func (h *V1Handler) handleSchemas(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/schemas")
-	parts := strings.Split(strings.Trim(path, "/"), "/")
-
-	// Handle collection endpoint: GET /api/v1/schemas and POST /api/v1/schemas
-	if len(parts) == 1 && parts[0] == "" {
-		switch r.Method {
-		case http.MethodGet:
-			memberId := r.URL.Query().Get("memberId")
-			h.getAllSchemas(w, r, &memberId)
-		case http.MethodPost:
-			h.createSchema(w, r)
-		default:
-			utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		}
-		return
-	}
-	if len(parts) < 1 || parts[0] == "" {
-		utils.RespondWithError(w, http.StatusBadRequest, "Schema ID is required")
-		return
-	}
-	schemaId := parts[0]
-
-	// Handle specific schema endpoint: GET /api/v1/schemas/:schemaId and PUT /api/v1/schemas/:schemaId
-	if len(parts) == 1 {
-		switch r.Method {
-		case http.MethodGet:
-			h.getSchema(w, r, schemaId)
-		case http.MethodPut:
-			h.updateSchema(w, r, schemaId)
-		default:
-			utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		}
-		return
-	}
-
-	utils.RespondWithError(w, http.StatusNotFound, "Endpoint not found")
-}
-
-// handleSchemaSubmissions handles schema submission-related routes
-func (h *V1Handler) handleSchemaSubmissions(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/schema-submissions")
-	parts := strings.Split(strings.Trim(path, "/"), "/")
-
-	// Handle collection endpoint: GET /api/v1/schema-submissions and POST /api/v1/schema-submissions
-	if len(parts) == 1 && parts[0] == "" {
-		switch r.Method {
-		case http.MethodGet:
-			status := r.URL.Query()["status"]
-			memberId := r.URL.Query().Get("memberId")
-			h.getAllSchemaSubmissions(w, r, &memberId, &status)
-		case http.MethodPost:
-			h.createSchemaSubmission(w, r, nil)
-		default:
-			utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		}
-		return
-	}
-	if len(parts) < 1 || parts[0] == "" {
-		utils.RespondWithError(w, http.StatusBadRequest, "Submission ID is required")
-		return
-	}
-	submissionId := parts[0]
-	// Handle specific schema submission endpoint: GET /api/v1/schema-submissions/:submissionId and PUT /api/v1/schema-submissions/:submissionId
-	if len(parts) == 1 {
-		switch r.Method {
-		case http.MethodGet:
-			h.getSchemaSubmission(w, r, submissionId)
-		case http.MethodPut:
-			h.updateSchemaSubmission(w, r, submissionId)
-		default:
-			utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		}
-		return
-	}
-
-	utils.RespondWithError(w, http.StatusNotFound, "Endpoint not found")
-}
-
-// handleInternalApplications handles internal application-related routes
-func (h *V1Handler) handleInternalApplications(w http.ResponseWriter, r *http.Request) {
-	// Only internal operation currently needed is getApplicationId by IdpClientId
-	if r.URL.Path != "/internal/api/v1/applications" && r.URL.Path != "/internal/api/v1/applications/" {
-		utils.RespondWithError(w, http.StatusNotFound, "Endpoint not found")
-		return
-	}
-	switch r.Method {
-	case http.MethodGet:
-		h.getApplicationIdByClientId(w, r)
-	default:
-		utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-	}
-}
-
-// handleApplications handles application-related routes
-func (h *V1Handler) handleApplications(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/applications")
-	parts := strings.Split(strings.Trim(path, "/"), "/")
-
-	// Handle collection endpoint: GET /api/v1/applications and POST /api/v1/applications
-	if len(parts) == 1 && parts[0] == "" {
-		switch r.Method {
-		case http.MethodGet:
-			memberId := r.URL.Query().Get("memberId")
-			h.getAllApplications(w, r, &memberId)
-		case http.MethodPost:
-			h.createApplication(w, r)
-		default:
-			utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		}
-		return
-	}
-	if len(parts) < 1 || parts[0] == "" {
-		utils.RespondWithError(w, http.StatusBadRequest, "Application ID is required")
-		return
-	}
-
-	applicationId := parts[0]
-	// Handle specific application endpoint: GET /api/v1/applications/:applicationId and PUT /api/v1/applications/:applicationId
-	if len(parts) == 1 {
-		switch r.Method {
-		case http.MethodGet:
-			h.getApplication(w, r, applicationId)
-		case http.MethodPut:
-			h.updateApplication(w, r, applicationId)
-		default:
-			utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		}
-		return
-	}
-
-	// Handle policy sub-resource: PUT /api/v1/applications/:applicationId/policy
-	if len(parts) == 2 && parts[1] == "policy" {
-		switch r.Method {
-		case http.MethodPut:
-			h.updateApplicationPolicy(w, r, applicationId)
-		default:
-			utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		}
-		return
-	}
-
-	utils.RespondWithError(w, http.StatusNotFound, "Endpoint not found")
-}
-
-// handleApplicationSubmissions handles application submission-related routes
-func (h *V1Handler) handleApplicationSubmissions(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/application-submissions")
-	parts := strings.Split(strings.Trim(path, "/"), "/")
-
-	// Handle collection endpoint: GET /api/v1/application-submissions and POST /api/v1/application-submissions
-	if len(parts) == 1 && parts[0] == "" {
-		switch r.Method {
-		case http.MethodGet:
-			status := r.URL.Query()["status"]
-			memberId := r.URL.Query().Get("memberId")
-			h.getAllApplicationSubmissions(w, r, &memberId, &status)
-		case http.MethodPost:
-			h.createApplicationSubmission(w, r, nil)
-		default:
-			utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		}
-		return
-	}
-
-	if len(parts) < 1 || parts[0] == "" {
-		utils.RespondWithError(w, http.StatusBadRequest, "Submission ID is required")
-		return
-	}
-
-	submissionId := parts[0]
-	// Handle specific application submission endpoint: GET /api/v1/application-submissions/:submissionId and PUT /api/v1/application-submissions/:submissionId
-	if len(parts) == 1 {
-		switch r.Method {
-		case http.MethodGet:
-			h.getApplicationSubmission(w, r, submissionId)
-		case http.MethodPut:
-			h.updateApplicationSubmission(w, r, submissionId)
-		default:
-			utils.RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		}
-		return
-	}
-	utils.RespondWithError(w, http.StatusNotFound, "Endpoint not found")
-}
-
 // Member handlers
-func (h *V1Handler) createMember(w http.ResponseWriter, r *http.Request) {
+
+// CreateMember handles POST /api/v1/members
+func (h *V1Handler) CreateMember(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -411,7 +158,10 @@ func (h *V1Handler) createMember(w http.ResponseWriter, r *http.Request) {
 	utils.RespondWithSuccess(w, http.StatusCreated, member)
 }
 
-func (h *V1Handler) updateMember(w http.ResponseWriter, r *http.Request, memberId string) {
+// UpdateMember handles PUT /api/v1/members/{memberId}
+func (h *V1Handler) UpdateMember(w http.ResponseWriter, r *http.Request) {
+	memberId := r.PathValue("memberId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -455,7 +205,10 @@ func (h *V1Handler) updateMember(w http.ResponseWriter, r *http.Request, memberI
 	utils.RespondWithSuccess(w, http.StatusOK, member)
 }
 
-func (h *V1Handler) getMember(w http.ResponseWriter, r *http.Request, memberId string) {
+// GetMember handles GET /api/v1/members/{memberId}
+func (h *V1Handler) GetMember(w http.ResponseWriter, r *http.Request) {
+	memberId := r.PathValue("memberId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -481,7 +234,10 @@ func (h *V1Handler) getMember(w http.ResponseWriter, r *http.Request, memberId s
 	utils.RespondWithSuccess(w, http.StatusOK, member)
 }
 
-func (h *V1Handler) getAllMembers(w http.ResponseWriter, r *http.Request, idpUserId *string, email *string) {
+// GetAllMembers handles GET /api/v1/members
+func (h *V1Handler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
+	idpUserId := r.URL.Query().Get("idpUserId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -494,8 +250,8 @@ func (h *V1Handler) getAllMembers(w http.ResponseWriter, r *http.Request, idpUse
 
 	if user.HasPermission(models.PermissionReadAllMembers) {
 		// Admin can use provided filters or see all
-		filteredIdpUserId = idpUserId
-		// Note: We still accept email parameter from query but don't use it
+		filteredIdpUserId = &idpUserId
+		// Note: The email query parameter is accepted but not used,
 		// since IdpUserID filtering is sufficient for uniqueness
 	} else if user.HasPermission(models.PermissionReadMember) {
 		// Regular users can only see their own member record
@@ -521,8 +277,13 @@ func (h *V1Handler) getAllMembers(w http.ResponseWriter, r *http.Request, idpUse
 	utils.RespondWithSuccess(w, http.StatusOK, response)
 }
 
-// Schema handlers
-func (h *V1Handler) getAllSchemaSubmissions(w http.ResponseWriter, r *http.Request, memberId *string, statusFilter *[]string) {
+// Schema submission handlers
+
+// GetAllSchemaSubmissions handles GET /api/v1/schema-submissions
+func (h *V1Handler) GetAllSchemaSubmissions(w http.ResponseWriter, r *http.Request) {
+	memberId := r.URL.Query().Get("memberId")
+	statusFilter := r.URL.Query()["status"]
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -534,7 +295,7 @@ func (h *V1Handler) getAllSchemaSubmissions(w http.ResponseWriter, r *http.Reque
 	var filteredMemberId *string
 	if user.HasPermission(models.PermissionReadAllSchemaSubmissions) {
 		// Admin/System can use provided filters or see all
-		filteredMemberId = memberId
+		filteredMemberId = &memberId
 	} else if user.HasPermission(models.PermissionReadSchemaSubmission) {
 		// Regular users can only see their own submissions
 		// Get member ID for the authenticated user (cached)
@@ -549,7 +310,7 @@ func (h *V1Handler) getAllSchemaSubmissions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	submissions, err := h.schemaService.GetSchemaSubmissions(filteredMemberId, statusFilter)
+	submissions, err := h.schemaService.GetSchemaSubmissions(filteredMemberId, &statusFilter)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -562,7 +323,10 @@ func (h *V1Handler) getAllSchemaSubmissions(w http.ResponseWriter, r *http.Reque
 	utils.RespondWithSuccess(w, http.StatusOK, response)
 }
 
-func (h *V1Handler) getSchemaSubmission(w http.ResponseWriter, r *http.Request, submissionId string) {
+// GetSchemaSubmission handles GET /api/v1/schema-submissions/{submissionId}
+func (h *V1Handler) GetSchemaSubmission(w http.ResponseWriter, r *http.Request) {
+	submissionId := r.PathValue("submissionId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -601,7 +365,8 @@ func (h *V1Handler) getSchemaSubmission(w http.ResponseWriter, r *http.Request, 
 	utils.RespondWithSuccess(w, http.StatusOK, submission)
 }
 
-func (h *V1Handler) createSchemaSubmission(w http.ResponseWriter, r *http.Request, memberId *string) {
+// CreateSchemaSubmission handles POST /api/v1/schema-submissions
+func (h *V1Handler) CreateSchemaSubmission(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -619,11 +384,6 @@ func (h *V1Handler) createSchemaSubmission(w http.ResponseWriter, r *http.Reques
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
-	}
-
-	// If memberId is provided from URL parameter, use it
-	if memberId != nil {
-		req.MemberID = *memberId
 	}
 
 	// For non-admin users, ensure they can only create submissions for themselves
@@ -663,7 +423,10 @@ func (h *V1Handler) createSchemaSubmission(w http.ResponseWriter, r *http.Reques
 	utils.RespondWithSuccess(w, http.StatusCreated, submission)
 }
 
-func (h *V1Handler) updateSchemaSubmission(w http.ResponseWriter, r *http.Request, submissionId string) {
+// UpdateSchemaSubmission handles PUT /api/v1/schema-submissions/{submissionId}
+func (h *V1Handler) UpdateSchemaSubmission(w http.ResponseWriter, r *http.Request) {
+	submissionId := r.PathValue("submissionId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -721,7 +484,12 @@ func (h *V1Handler) updateSchemaSubmission(w http.ResponseWriter, r *http.Reques
 	utils.RespondWithSuccess(w, http.StatusOK, submission)
 }
 
-func (h *V1Handler) getAllSchemas(w http.ResponseWriter, r *http.Request, memberId *string) {
+// Schema handlers
+
+// GetAllSchemas handles GET /api/v1/schemas
+func (h *V1Handler) GetAllSchemas(w http.ResponseWriter, r *http.Request) {
+	memberId := r.URL.Query().Get("memberId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -747,7 +515,7 @@ func (h *V1Handler) getAllSchemas(w http.ResponseWriter, r *http.Request, member
 		filteredMemberId = &userMemberId
 	} else {
 		// Admin can specify memberId or see all
-		filteredMemberId = memberId
+		filteredMemberId = &memberId
 	}
 
 	schemas, err := h.schemaService.GetSchemas(filteredMemberId)
@@ -763,7 +531,10 @@ func (h *V1Handler) getAllSchemas(w http.ResponseWriter, r *http.Request, member
 	utils.RespondWithSuccess(w, http.StatusOK, response)
 }
 
-func (h *V1Handler) getSchema(w http.ResponseWriter, r *http.Request, schemaId string) {
+// GetSchema handles GET /api/v1/schemas/{schemaId}
+func (h *V1Handler) GetSchema(w http.ResponseWriter, r *http.Request) {
+	schemaId := r.PathValue("schemaId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -802,7 +573,8 @@ func (h *V1Handler) getSchema(w http.ResponseWriter, r *http.Request, schemaId s
 	utils.RespondWithSuccess(w, http.StatusOK, schema)
 }
 
-func (h *V1Handler) createSchema(w http.ResponseWriter, r *http.Request) {
+// CreateSchema handles POST /api/v1/schemas
+func (h *V1Handler) CreateSchema(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -850,7 +622,10 @@ func (h *V1Handler) createSchema(w http.ResponseWriter, r *http.Request) {
 	utils.RespondWithSuccess(w, http.StatusCreated, schema)
 }
 
-func (h *V1Handler) updateSchema(w http.ResponseWriter, r *http.Request, schemaId string) {
+// UpdateSchema handles PUT /api/v1/schemas/{schemaId}
+func (h *V1Handler) UpdateSchema(w http.ResponseWriter, r *http.Request) {
+	schemaId := r.PathValue("schemaId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -908,8 +683,13 @@ func (h *V1Handler) updateSchema(w http.ResponseWriter, r *http.Request, schemaI
 	utils.RespondWithSuccess(w, http.StatusOK, schema)
 }
 
-// Application handlers
-func (h *V1Handler) getAllApplicationSubmissions(w http.ResponseWriter, r *http.Request, memberId *string, statusFilter *[]string) {
+// Application submission handlers
+
+// GetAllApplicationSubmissions handles GET /api/v1/application-submissions
+func (h *V1Handler) GetAllApplicationSubmissions(w http.ResponseWriter, r *http.Request) {
+	memberId := r.URL.Query().Get("memberId")
+	statusFilter := r.URL.Query()["status"]
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -923,7 +703,7 @@ func (h *V1Handler) getAllApplicationSubmissions(w http.ResponseWriter, r *http.
 		return
 	}
 
-	var finalMemberId *string = memberId
+	var finalMemberId *string = &memberId
 
 	// For non-admin users, force filtering to their own submissions only
 	if !user.IsAdmin() {
@@ -938,7 +718,7 @@ func (h *V1Handler) getAllApplicationSubmissions(w http.ResponseWriter, r *http.
 		finalMemberId = &userMemberID
 	}
 
-	submissions, err := h.applicationService.GetApplicationSubmissions(r.Context(), finalMemberId, statusFilter)
+	submissions, err := h.applicationService.GetApplicationSubmissions(r.Context(), finalMemberId, &statusFilter)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -951,7 +731,10 @@ func (h *V1Handler) getAllApplicationSubmissions(w http.ResponseWriter, r *http.
 	utils.RespondWithSuccess(w, http.StatusOK, response)
 }
 
-func (h *V1Handler) getApplicationSubmission(w http.ResponseWriter, r *http.Request, submissionId string) {
+// GetApplicationSubmission handles GET /api/v1/application-submissions/{submissionId}
+func (h *V1Handler) GetApplicationSubmission(w http.ResponseWriter, r *http.Request) {
+	submissionId := r.PathValue("submissionId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -990,7 +773,8 @@ func (h *V1Handler) getApplicationSubmission(w http.ResponseWriter, r *http.Requ
 	utils.RespondWithSuccess(w, http.StatusOK, submission)
 }
 
-func (h *V1Handler) createApplicationSubmission(w http.ResponseWriter, r *http.Request, memberId *string) {
+// CreateApplicationSubmission handles POST /api/v1/application-submissions
+func (h *V1Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -1008,11 +792,6 @@ func (h *V1Handler) createApplicationSubmission(w http.ResponseWriter, r *http.R
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
-	}
-
-	// If memberId is provided from URL parameter, use it
-	if memberId != nil {
-		req.MemberID = *memberId
 	}
 
 	// For non-admin users, ensure they can only create submissions for themselves
@@ -1052,7 +831,10 @@ func (h *V1Handler) createApplicationSubmission(w http.ResponseWriter, r *http.R
 	utils.RespondWithSuccess(w, http.StatusCreated, submission)
 }
 
-func (h *V1Handler) updateApplicationSubmission(w http.ResponseWriter, r *http.Request, submissionId string) {
+// UpdateApplicationSubmission handles PUT /api/v1/application-submissions/{submissionId}
+func (h *V1Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.Request) {
+	submissionId := r.PathValue("submissionId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -1110,7 +892,12 @@ func (h *V1Handler) updateApplicationSubmission(w http.ResponseWriter, r *http.R
 	utils.RespondWithSuccess(w, http.StatusOK, submission)
 }
 
-func (h *V1Handler) getAllApplications(w http.ResponseWriter, r *http.Request, memberId *string) {
+// Application handlers
+
+// GetAllApplications handles GET /api/v1/applications
+func (h *V1Handler) GetAllApplications(w http.ResponseWriter, r *http.Request) {
+	memberId := r.URL.Query().Get("memberId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -1122,7 +909,7 @@ func (h *V1Handler) getAllApplications(w http.ResponseWriter, r *http.Request, m
 	var filteredMemberId *string
 	if user.HasPermission(models.PermissionReadAllApplications) {
 		// Admin/System can use provided filters or see all
-		filteredMemberId = memberId
+		filteredMemberId = &memberId
 	} else if user.HasPermission(models.PermissionReadApplication) {
 		// Regular users can only see their own applications
 		// Get member ID for the authenticated user (cached)
@@ -1150,7 +937,10 @@ func (h *V1Handler) getAllApplications(w http.ResponseWriter, r *http.Request, m
 	utils.RespondWithSuccess(w, http.StatusOK, response)
 }
 
-func (h *V1Handler) getApplication(w http.ResponseWriter, r *http.Request, applicationId string) {
+// GetApplication handles GET /api/v1/applications/{applicationId}
+func (h *V1Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
+	applicationId := r.PathValue("applicationId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -1189,7 +979,8 @@ func (h *V1Handler) getApplication(w http.ResponseWriter, r *http.Request, appli
 	utils.RespondWithSuccess(w, http.StatusOK, application)
 }
 
-func (h *V1Handler) getApplicationIdByClientId(w http.ResponseWriter, r *http.Request) {
+// GetApplicationIdByClientId handles GET /internal/api/v1/applications
+func (h *V1Handler) GetApplicationIdByClientId(w http.ResponseWriter, r *http.Request) {
 	idpClientId := r.URL.Query().Get("idpClientId")
 	if idpClientId == "" {
 		utils.RespondWithError(w, http.StatusBadRequest, "idpClientId query parameter is required")
@@ -1204,7 +995,8 @@ func (h *V1Handler) getApplicationIdByClientId(w http.ResponseWriter, r *http.Re
 	utils.RespondWithSuccess(w, http.StatusOK, applicationId)
 }
 
-func (h *V1Handler) createApplication(w http.ResponseWriter, r *http.Request) {
+// CreateApplication handles POST /api/v1/applications
+func (h *V1Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -1252,7 +1044,10 @@ func (h *V1Handler) createApplication(w http.ResponseWriter, r *http.Request) {
 	utils.RespondWithSuccess(w, http.StatusCreated, application)
 }
 
-func (h *V1Handler) updateApplication(w http.ResponseWriter, r *http.Request, applicationId string) {
+// UpdateApplication handles PUT /api/v1/applications/{applicationId}
+func (h *V1Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
+	applicationId := r.PathValue("applicationId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
@@ -1310,7 +1105,10 @@ func (h *V1Handler) updateApplication(w http.ResponseWriter, r *http.Request, ap
 	utils.RespondWithSuccess(w, http.StatusOK, application)
 }
 
-func (h *V1Handler) updateApplicationPolicy(w http.ResponseWriter, r *http.Request, applicationId string) {
+// UpdateApplicationPolicy handles PUT /api/v1/applications/{applicationId}/policy
+func (h *V1Handler) UpdateApplicationPolicy(w http.ResponseWriter, r *http.Request) {
+	applicationId := r.PathValue("applicationId")
+
 	// Get authenticated user
 	user, err := middleware.GetUserFromRequest(r)
 	if err != nil {
