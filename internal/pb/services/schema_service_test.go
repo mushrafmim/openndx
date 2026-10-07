@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/stretchr/testify/assert"
 
@@ -116,7 +117,7 @@ func TestSchemaService_UpdateSchema(t *testing.T) {
 		mock.ExpectQuery(`SELECT .* FROM "schemas"`).
 			WithArgs(schemaID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"schema_id", "schema_name", "schema_description", "sdl", "endpoint", "member_id", "version", "created_at", "updated_at"}).
-				AddRow(schemaID, "Original Name", originalDesc, "type Query { original: String }", "http://original.com", "member-123", string(models.ActiveVersion), time.Now(), time.Now()))
+				AddRow(schemaID, "Original Name", originalDesc, "type Query { original: String }", "http://original.com", "member-123", string(kernel.ActiveVersion), time.Now(), time.Now()))
 
 		// Mock: Update schema
 		mock.ExpectExec(`UPDATE "schemas"`).
@@ -181,7 +182,7 @@ func TestSchemaService_GetSchema(t *testing.T) {
 		mock.ExpectQuery(`SELECT .* FROM "schemas"`).
 			WithArgs(schemaID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"schema_id", "schema_name", "schema_description", "sdl", "endpoint", "member_id", "version", "created_at", "updated_at"}).
-				AddRow(schemaID, "Test Schema", desc, "type Query { test: String }", "http://example.com", "member-123", string(models.ActiveVersion), time.Now(), time.Now()))
+				AddRow(schemaID, "Test Schema", desc, "type Query { test: String }", "http://example.com", "member-123", string(kernel.ActiveVersion), time.Now(), time.Now()))
 
 		result, err := service.GetSchema(schemaID)
 
@@ -228,8 +229,8 @@ func TestSchemaService_GetSchemas(t *testing.T) {
 		// Mock: Find all schemas
 		mock.ExpectQuery(`SELECT .* FROM "schemas" ORDER BY created_at DESC`).
 			WillReturnRows(sqlmock.NewRows([]string{"schema_id", "schema_name", "sdl", "endpoint", "member_id", "version", "created_at", "updated_at"}).
-				AddRow("sch_1", "Schema 1", "type Query { test1: String }", "http://example.com", "member-1", string(models.ActiveVersion), time.Now(), time.Now()).
-				AddRow("sch_2", "Schema 2", "type Query { test2: String }", "http://example.com", "member-2", string(models.ActiveVersion), time.Now(), time.Now()))
+				AddRow("sch_1", "Schema 1", "type Query { test1: String }", "http://example.com", "member-1", string(kernel.ActiveVersion), time.Now(), time.Now()).
+				AddRow("sch_2", "Schema 2", "type Query { test2: String }", "http://example.com", "member-2", string(kernel.ActiveVersion), time.Now(), time.Now()))
 
 		result, err := service.GetSchemas(nil)
 
@@ -252,7 +253,7 @@ func TestSchemaService_GetSchemas(t *testing.T) {
 		mock.ExpectQuery(`SELECT .* FROM "schemas" WHERE member_id = .* ORDER BY created_at DESC`).
 			WithArgs(memberID).
 			WillReturnRows(sqlmock.NewRows([]string{"schema_id", "schema_name", "sdl", "endpoint", "member_id", "version", "created_at", "updated_at"}).
-				AddRow("sch_1", "Schema 1", "type Query { test1: String }", "http://example.com", memberID, string(models.ActiveVersion), time.Now(), time.Now()))
+				AddRow("sch_1", "Schema 1", "type Query { test1: String }", "http://example.com", memberID, string(kernel.ActiveVersion), time.Now(), time.Now()))
 
 		result, err := service.GetSchemas(&memberID)
 
@@ -302,7 +303,7 @@ func TestSchemaService_CreateSchemaSubmission(t *testing.T) {
 		if result != nil {
 			assert.Equal(t, req.SchemaName, result.SchemaName)
 			assert.NotEmpty(t, result.SubmissionID)
-			assert.Equal(t, string(models.StatusPending), result.Status)
+			assert.Equal(t, string(kernel.StatusPending), result.Status)
 		}
 
 		assert.NoError(t, mock.ExpectationsWereMet())
@@ -355,7 +356,7 @@ func TestSchemaService_UpdateSchemaSubmission(t *testing.T) {
 		mock.ExpectQuery(`SELECT .* FROM "schema_submissions"`).
 			WithArgs(submissionID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "schema_name", "sdl", "schema_endpoint", "member_id", "status", "created_at", "updated_at"}).
-				AddRow(submissionID, "Original", "type Query { original: String }", "http://original.com", "member-123", string(models.StatusPending), time.Now(), time.Now()))
+				AddRow(submissionID, "Original", "type Query { original: String }", "http://original.com", "member-123", string(kernel.StatusPending), time.Now(), time.Now()))
 
 		// Mock: Update submission
 		mock.ExpectExec(`UPDATE "schema_submissions"`).
@@ -414,7 +415,7 @@ func TestSchemaService_UpdateSchemaSubmission(t *testing.T) {
 		mock.ExpectQuery(`SELECT .* FROM "schema_submissions"`).
 			WithArgs(submissionID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "schema_name", "sdl", "schema_endpoint", "member_id", "status", "created_at", "updated_at"}).
-				AddRow(submissionID, "Test", "type Query { test: String }", "http://example.com", "member-123", string(models.StatusPending), time.Now(), time.Now()))
+				AddRow(submissionID, "Test", "type Query { test: String }", "http://example.com", "member-123", string(kernel.StatusPending), time.Now(), time.Now()))
 
 		emptySDL := ""
 		req := &models.UpdateSchemaSubmissionRequest{SDL: &emptySDL}
@@ -442,7 +443,7 @@ func TestSchemaService_GetSchemaSubmission(t *testing.T) {
 		mock.ExpectQuery(`SELECT .* FROM "schema_submissions"`).
 			WithArgs(submissionID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "schema_name", "sdl", "schema_endpoint", "member_id", "status", "created_at", "updated_at"}).
-				AddRow(submissionID, "Test Submission", "type Query { test: String }", "http://example.com", "member-123", string(models.StatusPending), time.Now(), time.Now()))
+				AddRow(submissionID, "Test Submission", "type Query { test: String }", "http://example.com", "member-123", string(kernel.StatusPending), time.Now(), time.Now()))
 
 		result, err := service.GetSchemaSubmission(submissionID)
 
@@ -489,8 +490,8 @@ func TestSchemaService_GetSchemaSubmissions(t *testing.T) {
 		// Mock: Find all submissions (with Preload)
 		mock.ExpectQuery(`SELECT .* FROM "schema_submissions"`).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "schema_name", "sdl", "schema_endpoint", "member_id", "status", "created_at", "updated_at"}).
-				AddRow("sub_1", "Sub 1", "type Query { test1: String }", "http://example.com", "member-123", string(models.StatusPending), time.Now(), time.Now()).
-				AddRow("sub_2", "Sub 2", "type Query { test2: String }", "http://example.com", "member-123", string(models.StatusPending), time.Now(), time.Now()))
+				AddRow("sub_1", "Sub 1", "type Query { test1: String }", "http://example.com", "member-123", string(kernel.StatusPending), time.Now(), time.Now()).
+				AddRow("sub_2", "Sub 2", "type Query { test2: String }", "http://example.com", "member-123", string(kernel.StatusPending), time.Now(), time.Now()))
 
 		// Preload query for Member (GORM only preloads if foreign key is not nil)
 		// Since PreviousSchemaID is nil in test data, schema preload is skipped
@@ -517,7 +518,7 @@ func TestSchemaService_GetSchemaSubmissions(t *testing.T) {
 		mock.ExpectQuery(`SELECT .* FROM "schema_submissions"`).
 			WithArgs(memberID).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "schema_name", "sdl", "schema_endpoint", "member_id", "status", "created_at", "updated_at"}).
-				AddRow("sub_1", "Sub 1", "type Query { test1: String }", "http://example.com", memberID, string(models.StatusPending), time.Now(), time.Now()))
+				AddRow("sub_1", "Sub 1", "type Query { test1: String }", "http://example.com", memberID, string(kernel.StatusPending), time.Now(), time.Now()))
 
 		// Preload query for Member (GORM only preloads if foreign key is not nil)
 		// Since PreviousSchemaID is nil in test data, schema preload is skipped
@@ -539,13 +540,13 @@ func TestSchemaService_GetSchemaSubmissions(t *testing.T) {
 		pdpService := NewPDPService("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
-		statusFilter := []string{string(models.StatusApproved)}
+		statusFilter := []string{string(kernel.StatusApproved)}
 
 		// Mock: Find submissions filtered by status
 		mock.ExpectQuery(`SELECT .* FROM "schema_submissions"`).
-			WithArgs(string(models.StatusApproved)).
+			WithArgs(string(kernel.StatusApproved)).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "schema_name", "sdl", "schema_endpoint", "member_id", "status", "created_at", "updated_at"}).
-				AddRow("sub_2", "Sub 2", "type Query { test2: String }", "http://example.com", "member-123", string(models.StatusApproved), time.Now(), time.Now()))
+				AddRow("sub_2", "Sub 2", "type Query { test2: String }", "http://example.com", "member-123", string(kernel.StatusApproved), time.Now(), time.Now()))
 
 		// Preload query for Member (GORM only preloads if foreign key is not nil)
 		// Since PreviousSchemaID is nil in test data, schema preload is skipped
@@ -556,7 +557,7 @@ func TestSchemaService_GetSchemaSubmissions(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, result, 1)
 		if len(result) > 0 {
-			assert.Equal(t, string(models.StatusApproved), result[0].Status)
+			assert.Equal(t, string(kernel.StatusApproved), result[0].Status)
 		}
 
 		assert.NoError(t, mock.ExpectationsWereMet())
@@ -667,7 +668,7 @@ func TestSchemaService_UpdateSchema_EdgeCases(t *testing.T) {
 		mock.ExpectQuery(`SELECT .* FROM "schemas"`).
 			WithArgs(schemaID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"schema_id", "schema_name", "schema_description", "sdl", "endpoint", "member_id", "version", "created_at", "updated_at"}).
-				AddRow(schemaID, "Original Name", originalDesc, "type Query { original: String }", "http://original.com", "member-123", string(models.ActiveVersion), time.Now(), time.Now()))
+				AddRow(schemaID, "Original Name", originalDesc, "type Query { original: String }", "http://original.com", "member-123", string(kernel.ActiveVersion), time.Now(), time.Now()))
 
 		// Mock: Update schema
 		mock.ExpectExec(`UPDATE "schemas"`).
@@ -710,7 +711,7 @@ func TestSchemaService_UpdateSchema_EdgeCases(t *testing.T) {
 		mock.ExpectQuery(`SELECT .* FROM "schemas"`).
 			WithArgs(schemaID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"schema_id", "schema_name", "sdl", "endpoint", "member_id", "version", "created_at", "updated_at"}).
-				AddRow(schemaID, "Original", "type Query { original: String }", "http://original.com", "member-123", string(models.ActiveVersion), time.Now(), time.Now()))
+				AddRow(schemaID, "Original", "type Query { original: String }", "http://original.com", "member-123", string(kernel.ActiveVersion), time.Now(), time.Now()))
 
 		// Mock: Update schema
 		mock.ExpectExec(`UPDATE "schemas"`).
@@ -759,7 +760,7 @@ func TestSchemaService_CreateSchemaSubmission_EdgeCases(t *testing.T) {
 		mock.ExpectQuery(`SELECT .* FROM "schemas"`).
 			WithArgs(previousSchemaID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"schema_id", "schema_name", "sdl", "endpoint", "member_id", "version"}).
-				AddRow(previousSchemaID, "Previous Schema", "type Query { prev: String }", "http://prev.com", memberID, string(models.ActiveVersion)))
+				AddRow(previousSchemaID, "Previous Schema", "type Query { prev: String }", "http://prev.com", memberID, string(kernel.ActiveVersion)))
 
 		// Mock: Create submission
 		mock.ExpectQuery(`INSERT INTO "schema_submissions"`).

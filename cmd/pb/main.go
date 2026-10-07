@@ -42,6 +42,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	if os.Getenv("RUN_MIGRATION") == "true" {
+		err = database.AutoMigrate(gormDB,
+			&models.Member{},
+			&models.Schema{},
+			&models.Application{},
+			&models.SchemaSubmission{},
+			&models.ApplicationSubmission{},
+		)
+		if err != nil {
+			slog.Error("Failed to run database migrations", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		slog.Info("Database connected (migration skipped)")
+	}
+
 	// Initialize V1 handlers
 	v1Handler, err := handlers.NewV1Handler(gormDB)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/openndx/openndx-core/internal/pb/idp"
+	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"gorm.io/gorm"
 )
@@ -78,7 +79,7 @@ func (s *ApplicationService) CreateApplication(ctx context.Context, req *models.
 		IdpApplicationID:       idpApplicationID,
 		IdpClientID:            idpClientID,
 		MemberID:               req.MemberID,
-		Version:                string(models.ActiveVersion),
+		Version:                string(kernel.ActiveVersion),
 	}
 
 	if err := s.db.WithContext(ctx).Create(&application).Error; err != nil {
@@ -370,7 +371,7 @@ func (s *ApplicationService) CreateApplicationSubmission(ctx context.Context, re
 		ApplicationName:        req.ApplicationName,
 		ApplicationDescription: req.ApplicationDescription,
 		SelectedFields:         models.SelectedFieldRecords(req.SelectedFields),
-		Status:                 string(models.StatusPending),
+		Status:                 string(kernel.StatusPending),
 		MemberID:               req.MemberID,
 	}
 	if err := s.db.WithContext(ctx).Create(&submission).Error; err != nil {
@@ -430,7 +431,7 @@ func (s *ApplicationService) UpdateApplicationSubmission(ctx context.Context, su
 	if req.Status != nil {
 		submission.Status = *req.Status
 		// Mark that we need to create an application after saving
-		if *req.Status == string(models.StatusApproved) {
+		if *req.Status == string(kernel.StatusApproved) {
 			shouldCreateApplication = true
 		}
 	}
@@ -455,7 +456,7 @@ func (s *ApplicationService) UpdateApplicationSubmission(ctx context.Context, su
 		_, err := s.CreateApplication(ctx, &createApplicationRequest)
 		if err != nil {
 			// Compensation: Update submission status back to pending
-			submission.Status = string(models.StatusPending)
+			submission.Status = string(kernel.StatusPending)
 			if updateErr := s.db.WithContext(ctx).Save(&submission).Error; updateErr != nil {
 				slog.Error("Failed to compensate submission status after application creation failure",
 					"submissionID", submission.SubmissionID,

@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -87,31 +86,19 @@ func ConnectGormDB(config *DatabaseConfig) (*gorm.DB, error) {
 		"port", config.Port,
 		"database", config.Database)
 
-	// Only run migration if environment variable is set
-	if os.Getenv("RUN_MIGRATION") == "true" {
-		slog.Info("Running GORM auto-migration for V1 models")
-		// To avoid issues with GORM creating foreign keys before referenced tables exist,
-		// we migrate the models individually in strict dependency order.
-		orderedModels := []struct {
-			name  string
-			model interface{}
-		}{
-			{"Member", &models.Member{}},
-			{"Schema", &models.Schema{}},
-			{"Application", &models.Application{}},
-			{"SchemaSubmission", &models.SchemaSubmission{}},
-			{"ApplicationSubmission", &models.ApplicationSubmission{}},
-		}
-
-		for _, m := range orderedModels {
-			if err = db.AutoMigrate(m.model); err != nil {
-				return nil, fmt.Errorf("failed to run auto-migration for %s: %w", m.name, err)
-			}
-		}
-		slog.Info("GORM auto-migration completed successfully")
-	} else {
-		slog.Info("Database connected (migration skipped)")
-	}
-
 	return db, nil
+}
+
+// AutoMigrate runs GORM auto-migration for the given models one at a time, in
+// the order given. Callers must list referenced models before the models that
+// reference them, so tables exist before GORM creates foreign keys to them.
+func AutoMigrate(db *gorm.DB, models ...any) error {
+	slog.Info("Running GORM auto-migration for V1 models")
+	for _, m := range models {
+		if err := db.AutoMigrate(m); err != nil {
+			return fmt.Errorf("failed to run auto-migration for %T: %w", m, err)
+		}
+	}
+	slog.Info("GORM auto-migration completed successfully")
+	return nil
 }

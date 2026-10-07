@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/openndx/openndx-core/internal/pb/idp"
+	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/services"
 	"github.com/stretchr/testify/assert"
@@ -648,7 +649,7 @@ func TestSchemaSubmissionEndpoints(t *testing.T) {
 			SDL:            "type Query { test: String }",
 			SchemaEndpoint: "http://example.com/graphql",
 			MemberID:       memberID,
-			Status:         string(models.StatusPending),
+			Status:         string(kernel.StatusPending),
 		}
 		err := testHandler.db.Create(&submission).Error
 		assert.NoError(t, err)
@@ -676,7 +677,7 @@ func TestSchemaSubmissionEndpoints(t *testing.T) {
 			SDL:            "type Query { test: String }",
 			SchemaEndpoint: "http://example.com/graphql",
 			MemberID:       memberID,
-			Status:         string(models.StatusPending),
+			Status:         string(kernel.StatusPending),
 		}
 		err := testHandler.db.Create(&submission).Error
 		assert.NoError(t, err)
@@ -995,7 +996,7 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 			ApplicationName: "Test Submission",
 			SelectedFields:  selectedFields,
 			MemberID:        memberID,
-			Status:          string(models.StatusPending),
+			Status:          string(kernel.StatusPending),
 		}
 		err := testHandler.db.Create(&submission).Error
 		assert.NoError(t, err)
@@ -1082,7 +1083,7 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 			ApplicationName: "Test Submission",
 			SelectedFields:  selectedFields,
 			MemberID:        memberID,
-			Status:          string(models.StatusPending),
+			Status:          string(kernel.StatusPending),
 		}
 		err := testHandler.db.Create(&submission).Error
 		assert.NoError(t, err)

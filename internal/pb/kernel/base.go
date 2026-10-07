@@ -1,4 +1,7 @@
-package models
+// Package kernel holds the shared kernel of the Portal Backend: types used by
+// more than one bounded context. Anything with a single owner belongs in that
+// owner's package instead.
+package kernel
 
 import (
 	"time"

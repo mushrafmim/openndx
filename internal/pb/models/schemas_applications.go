@@ -1,5 +1,7 @@
 package models
 
+import "github.com/openndx/openndx-core/internal/pb/kernel"
+
 // Schema represents the provider_schemas table
 type Schema struct {
 	SchemaID          string  `gorm:"primarykey;column:schema_id" json:"schemaId"`
@@ -9,7 +11,7 @@ type Schema struct {
 	Endpoint          string  `gorm:"column:endpoint;not null" json:"endpoint"`
 	Version           string  `gorm:"column:version;not null" json:"version"`
 	SchemaDescription *string `gorm:"column:schema_description" json:"schemaDescription,omitempty"`
-	BaseModel
+	kernel.BaseModel
 
 	// Relationships
 	Member Member `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`
@@ -31,7 +33,7 @@ type SchemaSubmission struct {
 	Status            string  `gorm:"column:status;not null" json:"status"`
 	MemberID          string  `gorm:"column:member_id;not null" json:"memberId"`
 	Review            *string `gorm:"column:review" json:"review,omitempty"`
-	BaseModel
+	kernel.BaseModel
 
 	// Relationships
 	Member         Member  `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`
@@ -53,7 +55,7 @@ type Application struct {
 	Version                string               `gorm:"column:version;not null" json:"version"`
 	IdpApplicationID       *string              `gorm:"column:idp_application_id" json:"idpApplicationId,omitempty"` // Until the data migration is done this can be nullable
 	IdpClientID            *string              `gorm:"column:idp_client_id" json:"idpClientId,omitempty"`           // Until the data migration is done this can be nullable
-	BaseModel
+	kernel.BaseModel
 
 	// Relationships
 	Member Member `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`
@@ -74,7 +76,7 @@ type ApplicationSubmission struct {
 	MemberID               string               `gorm:"column:member_id;not null" json:"memberId"`
 	Status                 string               `gorm:"column:status;not null" json:"status"`
 	Review                 *string              `gorm:"column:review" json:"review,omitempty"`
-	BaseModel
+	kernel.BaseModel
 
 	// Relationships
 	Member              Member       `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`

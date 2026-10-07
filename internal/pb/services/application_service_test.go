@@ -12,6 +12,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/openndx/openndx-core/internal/pb/idp"
+	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
@@ -720,7 +721,7 @@ func TestApplicationService_CreateApplicationSubmission(t *testing.T) {
 		assert.NotNil(t, result)
 		if result != nil {
 			assert.Equal(t, req.ApplicationName, result.ApplicationName)
-			assert.Equal(t, string(models.StatusPending), result.Status)
+			assert.Equal(t, string(kernel.StatusPending), result.Status)
 		}
 
 		assert.NoError(t, mock.ExpectationsWereMet())
@@ -771,7 +772,7 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 		// 1. Find submission
 		mock.ExpectQuery(`SELECT .*`).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "application_name", "member_id", "status"}).
-				AddRow("sub_123", "Original", "member-123", string(models.StatusPending)))
+				AddRow("sub_123", "Original", "member-123", string(kernel.StatusPending)))
 
 		// 2. Save submission
 		mock.ExpectExec(`UPDATE "application_submissions"`).
@@ -840,7 +841,7 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 		// 1. Find submission
 		mock.ExpectQuery(`SELECT .*`).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "application_name", "member_id", "status"}).
-				AddRow("sub_123", "Original", "member-123", string(models.StatusPending)))
+				AddRow("sub_123", "Original", "member-123", string(kernel.StatusPending)))
 
 		// 2. Save submission (status update to Approved)
 		mock.ExpectExec(`UPDATE "application_submissions"`).
@@ -858,7 +859,7 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 		mock.ExpectExec(`UPDATE "application_submissions"`).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
-		status := string(models.StatusApproved)
+		status := string(kernel.StatusApproved)
 		req := &models.UpdateApplicationSubmissionRequest{
 			Status: &status,
 		}
@@ -885,7 +886,7 @@ func TestApplicationService_GetApplicationSubmission(t *testing.T) {
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT .*`).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "application_name", "member_id", "status"}).
-				AddRow("sub_123", "Test Submission", "member-123", string(models.StatusPending)))
+				AddRow("sub_123", "Test Submission", "member-123", string(kernel.StatusPending)))
 
 		// Preload Member
 		mock.ExpectQuery(`SELECT .* FROM "members" WHERE "members"."member_id" = .*`).
@@ -943,8 +944,8 @@ func TestApplicationService_GetApplicationSubmissions(t *testing.T) {
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT .*`).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "application_name", "member_id", "status"}).
-				AddRow("sub_1", "Sub 1", "member-1", string(models.StatusPending)).
-				AddRow("sub_2", "Sub 2", "member-1", string(models.StatusPending)))
+				AddRow("sub_1", "Sub 1", "member-1", string(kernel.StatusPending)).
+				AddRow("sub_2", "Sub 2", "member-1", string(kernel.StatusPending)))
 
 		// Preload Member
 		mock.ExpectQuery(`SELECT .*`).
@@ -974,7 +975,7 @@ func TestApplicationService_GetApplicationSubmissions(t *testing.T) {
 		mock.ExpectQuery(`SELECT .* FROM "application_submissions" WHERE member_id = .* ORDER BY created_at DESC`).
 			WithArgs(memberID).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "application_name", "member_id", "status"}).
-				AddRow("sub_1", "Sub 1", memberID, string(models.StatusPending)))
+				AddRow("sub_1", "Sub 1", memberID, string(kernel.StatusPending)))
 
 		// Preload Member
 		mock.ExpectQuery(`SELECT .* FROM "members" WHERE "members"."member_id" = .*`).
@@ -998,13 +999,13 @@ func TestApplicationService_GetApplicationSubmissions(t *testing.T) {
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
-		statusFilter := []string{string(models.StatusApproved)}
+		statusFilter := []string{string(kernel.StatusApproved)}
 
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT .* FROM "application_submissions" WHERE status IN .* ORDER BY created_at DESC`).
 			WithArgs(statusFilter[0]).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id", "application_name", "member_id", "status"}).
-				AddRow("sub_2", "Sub 2", "member-123", string(models.StatusApproved)))
+				AddRow("sub_2", "Sub 2", "member-123", string(kernel.StatusApproved)))
 
 		// Preload Member
 		mock.ExpectQuery(`SELECT .* FROM "members" WHERE "members"."member_id" = .*`).
@@ -1015,7 +1016,7 @@ func TestApplicationService_GetApplicationSubmissions(t *testing.T) {
 
 		assert.NoError(t, err)
 		if len(result) > 0 {
-			assert.Equal(t, string(models.StatusApproved), result[0].Status)
+			assert.Equal(t, string(kernel.StatusApproved), result[0].Status)
 		}
 
 		assert.NoError(t, mock.ExpectationsWereMet())

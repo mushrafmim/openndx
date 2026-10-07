@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"gorm.io/gorm"
 )
@@ -42,7 +43,7 @@ func (s *SchemaService) CreateSchema(req *models.CreateSchemaRequest) (*models.S
 		SDL:        req.SDL,
 		Endpoint:   req.Endpoint,
 		MemberID:   req.MemberID,
-		Version:    string(models.ActiveVersion),
+		Version:    string(kernel.ActiveVersion),
 	}
 	if req.SchemaDescription != nil {
 		schema.SchemaDescription = req.SchemaDescription
@@ -272,7 +273,7 @@ func (s *SchemaService) CreateSchemaSubmission(req *models.CreateSchemaSubmissio
 		SchemaDescription: req.SchemaDescription,
 		SDL:               req.SDL,
 		SchemaEndpoint:    req.SchemaEndpoint,
-		Status:            string(models.StatusPending),
+		Status:            string(kernel.StatusPending),
 		MemberID:          req.MemberID,
 	}
 	if err := s.db.Create(&submission).Error; err != nil {
@@ -338,7 +339,7 @@ func (s *SchemaService) UpdateSchemaSubmission(submissionID string, req *models.
 	if req.Status != nil {
 		submission.Status = *req.Status
 		// Mark that we need to create a schema after saving
-		if *req.Status == string(models.StatusApproved) {
+		if *req.Status == string(kernel.StatusApproved) {
 			shouldCreateSchema = true
 		}
 	}
@@ -364,7 +365,7 @@ func (s *SchemaService) UpdateSchemaSubmission(submissionID string, req *models.
 		_, err := s.CreateSchema(&createSchemaRequest)
 		if err != nil {
 			// Compensation: Update submission status back to pending
-			submission.Status = string(models.StatusPending)
+			submission.Status = string(kernel.StatusPending)
 			if updateErr := s.db.Save(&submission).Error; updateErr != nil {
 				slog.Error("Failed to compensate submission status after schema creation failure",
 					"submissionID", submission.SubmissionID,
