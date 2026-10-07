@@ -14,7 +14,7 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/middleware"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/services"
-	"github.com/openndx/openndx-core/internal/pb/shared/utils"
+	"github.com/openndx/openndx-core/internal/utils"
 	"gorm.io/gorm"
 )
 

@@ -17,8 +17,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/openndx/openndx-core/internal/pb/models"
-	sharedutils "github.com/openndx/openndx-core/internal/pb/shared/utils"
-	"github.com/openndx/openndx-core/internal/pb/utils"
+	authutils "github.com/openndx/openndx-core/internal/pb/utils"
+	"github.com/openndx/openndx-core/internal/utils"
 )
 
 // JWKS represents the JSON Web Key Set structure
@@ -121,10 +121,10 @@ func (j *JWTAuthMiddleware) AuthenticateJWT(next http.Handler) http.Handler {
 		}
 
 		// Extract token from Authorization header
-		tokenString, err := utils.ExtractBearerToken(r)
+		tokenString, err := authutils.ExtractBearerToken(r)
 		if err != nil {
 			slog.Warn("Failed to extract bearer token", "error", err, "path", r.URL.Path, "method", r.Method)
-			sharedutils.RespondWithError(w, http.StatusUnauthorized, "Invalid or missing authorization header")
+			utils.RespondWithError(w, http.StatusUnauthorized, "Invalid or missing authorization header")
 			return
 		}
 
@@ -132,20 +132,20 @@ func (j *JWTAuthMiddleware) AuthenticateJWT(next http.Handler) http.Handler {
 		user, authCtx, err := j.validateToken(tokenString)
 		if err != nil {
 			slog.Warn("Token validation failed", "error", err, "path", r.URL.Path, "method", r.Method)
-			sharedutils.RespondWithError(w, http.StatusUnauthorized, "Invalid access token")
+			utils.RespondWithError(w, http.StatusUnauthorized, "Invalid access token")
 			return
 		}
 
 		// Check if token is expired
 		if user.IsTokenExpired() {
 			slog.Warn("Token is expired", "expiry", user.ExpiresAt, "user", user.Email)
-			sharedutils.RespondWithError(w, http.StatusUnauthorized, "Access token has expired")
+			utils.RespondWithError(w, http.StatusUnauthorized, "Access token has expired")
 			return
 		}
 
 		// Add user and auth context to request context
-		ctx := utils.SetAuthenticatedUser(r.Context(), user)
-		ctx = utils.SetAuthContext(ctx, authCtx)
+		ctx := authutils.SetAuthenticatedUser(r.Context(), user)
+		ctx = authutils.SetAuthContext(ctx, authCtx)
 
 		// Log successful authentication
 		slog.Info("User authenticated successfully",

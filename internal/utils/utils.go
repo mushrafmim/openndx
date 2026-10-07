@@ -247,38 +247,6 @@ func GetEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-// ParseExpiryTime parses expiry time strings like "30d", "1h", "7d"
-func ParseExpiryTime(expiryStr string) (time.Duration, error) {
-	if len(expiryStr) < 2 {
-		return 0, fmt.Errorf("invalid expiry time format")
-	}
-
-	unit := expiryStr[len(expiryStr)-1:]
-	value := expiryStr[:len(expiryStr)-1]
-
-	var duration time.Duration
-	switch unit {
-	case "d":
-		duration = 24 * time.Hour
-	case "h":
-		duration = time.Hour
-	case "m":
-		duration = time.Minute
-	case "s":
-		duration = time.Second
-	default:
-		return 0, fmt.Errorf("unsupported time unit: %s", unit)
-	}
-
-	// Parse the numeric value
-	var multiplier int
-	if _, err := fmt.Sscanf(value, "%d", &multiplier); err != nil {
-		return 0, fmt.Errorf("invalid numeric value: %s", value)
-	}
-
-	return time.Duration(multiplier) * duration, nil
-}
-
 // SetupLogging configures logging based on the configuration
 func SetupLogging(format, level string) {
 	var handler slog.Handler

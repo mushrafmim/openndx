@@ -146,14 +146,15 @@ cmd/pb/
 └── main.go                 # Application entry point
 
 internal/pb/
-├── v1/                     # API version 1
-│   ├── handlers/           # HTTP request handlers
-│   ├── middleware/         # Authentication & authorization
-│   ├── models/            # Data models and DTOs
-│   ├── services/          # Business logic layer
-│   └── utils/             # Utility functions
-├── shared/                # Shared utilities
+├── database/              # GORM connection and migrations
+├── handlers/              # HTTP request handlers
+├── middleware/            # Authentication, authorization, CORS & audit
+├── models/                # Data models and DTOs
+├── services/              # Business logic layer
+├── utils/                 # Auth context helpers & GraphQL SDL parsing
 └── idp/                   # Identity provider integrations
+
+internal/utils/            # HTTP/server helpers shared across services
 ```
 
 ### Security Architecture
