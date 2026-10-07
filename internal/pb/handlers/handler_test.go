@@ -157,7 +157,7 @@ type TestV1Handler struct {
 // NewTestV1Handler creates a new test handler with SQLite test database
 func NewTestV1Handler(t *testing.T) *TestV1Handler {
 	// Use shared SQLite test utility
-	db := services.SetupSQLiteTestDB(t)
+	db := setupSQLiteTestDB(t)
 
 	// Create handler with mock PDP service
 	handler := NewTestV1HandlerWithMockPDP(t, db)
@@ -311,15 +311,13 @@ func createTestApplicationWithClientID(t *testing.T, db *gorm.DB, memberID, idpC
 // in-process mock transport (unlike NewTestV1HandlerWithMockPDP, which points at an
 // unreachable localhost address), so tests can exercise the full allow-list update path.
 func newTestV1HandlerWithWorkingPDP(t *testing.T, db *gorm.DB, pdpStatusCode int, pdpBody string) *V1Handler {
-	mockTransport := &services.MockRoundTripper{
-		RoundTripFunc: func(req *http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: pdpStatusCode,
-				Body:       io.NopCloser(bytes.NewBufferString(pdpBody)),
-				Header:     make(http.Header),
-			}, nil
-		},
-	}
+	mockTransport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: pdpStatusCode,
+			Body:       io.NopCloser(bytes.NewBufferString(pdpBody)),
+			Header:     make(http.Header),
+		}, nil
+	})
 	pdpService := services.NewPDPService("http://mock-pdp")
 	pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
@@ -844,7 +842,7 @@ func TestApplicationEndpoints(t *testing.T) {
 // TestApplicationPolicyEndpoint tests PUT /api/v1/applications/:applicationId/policy
 func TestApplicationPolicyEndpoint(t *testing.T) {
 	t.Run("PUT /api/v1/applications/:id/policy - Success", func(t *testing.T) {
-		db := services.SetupSQLiteTestDB(t)
+		db := setupSQLiteTestDB(t)
 		if db == nil {
 			t.Skip("Skipping test: database connection failed")
 			return
@@ -879,7 +877,7 @@ func TestApplicationPolicyEndpoint(t *testing.T) {
 	})
 
 	t.Run("PUT /api/v1/applications/:id/policy - PDPFailure", func(t *testing.T) {
-		db := services.SetupSQLiteTestDB(t)
+		db := setupSQLiteTestDB(t)
 		if db == nil {
 			t.Skip("Skipping test: database connection failed")
 			return
@@ -1294,7 +1292,7 @@ func TestNewV1Handler(t *testing.T) {
 		defer os.Unsetenv("IDP_CLIENT_ID")
 		defer os.Unsetenv("IDP_CLIENT_SECRET")
 
-		db := services.SetupSQLiteTestDB(t)
+		db := setupSQLiteTestDB(t)
 		if db == nil {
 			return
 		}
@@ -1345,7 +1343,7 @@ func TestNewV1Handler(t *testing.T) {
 		os.Setenv("IDP_CLIENT_SECRET", "test-client-secret")
 		os.Setenv("IDP_SCOPE", "scope1 scope2 scope3")
 
-		db := services.SetupSQLiteTestDB(t)
+		db := setupSQLiteTestDB(t)
 		if db == nil {
 			return
 		}
@@ -1398,7 +1396,7 @@ func TestNewV1Handler(t *testing.T) {
 		os.Setenv("IDP_CLIENT_SECRET", "test-client-secret")
 		os.Unsetenv("IDP_SCOPE")
 
-		db := services.SetupSQLiteTestDB(t)
+		db := setupSQLiteTestDB(t)
 		if db == nil {
 			return
 		}

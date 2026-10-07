@@ -94,7 +94,7 @@ type policyMetadataTestEnv struct {
 // newPolicyMetadataTestEnv creates a schema owned by a member other than the
 // test users and a fake PDP holding one policy metadata record for it.
 func newPolicyMetadataTestEnv(t *testing.T) *policyMetadataTestEnv {
-	db := services.SetupSQLiteTestDB(t)
+	db := setupSQLiteTestDB(t)
 
 	memberID := createTestMember(t, db, fmt.Sprintf("policy-metadata-%d@example.com", time.Now().UnixNano()))
 	schemaID := createTestSchema(t, db, memberID)
@@ -400,7 +400,7 @@ func TestSchemaPolicyMetadataEndpoints_RevokeAllowListEntry(t *testing.T) {
 }
 
 func TestSchemaPolicyMetadataEndpoints_PDPUnreachable(t *testing.T) {
-	db := services.SetupSQLiteTestDB(t)
+	db := setupSQLiteTestDB(t)
 	memberID := createTestMember(t, db, fmt.Sprintf("policy-unreachable-%d@example.com", time.Now().UnixNano()))
 	schemaID := createTestSchema(t, db, memberID)
 	handler := NewTestV1HandlerWithMockPDP(t, db)

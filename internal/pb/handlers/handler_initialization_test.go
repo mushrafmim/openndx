@@ -71,7 +71,7 @@ func TestNewV1Handler_MissingEnvVars(t *testing.T) {
 	// Test missing IDP config (NewIdpAPIProvider fails)
 
 	// We need a DB connection
-	db := services.SetupSQLiteTestDB(t)
+	db := setupSQLiteTestDB(t)
 
 	// Case 1: Missing IDP config (BaseURL)
 	handler, err := NewV1Handler(db)
@@ -222,7 +222,7 @@ func TestNewV1Handler_StandardOIDC_WithoutBaseURL(t *testing.T) {
 	os.Setenv("IDP_CLIENT_SECRET", "client-secret")
 	os.Setenv("PDP_SERVICE_URL", "http://pdp:8080")
 
-	db := services.SetupSQLiteTestDB(t)
+	db := setupSQLiteTestDB(t)
 
 	handler, err := NewV1Handler(db)
 	assert.NoError(t, err)
