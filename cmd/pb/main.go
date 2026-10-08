@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/LSFLK/argus/pkg/audit"
+	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/database"
 	"github.com/openndx/openndx-core/internal/pb/handlers"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
@@ -143,7 +144,7 @@ func main() {
 		validClientIDs = append(validClientIDs, adminPortalClientID)
 	}
 
-	jwtConfig := middleware.JWTAuthConfig{
+	jwtConfig := auth.JWTConfig{
 		JWKSURL:                utils.GetEnvOrDefault("IDP_JWKS_URL", idpBaseURL+"/oauth2/jwks"),
 		ExpectedIssuer:         utils.GetEnvOrDefault("IDP_ISSUER", utils.GetEnvOrDefault("IDP_TOKEN_URL", idpBaseURL+"/oauth2/token")),
 		ValidClientIDs:         validClientIDs,
@@ -157,27 +158,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	jwtAuthMiddleware := middleware.NewJWTAuthMiddleware(jwtConfig)
+	jwtAuthMiddleware := auth.NewJWTMiddleware(jwtConfig)
 
 	// Setup Authorization middleware with configurable security policy
 	authMode := utils.GetEnvOrDefault("AUTHORIZATION_MODE", "fail_open_admin_system")
 	strictMode := utils.GetEnvOrDefault("AUTHORIZATION_STRICT_MODE", "false") == "true"
 
-	var authConfig middleware.AuthorizationConfig
+	var authConfig auth.AuthorizationConfig
 	switch authMode {
 	case "fail_closed":
-		authConfig.Mode = models.AuthorizationModeFailClosed
+		authConfig.Mode = auth.AuthorizationModeFailClosed
 	case "fail_open_admin":
-		authConfig.Mode = models.AuthorizationModeFailOpenAdmin
+		authConfig.Mode = auth.AuthorizationModeFailOpenAdmin
 	case "fail_open_admin_system":
-		authConfig.Mode = models.AuthorizationModeFailOpenAdminSystem
+		authConfig.Mode = auth.AuthorizationModeFailOpenAdminSystem
 	default:
 		slog.Error("Invalid authorization mode. Valid options: fail_closed, fail_open_admin, fail_open_admin_system", "mode", authMode)
 		os.Exit(1)
 	}
 	authConfig.StrictMode = strictMode
 
-	authorizationMiddleware := middleware.NewAuthorizationMiddlewareWithConfig(authConfig)
+	authorizationMiddleware := auth.NewAuthorizationMiddlewareWithConfig(authConfig)
 
 	// Initialize Audit system
 	// Services will work without auditing - gracefully degrades if disabled via ENABLE_AUDIT=false

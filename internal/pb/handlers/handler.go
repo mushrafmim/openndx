@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/idp"
 	"github.com/openndx/openndx-core/internal/pb/idp/idpfactory"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
@@ -28,7 +29,7 @@ type V1Handler struct {
 
 // getUserMemberID gets the member ID for the authenticated user with caching
 // This avoids repeated database calls for the same user within the same request context
-func (h *V1Handler) getUserMemberID(r *http.Request, user *models.AuthenticatedUser) (string, error) {
+func (h *V1Handler) getUserMemberID(r *http.Request, user *auth.AuthenticatedUser) (string, error) {
 	// Check if we already have cached the member ID
 	if memberID, cached := user.GetCachedMemberID(); cached {
 		// Return cached error if the previous lookup failed
@@ -124,14 +125,14 @@ func NewV1Handler(db *gorm.DB) (*V1Handler, error) {
 // CreateMember handles POST /api/v1/members
 func (h *V1Handler) CreateMember(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission - only admin users can create members
-	if !user.HasPermission(models.PermissionCreateMember) {
+	if !user.HasPermission(auth.PermissionCreateMember) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -148,14 +149,14 @@ func (h *V1Handler) CreateMember(w http.ResponseWriter, r *http.Request) {
 	member, err := h.memberService.CreateMember(r.Context(), &req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeMembers), nil, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeMembers), nil, string(middleware.AuditStatusFailure))
 
 		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeMembers), &member.MemberID, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeMembers), &member.MemberID, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusCreated, member)
 }
@@ -165,7 +166,7 @@ func (h *V1Handler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 	memberId := r.PathValue("memberId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
@@ -195,14 +196,14 @@ func (h *V1Handler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 	member, err := h.memberService.UpdateMember(r.Context(), memberId, &req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeMembers), &existingMember.MemberID, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeMembers), &existingMember.MemberID, string(middleware.AuditStatusFailure))
 
 		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeMembers), &member.MemberID, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeMembers), &member.MemberID, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusOK, member)
 }
@@ -212,7 +213,7 @@ func (h *V1Handler) GetMember(w http.ResponseWriter, r *http.Request) {
 	memberId := r.PathValue("memberId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
@@ -241,7 +242,7 @@ func (h *V1Handler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
 	idpUserId := r.URL.Query().Get("idpUserId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
@@ -250,12 +251,12 @@ func (h *V1Handler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
 	// Check permission - admin can read all members, regular users need specific permission
 	var filteredIdpUserId *string
 
-	if user.HasPermission(models.PermissionReadAllMembers) {
+	if user.HasPermission(auth.PermissionReadAllMembers) {
 		// Admin can use provided filters or see all
 		filteredIdpUserId = &idpUserId
 		// Note: The email query parameter is accepted but not used,
 		// since IdpUserID filtering is sufficient for uniqueness
-	} else if user.HasPermission(models.PermissionReadMember) {
+	} else if user.HasPermission(auth.PermissionReadMember) {
 		// Regular users can only see their own member record
 		// IdpUserID is unique, so no need to also filter by email
 		filteredIdpUserId = &user.IdpUserID
@@ -287,7 +288,7 @@ func (h *V1Handler) GetAllSchemaSubmissions(w http.ResponseWriter, r *http.Reque
 	statusFilter := r.URL.Query()["status"]
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
@@ -295,10 +296,10 @@ func (h *V1Handler) GetAllSchemaSubmissions(w http.ResponseWriter, r *http.Reque
 
 	// Check permission
 	var filteredMemberId *string
-	if user.HasPermission(models.PermissionReadAllSchemaSubmissions) {
+	if user.HasPermission(auth.PermissionReadAllSchemaSubmissions) {
 		// Admin/System can use provided filters or see all
 		filteredMemberId = &memberId
-	} else if user.HasPermission(models.PermissionReadSchemaSubmission) {
+	} else if user.HasPermission(auth.PermissionReadSchemaSubmission) {
 		// Regular users can only see their own submissions
 		// Get member ID for the authenticated user (cached)
 		userMemberId, err := h.getUserMemberID(r, user)
@@ -330,14 +331,14 @@ func (h *V1Handler) GetSchemaSubmission(w http.ResponseWriter, r *http.Request) 
 	submissionId := r.PathValue("submissionId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionReadSchemaSubmission) {
+	if !user.HasPermission(auth.PermissionReadSchemaSubmission) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -370,14 +371,14 @@ func (h *V1Handler) GetSchemaSubmission(w http.ResponseWriter, r *http.Request) 
 // CreateSchemaSubmission handles POST /api/v1/schema-submissions
 func (h *V1Handler) CreateSchemaSubmission(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionCreateSchemaSubmission) {
+	if !user.HasPermission(auth.PermissionCreateSchemaSubmission) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -413,14 +414,14 @@ func (h *V1Handler) CreateSchemaSubmission(w http.ResponseWriter, r *http.Reques
 	submission, err := h.schemaService.CreateSchemaSubmission(&req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeSchemaSubmissions), nil, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemaSubmissions), nil, string(middleware.AuditStatusFailure))
 
 		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeSchemaSubmissions), &submission.SubmissionID, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemaSubmissions), &submission.SubmissionID, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusCreated, submission)
 }
@@ -430,14 +431,14 @@ func (h *V1Handler) UpdateSchemaSubmission(w http.ResponseWriter, r *http.Reques
 	submissionId := r.PathValue("submissionId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionUpdateSchemaSubmission) {
+	if !user.HasPermission(auth.PermissionUpdateSchemaSubmission) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -474,14 +475,14 @@ func (h *V1Handler) UpdateSchemaSubmission(w http.ResponseWriter, r *http.Reques
 	submission, err := h.schemaService.UpdateSchemaSubmission(submissionId, &req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeSchemaSubmissions), &existingSubmission.SubmissionID, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemaSubmissions), &existingSubmission.SubmissionID, string(middleware.AuditStatusFailure))
 
 		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeSchemaSubmissions), &submission.SubmissionID, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemaSubmissions), &submission.SubmissionID, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusOK, submission)
 }
@@ -493,14 +494,14 @@ func (h *V1Handler) GetAllSchemas(w http.ResponseWriter, r *http.Request) {
 	memberId := r.URL.Query().Get("memberId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionReadSchema) {
+	if !user.HasPermission(auth.PermissionReadSchema) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -538,14 +539,14 @@ func (h *V1Handler) GetSchema(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionReadSchema) {
+	if !user.HasPermission(auth.PermissionReadSchema) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -578,14 +579,14 @@ func (h *V1Handler) GetSchema(w http.ResponseWriter, r *http.Request) {
 // CreateSchema handles POST /api/v1/schemas
 func (h *V1Handler) CreateSchema(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionCreateSchema) {
+	if !user.HasPermission(auth.PermissionCreateSchema) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -612,14 +613,14 @@ func (h *V1Handler) CreateSchema(w http.ResponseWriter, r *http.Request) {
 	schema, err := h.schemaService.CreateSchema(&req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeSchemas), nil, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemas), nil, string(middleware.AuditStatusFailure))
 
 		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeSchemas), &schema.SchemaID, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemas), &schema.SchemaID, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusCreated, schema)
 }
@@ -629,14 +630,14 @@ func (h *V1Handler) UpdateSchema(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionUpdateSchema) {
+	if !user.HasPermission(auth.PermissionUpdateSchema) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -673,14 +674,14 @@ func (h *V1Handler) UpdateSchema(w http.ResponseWriter, r *http.Request) {
 	schema, err := h.schemaService.UpdateSchema(schemaId, &req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeSchemas), &existingSchema.SchemaID, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemas), &existingSchema.SchemaID, string(middleware.AuditStatusFailure))
 
 		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeSchemas), &schema.SchemaID, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemas), &schema.SchemaID, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusOK, schema)
 }
@@ -690,9 +691,9 @@ func (h *V1Handler) UpdateSchema(w http.ResponseWriter, r *http.Request) {
 // authorizeSchemaAccess checks that the authenticated user has the permission and,
 // for non-admin users, owns the schema. It writes the error response and returns
 // false when access is denied.
-func (h *V1Handler) authorizeSchemaAccess(w http.ResponseWriter, r *http.Request, schemaId string, permission models.Permission) bool {
+func (h *V1Handler) authorizeSchemaAccess(w http.ResponseWriter, r *http.Request, schemaId string, permission auth.Permission) bool {
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return false
@@ -732,7 +733,7 @@ func (h *V1Handler) authorizeSchemaAccess(w http.ResponseWriter, r *http.Request
 // ListSchemaPolicyMetadata handles GET /api/v1/schemas/{schemaId}/policy-metadata
 func (h *V1Handler) ListSchemaPolicyMetadata(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
-	if !h.authorizeSchemaAccess(w, r, schemaId, models.PermissionReadSchema) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, auth.PermissionReadSchema) {
 		return
 	}
 
@@ -753,7 +754,7 @@ func (h *V1Handler) ListSchemaPolicyMetadata(w http.ResponseWriter, r *http.Requ
 func (h *V1Handler) PatchSchemaPolicyMetadata(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
 	id := r.PathValue("id")
-	if !h.authorizeSchemaAccess(w, r, schemaId, models.PermissionUpdateSchema) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, auth.PermissionUpdateSchema) {
 		return
 	}
 
@@ -773,14 +774,14 @@ func (h *V1Handler) PatchSchemaPolicyMetadata(w http.ResponseWriter, r *http.Req
 	record, err := h.schemaService.PatchPolicyMetadata(schemaId, id, &req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeSchemas), &schemaId, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemas), &schemaId, string(middleware.AuditStatusFailure))
 
 		respondWithPolicyMetadataError(w, err)
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeSchemas), &schemaId, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemas), &schemaId, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusOK, record)
 }
@@ -789,20 +790,20 @@ func (h *V1Handler) PatchSchemaPolicyMetadata(w http.ResponseWriter, r *http.Req
 func (h *V1Handler) DeleteSchemaPolicyMetadata(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
 	id := r.PathValue("id")
-	if !h.authorizeSchemaAccess(w, r, schemaId, models.PermissionUpdateSchema) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, auth.PermissionUpdateSchema) {
 		return
 	}
 
 	if err := h.schemaService.DeletePolicyMetadata(schemaId, id); err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeSchemas), &schemaId, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemas), &schemaId, string(middleware.AuditStatusFailure))
 
 		respondWithPolicyMetadataError(w, err)
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeSchemas), &schemaId, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemas), &schemaId, string(middleware.AuditStatusSuccess))
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -812,20 +813,20 @@ func (h *V1Handler) RevokeSchemaPolicyAllowListEntry(w http.ResponseWriter, r *h
 	schemaId := r.PathValue("schemaId")
 	id := r.PathValue("id")
 	applicationId := r.PathValue("applicationId")
-	if !h.authorizeSchemaAccess(w, r, schemaId, models.PermissionUpdateSchema) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, auth.PermissionUpdateSchema) {
 		return
 	}
 
 	if err := h.schemaService.RevokeAllowListEntry(schemaId, id, applicationId); err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeSchemas), &schemaId, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemas), &schemaId, string(middleware.AuditStatusFailure))
 
 		respondWithPolicyMetadataError(w, err)
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeSchemas), &schemaId, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemas), &schemaId, string(middleware.AuditStatusSuccess))
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -860,14 +861,14 @@ func (h *V1Handler) GetAllApplicationSubmissions(w http.ResponseWriter, r *http.
 	statusFilter := r.URL.Query()["status"]
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionReadApplicationSubmission) {
+	if !user.HasPermission(auth.PermissionReadApplicationSubmission) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -905,14 +906,14 @@ func (h *V1Handler) GetApplicationSubmission(w http.ResponseWriter, r *http.Requ
 	submissionId := r.PathValue("submissionId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionReadApplicationSubmission) {
+	if !user.HasPermission(auth.PermissionReadApplicationSubmission) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -945,14 +946,14 @@ func (h *V1Handler) GetApplicationSubmission(w http.ResponseWriter, r *http.Requ
 // CreateApplicationSubmission handles POST /api/v1/application-submissions
 func (h *V1Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionCreateApplicationSubmission) {
+	if !user.HasPermission(auth.PermissionCreateApplicationSubmission) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -988,14 +989,14 @@ func (h *V1Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.R
 	submission, err := h.applicationService.CreateApplicationSubmission(r.Context(), &req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeApplicationSubmissions), nil, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplicationSubmissions), nil, string(middleware.AuditStatusFailure))
 
 		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeApplicationSubmissions), &submission.SubmissionID, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplicationSubmissions), &submission.SubmissionID, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusCreated, submission)
 }
@@ -1005,14 +1006,14 @@ func (h *V1Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.R
 	submissionId := r.PathValue("submissionId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionUpdateApplicationSubmission) {
+	if !user.HasPermission(auth.PermissionUpdateApplicationSubmission) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -1049,14 +1050,14 @@ func (h *V1Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.R
 	submission, err := h.applicationService.UpdateApplicationSubmission(r.Context(), submissionId, &req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeApplicationSubmissions), &existingSubmission.SubmissionID, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplicationSubmissions), &existingSubmission.SubmissionID, string(middleware.AuditStatusFailure))
 
 		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeApplicationSubmissions), &submission.SubmissionID, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplicationSubmissions), &submission.SubmissionID, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusOK, submission)
 }
@@ -1068,7 +1069,7 @@ func (h *V1Handler) GetAllApplications(w http.ResponseWriter, r *http.Request) {
 	memberId := r.URL.Query().Get("memberId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
@@ -1076,10 +1077,10 @@ func (h *V1Handler) GetAllApplications(w http.ResponseWriter, r *http.Request) {
 
 	// Check permission
 	var filteredMemberId *string
-	if user.HasPermission(models.PermissionReadAllApplications) {
+	if user.HasPermission(auth.PermissionReadAllApplications) {
 		// Admin/System can use provided filters or see all
 		filteredMemberId = &memberId
-	} else if user.HasPermission(models.PermissionReadApplication) {
+	} else if user.HasPermission(auth.PermissionReadApplication) {
 		// Regular users can only see their own applications
 		// Get member ID for the authenticated user (cached)
 		userMemberId, err := h.getUserMemberID(r, user)
@@ -1111,14 +1112,14 @@ func (h *V1Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 	applicationId := r.PathValue("applicationId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionReadApplication) {
+	if !user.HasPermission(auth.PermissionReadApplication) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -1167,14 +1168,14 @@ func (h *V1Handler) GetApplicationIdByClientId(w http.ResponseWriter, r *http.Re
 // CreateApplication handles POST /api/v1/applications
 func (h *V1Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionCreateApplication) {
+	if !user.HasPermission(auth.PermissionCreateApplication) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -1201,14 +1202,14 @@ func (h *V1Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	application, err := h.applicationService.CreateApplication(r.Context(), &req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeApplications), nil, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplications), nil, string(middleware.AuditStatusFailure))
 
 		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeApplications), &application.ApplicationID, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplications), &application.ApplicationID, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusCreated, application)
 }
@@ -1218,14 +1219,14 @@ func (h *V1Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	applicationId := r.PathValue("applicationId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission
-	if !user.HasPermission(models.PermissionUpdateApplication) {
+	if !user.HasPermission(auth.PermissionUpdateApplication) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -1262,14 +1263,14 @@ func (h *V1Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	application, err := h.applicationService.UpdateApplication(r.Context(), applicationId, &req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeApplications), &existingApplication.ApplicationID, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplications), &existingApplication.ApplicationID, string(middleware.AuditStatusFailure))
 
 		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeApplications), &application.ApplicationID, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplications), &application.ApplicationID, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusOK, application)
 }
@@ -1279,14 +1280,14 @@ func (h *V1Handler) UpdateApplicationPolicy(w http.ResponseWriter, r *http.Reque
 	applicationId := r.PathValue("applicationId")
 
 	// Get authenticated user
-	user, err := middleware.GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	// Check permission - policy updates share the application:update permission
-	if !user.HasPermission(models.PermissionUpdateApplication) {
+	if !user.HasPermission(auth.PermissionUpdateApplication) {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
@@ -1323,14 +1324,14 @@ func (h *V1Handler) UpdateApplicationPolicy(w http.ResponseWriter, r *http.Reque
 	application, err := h.applicationService.UpdateApplicationPolicy(r.Context(), applicationId, &req)
 	if err != nil {
 		// Log audit event for failure
-		middleware.LogAuditEvent(r, string(models.ResourceTypeApplications), &existingApplication.ApplicationID, string(models.AuditStatusFailure))
+		middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplications), &existingApplication.ApplicationID, string(middleware.AuditStatusFailure))
 
 		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Log audit event
-	middleware.LogAuditEvent(r, string(models.ResourceTypeApplications), &application.ApplicationID, string(models.AuditStatusSuccess))
+	middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplications), &application.ApplicationID, string(middleware.AuditStatusSuccess))
 
 	utils.RespondWithSuccess(w, http.StatusOK, application)
 }

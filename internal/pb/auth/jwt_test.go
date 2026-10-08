@@ -1,4 +1,4 @@
-package middleware
+package auth
 
 import (
 	"crypto/rand"
@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/openndx/openndx-core/internal/pb/utils"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,15 +45,15 @@ func createJWKSResponse(t *testing.T, pubKey *rsa.PublicKey, kid string) []byte 
 	return data
 }
 
-func TestJWTAuthConfig_Validate(t *testing.T) {
+func TestJWTConfig_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		config  JWTAuthConfig
+		config  JWTConfig
 		wantErr bool
 	}{
 		{
 			name: "Valid config",
-			config: JWTAuthConfig{
+			config: JWTConfig{
 				JWKSURL:        "https://example.com/jwks",
 				ExpectedIssuer: "https://example.com",
 				ValidClientIDs: []string{"client-1"},
@@ -63,7 +62,7 @@ func TestJWTAuthConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "Missing JWKS URL",
-			config: JWTAuthConfig{
+			config: JWTConfig{
 				ExpectedIssuer: "https://example.com",
 				ValidClientIDs: []string{"client-1"},
 			},
@@ -71,7 +70,7 @@ func TestJWTAuthConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "Missing Issuer",
-			config: JWTAuthConfig{
+			config: JWTConfig{
 				JWKSURL:        "https://example.com/jwks",
 				ValidClientIDs: []string{"client-1"},
 			},
@@ -79,7 +78,7 @@ func TestJWTAuthConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "Missing Client IDs",
-			config: JWTAuthConfig{
+			config: JWTConfig{
 				JWKSURL:        "https://example.com/jwks",
 				ExpectedIssuer: "https://example.com",
 			},
@@ -87,7 +86,7 @@ func TestJWTAuthConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "Empty Client ID",
-			config: JWTAuthConfig{
+			config: JWTConfig{
 				JWKSURL:        "https://example.com/jwks",
 				ExpectedIssuer: "https://example.com",
 				ValidClientIDs: []string{""},
@@ -108,7 +107,7 @@ func TestJWTAuthConfig_Validate(t *testing.T) {
 	}
 }
 
-func TestJWTAuthMiddleware_JWKSInsecureSkipVerify(t *testing.T) {
+func TestJWTMiddleware_JWKSInsecureSkipVerify(t *testing.T) {
 	privKey, pubKey := generateTestKeys(t)
 	kid := "test-key-1"
 
@@ -140,7 +139,7 @@ func TestJWTAuthMiddleware_JWKSInsecureSkipVerify(t *testing.T) {
 	}
 
 	t.Run("fails without skip-verify against a self-signed JWKS server", func(t *testing.T) {
-		middleware := NewJWTAuthMiddleware(JWTAuthConfig{
+		middleware := NewJWTMiddleware(JWTConfig{
 			JWKSURL:        jwksServer.URL,
 			ExpectedIssuer: "https://example.com",
 			ValidClientIDs: []string{"client-1"},
@@ -155,7 +154,7 @@ func TestJWTAuthMiddleware_JWKSInsecureSkipVerify(t *testing.T) {
 	})
 
 	t.Run("succeeds with skip-verify against a self-signed JWKS server", func(t *testing.T) {
-		middleware := NewJWTAuthMiddleware(JWTAuthConfig{
+		middleware := NewJWTMiddleware(JWTConfig{
 			JWKSURL:                jwksServer.URL,
 			ExpectedIssuer:         "https://example.com",
 			ValidClientIDs:         []string{"client-1"},
@@ -171,7 +170,7 @@ func TestJWTAuthMiddleware_JWKSInsecureSkipVerify(t *testing.T) {
 	})
 }
 
-func TestJWTAuthMiddleware_AuthenticateJWT(t *testing.T) {
+func TestJWTMiddleware_AuthenticateJWT(t *testing.T) {
 	privKey, pubKey := generateTestKeys(t)
 	kid := "test-key-1"
 
@@ -181,13 +180,13 @@ func TestJWTAuthMiddleware_AuthenticateJWT(t *testing.T) {
 	}))
 	defer jwksServer.Close()
 
-	config := JWTAuthConfig{
+	config := JWTConfig{
 		JWKSURL:        jwksServer.URL,
 		ExpectedIssuer: "https://example.com",
 		ValidClientIDs: []string{"client-1"},
 	}
 
-	middleware := NewJWTAuthMiddleware(config)
+	middleware := NewJWTMiddleware(config)
 
 	// Helper to create token
 	createToken := func(claims jwt.MapClaims, signKey *rsa.PrivateKey, keyID string) string {
@@ -311,7 +310,7 @@ func TestJWTAuthMiddleware_AuthenticateJWT(t *testing.T) {
 
 				// Verify context is set for authenticated requests
 				if tt.expectedStatus == http.StatusOK && req.URL.Path != "/health" {
-					user, err := utils.GetAuthenticatedUser(r.Context())
+					user, err := GetAuthenticatedUser(r.Context())
 					assert.NoError(t, err)
 					assert.NotNil(t, user)
 					assert.Equal(t, "user-1", user.IdpUserID)

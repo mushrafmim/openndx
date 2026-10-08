@@ -1,44 +1,42 @@
-package middleware
+package auth
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/openndx/openndx-core/internal/pb/models"
 )
 
 func TestAuthorizationMiddleware_HandleUndefinedEndpoint(t *testing.T) {
 	// Create test users with different roles
-	adminUser := &models.AuthenticatedUser{
+	adminUser := &AuthenticatedUser{
 		IdpUserID: "admin-123",
 		Email:     "admin@example.com",
-		Roles:     []models.Role{models.RoleAdmin},
+		Roles:     []Role{RoleAdmin},
 	}
 
-	memberUser := &models.AuthenticatedUser{
+	memberUser := &AuthenticatedUser{
 		IdpUserID: "member-123",
 		Email:     "member@example.com",
-		Roles:     []models.Role{models.RoleMember},
+		Roles:     []Role{RoleMember},
 	}
 
-	systemUser := &models.AuthenticatedUser{
+	systemUser := &AuthenticatedUser{
 		IdpUserID: "system-123",
 		Email:     "system@example.com",
-		Roles:     []models.Role{models.RoleSystem},
+		Roles:     []Role{RoleSystem},
 	}
 
 	tests := []struct {
 		name           string
 		config         AuthorizationConfig
-		user           *models.AuthenticatedUser
+		user           *AuthenticatedUser
 		expectedStatus int
 		expectedStop   bool // true if response should be sent (request stops)
 	}{
 		{
 			name: "FailClosed - Admin user denied",
 			config: AuthorizationConfig{
-				Mode:       models.AuthorizationModeFailClosed,
+				Mode:       AuthorizationModeFailClosed,
 				StrictMode: false,
 			},
 			user:           adminUser,
@@ -48,7 +46,7 @@ func TestAuthorizationMiddleware_HandleUndefinedEndpoint(t *testing.T) {
 		{
 			name: "FailClosed - Member user denied",
 			config: AuthorizationConfig{
-				Mode:       models.AuthorizationModeFailClosed,
+				Mode:       AuthorizationModeFailClosed,
 				StrictMode: false,
 			},
 			user:           memberUser,
@@ -58,7 +56,7 @@ func TestAuthorizationMiddleware_HandleUndefinedEndpoint(t *testing.T) {
 		{
 			name: "FailOpenAdmin - Admin user allowed",
 			config: AuthorizationConfig{
-				Mode:       models.AuthorizationModeFailOpenAdmin,
+				Mode:       AuthorizationModeFailOpenAdmin,
 				StrictMode: false,
 			},
 			user:           adminUser,
@@ -68,7 +66,7 @@ func TestAuthorizationMiddleware_HandleUndefinedEndpoint(t *testing.T) {
 		{
 			name: "FailOpenAdmin - Member user denied",
 			config: AuthorizationConfig{
-				Mode:       models.AuthorizationModeFailOpenAdmin,
+				Mode:       AuthorizationModeFailOpenAdmin,
 				StrictMode: false,
 			},
 			user:           memberUser,
@@ -78,7 +76,7 @@ func TestAuthorizationMiddleware_HandleUndefinedEndpoint(t *testing.T) {
 		{
 			name: "FailOpenAdmin - System user denied",
 			config: AuthorizationConfig{
-				Mode:       models.AuthorizationModeFailOpenAdmin,
+				Mode:       AuthorizationModeFailOpenAdmin,
 				StrictMode: false,
 			},
 			user:           systemUser,
@@ -88,7 +86,7 @@ func TestAuthorizationMiddleware_HandleUndefinedEndpoint(t *testing.T) {
 		{
 			name: "FailOpenAdminSystem - Admin user allowed",
 			config: AuthorizationConfig{
-				Mode:       models.AuthorizationModeFailOpenAdminSystem,
+				Mode:       AuthorizationModeFailOpenAdminSystem,
 				StrictMode: false,
 			},
 			user:           adminUser,
@@ -98,7 +96,7 @@ func TestAuthorizationMiddleware_HandleUndefinedEndpoint(t *testing.T) {
 		{
 			name: "FailOpenAdminSystem - System user allowed",
 			config: AuthorizationConfig{
-				Mode:       models.AuthorizationModeFailOpenAdminSystem,
+				Mode:       AuthorizationModeFailOpenAdminSystem,
 				StrictMode: false,
 			},
 			user:           systemUser,
@@ -108,7 +106,7 @@ func TestAuthorizationMiddleware_HandleUndefinedEndpoint(t *testing.T) {
 		{
 			name: "FailOpenAdminSystem - Member user denied",
 			config: AuthorizationConfig{
-				Mode:       models.AuthorizationModeFailOpenAdminSystem,
+				Mode:       AuthorizationModeFailOpenAdminSystem,
 				StrictMode: false,
 			},
 			user:           memberUser,
@@ -153,7 +151,7 @@ func TestAuthorizationMiddleware_HandleUndefinedEndpoint(t *testing.T) {
 func TestAuthorizationMiddleware_Configuration(t *testing.T) {
 	// Test default configuration
 	defaultMiddleware := NewAuthorizationMiddleware()
-	if defaultMiddleware.config.Mode != models.AuthorizationModeFailOpenAdminSystem {
+	if defaultMiddleware.config.Mode != AuthorizationModeFailOpenAdminSystem {
 		t.Errorf("Default mode should be FailOpenAdminSystem, got %v", defaultMiddleware.config.Mode)
 	}
 	if defaultMiddleware.config.StrictMode != false {
@@ -162,11 +160,11 @@ func TestAuthorizationMiddleware_Configuration(t *testing.T) {
 
 	// Test custom configuration
 	customConfig := AuthorizationConfig{
-		Mode:       models.AuthorizationModeFailClosed,
+		Mode:       AuthorizationModeFailClosed,
 		StrictMode: true,
 	}
 	customMiddleware := NewAuthorizationMiddlewareWithConfig(customConfig)
-	if customMiddleware.config.Mode != models.AuthorizationModeFailClosed {
+	if customMiddleware.config.Mode != AuthorizationModeFailClosed {
 		t.Errorf("Custom mode should be FailClosed, got %v", customMiddleware.config.Mode)
 	}
 	if customMiddleware.config.StrictMode != true {

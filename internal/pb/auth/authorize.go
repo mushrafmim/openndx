@@ -1,19 +1,17 @@
-package middleware
+package auth
 
 import (
 	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/openndx/openndx-core/internal/pb/models"
-	authutils "github.com/openndx/openndx-core/internal/pb/utils"
 	"github.com/openndx/openndx-core/internal/utils"
 )
 
 // AuthorizationConfig configures the authorization middleware behavior
 type AuthorizationConfig struct {
 	// Mode defines the behavior when no explicit permission is defined for an endpoint
-	Mode models.AuthorizationMode
+	Mode AuthorizationMode
 
 	// StrictMode when true, logs warnings about undefined endpoints in production
 	StrictMode bool
@@ -27,7 +25,7 @@ type AuthorizationMiddleware struct {
 // NewAuthorizationMiddleware creates a new authorization middleware with default configuration
 func NewAuthorizationMiddleware() *AuthorizationMiddleware {
 	return NewAuthorizationMiddlewareWithConfig(AuthorizationConfig{
-		Mode:       models.AuthorizationModeFailOpenAdminSystem, // Maintain backward compatibility
+		Mode:       AuthorizationModeFailOpenAdminSystem, // Maintain backward compatibility
 		StrictMode: false,
 	})
 }
@@ -49,7 +47,7 @@ func (a *AuthorizationMiddleware) AuthorizeRequest(next http.Handler) http.Handl
 		}
 
 		// Get authenticated user from context (should be set by JWT middleware)
-		user, err := authutils.RequireAuthentication(r)
+		user, err := RequireAuthentication(r)
 		if err != nil {
 			slog.Warn("Authorization failed: user not authenticated", "path", r.URL.Path, "method", r.Method, "error", err)
 			utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
@@ -57,7 +55,7 @@ func (a *AuthorizationMiddleware) AuthorizeRequest(next http.Handler) http.Handl
 		}
 
 		// Find the endpoint permission requirement
-		endpointPermission, found := authutils.FindEndpointPermission(r.Method, r.URL.Path)
+		endpointPermission, found := FindEndpointPermission(r.Method, r.URL.Path)
 		if !found {
 			// Handle undefined endpoints based on configuration
 			if a.handleUndefinedEndpoint(w, r, user) {
@@ -96,10 +94,10 @@ func (a *AuthorizationMiddleware) AuthorizeRequest(next http.Handler) http.Handl
 }
 
 // RequireRole returns a middleware that requires a specific role
-func (a *AuthorizationMiddleware) RequireRole(requiredRole models.Role) func(http.Handler) http.Handler {
+func (a *AuthorizationMiddleware) RequireRole(requiredRole Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, err := authutils.RequireRole(r, requiredRole)
+			user, err := RequireRole(r, requiredRole)
 			if err != nil {
 				slog.Warn("Role requirement not met",
 					"required_role", requiredRole,
@@ -123,10 +121,10 @@ func (a *AuthorizationMiddleware) RequireRole(requiredRole models.Role) func(htt
 }
 
 // RequireAnyRole returns a middleware that requires any of the specified roles
-func (a *AuthorizationMiddleware) RequireAnyRole(requiredRoles ...models.Role) func(http.Handler) http.Handler {
+func (a *AuthorizationMiddleware) RequireAnyRole(requiredRoles ...Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, err := authutils.RequireAnyRole(r, requiredRoles...)
+			user, err := RequireAnyRole(r, requiredRoles...)
 			if err != nil {
 				roleNames := make([]string, len(requiredRoles))
 				for i, role := range requiredRoles {
@@ -155,10 +153,10 @@ func (a *AuthorizationMiddleware) RequireAnyRole(requiredRoles ...models.Role) f
 }
 
 // RequirePermission returns a middleware that requires a specific permission
-func (a *AuthorizationMiddleware) RequirePermission(requiredPermission models.Permission) func(http.Handler) http.Handler {
+func (a *AuthorizationMiddleware) RequirePermission(requiredPermission Permission) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, err := authutils.RequirePermission(r, requiredPermission)
+			user, err := RequirePermission(r, requiredPermission)
 			if err != nil {
 				slog.Warn("Permission requirement not met",
 					"required_permission", requiredPermission,
@@ -183,32 +181,32 @@ func (a *AuthorizationMiddleware) RequirePermission(requiredPermission models.Pe
 
 // RequireAdminRole is a convenience middleware that requires admin role
 func (a *AuthorizationMiddleware) RequireAdminRole() func(http.Handler) http.Handler {
-	return a.RequireRole(models.RoleAdmin)
+	return a.RequireRole(RoleAdmin)
 }
 
 // RequireMemberRole is a convenience middleware that requires member role
 func (a *AuthorizationMiddleware) RequireMemberRole() func(http.Handler) http.Handler {
-	return a.RequireRole(models.RoleMember)
+	return a.RequireRole(RoleMember)
 }
 
 // RequireSystemRole is a convenience middleware that requires system role
 func (a *AuthorizationMiddleware) RequireSystemRole() func(http.Handler) http.Handler {
-	return a.RequireRole(models.RoleSystem)
+	return a.RequireRole(RoleSystem)
 }
 
 // RequireAdminOrSystemRole requires either admin or system role
 func (a *AuthorizationMiddleware) RequireAdminOrSystemRole() func(http.Handler) http.Handler {
-	return a.RequireAnyRole(models.RoleAdmin, models.RoleSystem)
+	return a.RequireAnyRole(RoleAdmin, RoleSystem)
 }
 
 // CheckResourceOwnership is a helper function to be used in handlers to verify resource ownership
-func (a *AuthorizationMiddleware) CheckResourceOwnership(user *models.AuthenticatedUser, resourceOwnerIdpUserId string, permission models.Permission) bool {
-	return authutils.CanAccessResource(user, permission, resourceOwnerIdpUserId)
+func (a *AuthorizationMiddleware) CheckResourceOwnership(user *AuthenticatedUser, resourceOwnerIdpUserId string, permission Permission) bool {
+	return CanAccessResource(user, permission, resourceOwnerIdpUserId)
 }
 
 // handleUndefinedEndpoint handles access control for endpoints without explicit permission mappings
 // Returns true if response was sent (request should stop), false if request should continue
-func (a *AuthorizationMiddleware) handleUndefinedEndpoint(w http.ResponseWriter, r *http.Request, user *models.AuthenticatedUser) bool {
+func (a *AuthorizationMiddleware) handleUndefinedEndpoint(w http.ResponseWriter, r *http.Request, user *AuthenticatedUser) bool {
 	// Log warning if in strict mode - helps identify missing permission mappings
 	if a.config.StrictMode {
 		slog.Warn("SECURITY: Undefined endpoint accessed - consider adding explicit permission mapping",
@@ -220,7 +218,7 @@ func (a *AuthorizationMiddleware) handleUndefinedEndpoint(w http.ResponseWriter,
 	}
 
 	switch a.config.Mode {
-	case models.AuthorizationModeFailClosed:
+	case AuthorizationModeFailClosed:
 		// Most secure: deny all access to undefined endpoints
 		slog.Warn("Access denied to undefined endpoint (fail-closed mode)",
 			"user", user.Email,
@@ -230,7 +228,7 @@ func (a *AuthorizationMiddleware) handleUndefinedEndpoint(w http.ResponseWriter,
 		utils.RespondWithError(w, http.StatusForbidden, "Endpoint access not explicitly permitted")
 		return true
 
-	case models.AuthorizationModeFailOpenAdmin:
+	case AuthorizationModeFailOpenAdmin:
 		// Allow only admin users
 		if user.IsAdmin() {
 			slog.Info("Access granted to undefined endpoint (admin-only mode)",
@@ -249,7 +247,7 @@ func (a *AuthorizationMiddleware) handleUndefinedEndpoint(w http.ResponseWriter,
 		utils.RespondWithError(w, http.StatusForbidden, "Administrative access required")
 		return true
 
-	case models.AuthorizationModeFailOpenAdminSystem:
+	case AuthorizationModeFailOpenAdminSystem:
 		// Legacy behavior: allow admin and system users
 		if user.IsAdmin() || user.IsSystem() {
 			slog.Info("Access granted to undefined endpoint (admin/system mode)",
@@ -297,11 +295,11 @@ func (a *AuthorizationMiddleware) shouldSkipAuthorization(path string) bool {
 }
 
 // GetUserFromRequest is a helper to extract the authenticated user from request context
-func GetUserFromRequest(r *http.Request) (*models.AuthenticatedUser, error) {
-	return authutils.GetAuthenticatedUser(r.Context())
+func GetUserFromRequest(r *http.Request) (*AuthenticatedUser, error) {
+	return GetAuthenticatedUser(r.Context())
 }
 
 // GetAuthContextFromRequest is a helper to extract the auth context from request context
-func GetAuthContextFromRequest(r *http.Request) (*models.AuthContext, error) {
-	return authutils.GetAuthContext(r.Context())
+func GetAuthContextFromRequest(r *http.Request) (*AuthContext, error) {
+	return GetAuthContext(r.Context())
 }

@@ -1,4 +1,4 @@
-package middleware
+package auth
 
 import (
 	"crypto/rsa"
@@ -8,16 +8,16 @@ import (
 	"time"
 )
 
-// TestJWTAuthMiddleware_ThreadSafety tests that concurrent access to keys map is safe
-func TestJWTAuthMiddleware_ThreadSafety(t *testing.T) {
-	config := JWTAuthConfig{
+// TestJWTMiddleware_ThreadSafety tests that concurrent access to keys map is safe
+func TestJWTMiddleware_ThreadSafety(t *testing.T) {
+	config := JWTConfig{
 		JWKSURL:        "https://example.com/.well-known/jwks.json",
 		ExpectedIssuer: "https://example.com",
 		ValidClientIDs: []string{"test-client"},
 		Timeout:        5 * time.Second,
 	}
 
-	middleware := NewJWTAuthMiddleware(config)
+	middleware := NewJWTMiddleware(config)
 
 	// Initialize with some test keys to simulate real scenario
 	middleware.keysMutex.Lock()
@@ -102,16 +102,16 @@ func TestJWTAuthMiddleware_ThreadSafety(t *testing.T) {
 	}
 }
 
-// TestJWTAuthMiddleware_KeyUpdateAtomicity tests that key updates are atomic
-func TestJWTAuthMiddleware_KeyUpdateAtomicity(t *testing.T) {
-	config := JWTAuthConfig{
+// TestJWTMiddleware_KeyUpdateAtomicity tests that key updates are atomic
+func TestJWTMiddleware_KeyUpdateAtomicity(t *testing.T) {
+	config := JWTConfig{
 		JWKSURL:        "https://example.com/.well-known/jwks.json",
 		ExpectedIssuer: "https://example.com",
 		ValidClientIDs: []string{"test-client"},
 		Timeout:        5 * time.Second,
 	}
 
-	middleware := NewJWTAuthMiddleware(config)
+	middleware := NewJWTMiddleware(config)
 
 	// Initialize with initial state
 	middleware.keysMutex.Lock()
@@ -172,16 +172,16 @@ func TestJWTAuthMiddleware_KeyUpdateAtomicity(t *testing.T) {
 	}
 }
 
-// BenchmarkJWTAuthMiddleware_ConcurrentKeyAccess benchmarks concurrent key access
-func BenchmarkJWTAuthMiddleware_ConcurrentKeyAccess(b *testing.B) {
-	config := JWTAuthConfig{
+// BenchmarkJWTMiddleware_ConcurrentKeyAccess benchmarks concurrent key access
+func BenchmarkJWTMiddleware_ConcurrentKeyAccess(b *testing.B) {
+	config := JWTConfig{
 		JWKSURL:        "https://example.com/.well-known/jwks.json",
 		ExpectedIssuer: "https://example.com",
 		ValidClientIDs: []string{"test-client"},
 		Timeout:        5 * time.Second,
 	}
 
-	middleware := NewJWTAuthMiddleware(config)
+	middleware := NewJWTMiddleware(config)
 
 	// Initialize with test keys
 	middleware.keysMutex.Lock()

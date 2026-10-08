@@ -1,4 +1,4 @@
-package utils
+package auth
 
 import (
 	"context"
@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-
-	"github.com/openndx/openndx-core/internal/pb/models"
 )
 
 // AuthContextKey is the key used to store authentication context in request context
@@ -48,8 +46,8 @@ func ExtractBearerToken(r *http.Request) (string, error) {
 }
 
 // GetAuthenticatedUser retrieves the authenticated user from request context
-func GetAuthenticatedUser(ctx context.Context) (*models.AuthenticatedUser, error) {
-	user, ok := ctx.Value(AuthContextKeyUser).(*models.AuthenticatedUser)
+func GetAuthenticatedUser(ctx context.Context) (*AuthenticatedUser, error) {
+	user, ok := ctx.Value(AuthContextKeyUser).(*AuthenticatedUser)
 	if !ok || user == nil {
 		return nil, fmt.Errorf("no authenticated user found in context")
 	}
@@ -57,8 +55,8 @@ func GetAuthenticatedUser(ctx context.Context) (*models.AuthenticatedUser, error
 }
 
 // GetAuthContext retrieves the auth context from request context
-func GetAuthContext(ctx context.Context) (*models.AuthContext, error) {
-	authCtx, ok := ctx.Value(AuthContextKeyAuth).(*models.AuthContext)
+func GetAuthContext(ctx context.Context) (*AuthContext, error) {
+	authCtx, ok := ctx.Value(AuthContextKeyAuth).(*AuthContext)
 	if !ok || authCtx == nil {
 		return nil, fmt.Errorf("no auth context found in request context")
 	}
@@ -66,22 +64,22 @@ func GetAuthContext(ctx context.Context) (*models.AuthContext, error) {
 }
 
 // SetAuthenticatedUser sets the authenticated user in request context
-func SetAuthenticatedUser(ctx context.Context, user *models.AuthenticatedUser) context.Context {
+func SetAuthenticatedUser(ctx context.Context, user *AuthenticatedUser) context.Context {
 	return context.WithValue(ctx, AuthContextKeyUser, user)
 }
 
 // SetAuthContext sets the auth context in request context
-func SetAuthContext(ctx context.Context, authCtx *models.AuthContext) context.Context {
+func SetAuthContext(ctx context.Context, authCtx *AuthContext) context.Context {
 	return context.WithValue(ctx, AuthContextKeyAuth, authCtx)
 }
 
 // RequireAuthentication is a helper that checks if a user is authenticated
-func RequireAuthentication(r *http.Request) (*models.AuthenticatedUser, error) {
+func RequireAuthentication(r *http.Request) (*AuthenticatedUser, error) {
 	return GetAuthenticatedUser(r.Context())
 }
 
 // RequireRole checks if the authenticated user has the required role
-func RequireRole(r *http.Request, requiredRole models.Role) (*models.AuthenticatedUser, error) {
+func RequireRole(r *http.Request, requiredRole Role) (*AuthenticatedUser, error) {
 	user, err := RequireAuthentication(r)
 	if err != nil {
 		return nil, err
@@ -95,7 +93,7 @@ func RequireRole(r *http.Request, requiredRole models.Role) (*models.Authenticat
 }
 
 // RequireAnyRole checks if the authenticated user has any of the required roles
-func RequireAnyRole(r *http.Request, requiredRoles ...models.Role) (*models.AuthenticatedUser, error) {
+func RequireAnyRole(r *http.Request, requiredRoles ...Role) (*AuthenticatedUser, error) {
 	user, err := RequireAuthentication(r)
 	if err != nil {
 		return nil, err
@@ -113,7 +111,7 @@ func RequireAnyRole(r *http.Request, requiredRoles ...models.Role) (*models.Auth
 }
 
 // RequirePermission checks if the authenticated user has the required permission
-func RequirePermission(r *http.Request, requiredPermission models.Permission) (*models.AuthenticatedUser, error) {
+func RequirePermission(r *http.Request, requiredPermission Permission) (*AuthenticatedUser, error) {
 	user, err := RequireAuthentication(r)
 	if err != nil {
 		return nil, err
@@ -128,12 +126,12 @@ func RequirePermission(r *http.Request, requiredPermission models.Permission) (*
 
 // IsOwner checks if the authenticated user owns the resource by comparing their IdP user ID
 // This is used for resource-level authorization
-func IsOwner(user *models.AuthenticatedUser, resourceOwnerIdpUserId string) bool {
+func IsOwner(user *AuthenticatedUser, resourceOwnerIdpUserId string) bool {
 	return user.IdpUserID == resourceOwnerIdpUserId
 }
 
 // IsOwnerOrAdmin checks if the user is either the owner of the resource or has admin role
-func IsOwnerOrAdmin(user *models.AuthenticatedUser, resourceOwnerIdpUserId string) bool {
+func IsOwnerOrAdmin(user *AuthenticatedUser, resourceOwnerIdpUserId string) bool {
 	return user.IsAdmin() || IsOwner(user, resourceOwnerIdpUserId)
 }
 
@@ -141,7 +139,7 @@ func IsOwnerOrAdmin(user *models.AuthenticatedUser, resourceOwnerIdpUserId strin
 // 1. Admin role (can access everything)
 // 2. System role (read-only access to most resources)
 // 3. Member role with ownership (can access their own resources)
-func CanAccessResource(user *models.AuthenticatedUser, permission models.Permission, resourceOwnerIdpUserId string) bool {
+func CanAccessResource(user *AuthenticatedUser, permission Permission, resourceOwnerIdpUserId string) bool {
 	// Admin can access everything
 	if user.IsAdmin() {
 		return user.HasPermission(permission)
@@ -231,8 +229,8 @@ func MatchesEndpoint(requestPath, endpointPattern string) bool {
 
 // endpointLookupCache caches endpoint permissions for O(1) lookup
 type endpointLookupCache struct {
-	exactMatches    map[string]*models.EndpointPermission // method:path -> permission
-	wildcardMatches []models.EndpointPermission           // patterns with wildcards
+	exactMatches    map[string]*EndpointPermission // method:path -> permission
+	wildcardMatches []EndpointPermission           // patterns with wildcards
 }
 
 var (
@@ -247,12 +245,12 @@ var (
 func initializeEndpointCache() {
 	initOnce.Do(func() {
 		cache := &endpointLookupCache{
-			exactMatches:    make(map[string]*models.EndpointPermission),
-			wildcardMatches: make([]models.EndpointPermission, 0),
+			exactMatches:    make(map[string]*EndpointPermission),
+			wildcardMatches: make([]EndpointPermission, 0),
 		}
 
-		for i := range models.EndpointPermissions {
-			ep := &models.EndpointPermissions[i]
+		for i := range EndpointPermissions {
+			ep := &EndpointPermissions[i]
 			key := ep.Method + ":" + ep.Path
 
 			if strings.Contains(ep.Path, "*") {
@@ -271,7 +269,7 @@ func initializeEndpointCache() {
 // FindEndpointPermission finds the required permission for a given HTTP method and path
 // Uses an optimized lookup structure with O(1) for exact matches and minimal linear search for wildcards
 // Performance: ~36ns/op with 0 allocations (significant improvement over linear search as endpoints scale)
-func FindEndpointPermission(method, path string) (*models.EndpointPermission, bool) {
+func FindEndpointPermission(method, path string) (*EndpointPermission, bool) {
 	// Ensure cache is initialized using sync.Once
 	initializeEndpointCache()
 

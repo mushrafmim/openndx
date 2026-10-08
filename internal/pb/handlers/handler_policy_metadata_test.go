@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/pb/services"
@@ -131,7 +132,7 @@ func newPolicyMetadataTestEnv(t *testing.T) *policyMetadataTestEnv {
 // test user. A fresh user is created per test because AuthenticatedUser caches
 // its member ID, which would otherwise leak between test databases.
 func (e *policyMetadataTestEnv) makeMemberOwner(t *testing.T) TestUser {
-	owner := CreateCustomTestUser(fmt.Sprintf("owner-%d", time.Now().UnixNano()), "owner@test.com", []models.Role{models.RoleMember})
+	owner := CreateCustomTestUser(fmt.Sprintf("owner-%d", time.Now().UnixNano()), "owner@test.com", []auth.Role{auth.RoleMember})
 	member := models.Member{
 		MemberID:    "mem_owner_" + fmt.Sprintf("%d", time.Now().UnixNano()),
 		Name:        "Owner Member",
