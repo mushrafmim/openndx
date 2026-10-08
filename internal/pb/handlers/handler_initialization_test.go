@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/services"
 	"github.com/stretchr/testify/assert"
@@ -108,7 +109,7 @@ func TestGetUserMemberID_Caching(t *testing.T) {
 	testHandler.handler.memberService = services.NewMemberService(testHandler.db, mockIDPStore)
 
 	// Create a user
-	user := &models.AuthenticatedUser{
+	user := &auth.AuthenticatedUser{
 		IdpUserID: "test-user-id",
 		Email:     "test@example.com",
 	}
@@ -137,7 +138,7 @@ func TestGetUserMemberID_Caching(t *testing.T) {
 
 	// Case 3: Member exists
 	// Clear cache
-	user = &models.AuthenticatedUser{
+	user = &auth.AuthenticatedUser{
 		IdpUserID: "test-user-id-2",
 		Email:     "test2@example.com",
 	}

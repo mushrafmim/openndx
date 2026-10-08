@@ -6,8 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/openndx/openndx-core/internal/pb/models"
-	"github.com/openndx/openndx-core/internal/pb/utils"
+	"github.com/openndx/openndx-core/internal/pb/auth"
 )
 
 // TestUser represents different test user personas for testing authorization scenarios.
@@ -16,8 +15,8 @@ import (
 type TestUser struct {
 	IdpUserID string
 	Email     string
-	Roles     []models.Role
-	User      *models.AuthenticatedUser
+	Roles     []auth.Role
+	User      *auth.AuthenticatedUser
 }
 
 // Predefined test users with different roles for testing authorization scenarios
@@ -26,21 +25,21 @@ var (
 	AdminUser = TestUser{
 		IdpUserID: "admin-test-user-123",
 		Email:     "admin@test.com",
-		Roles:     []models.Role{models.RoleAdmin},
+		Roles:     []auth.Role{auth.RoleAdmin},
 	}
 
 	// MemberUser has standard member privileges
 	MemberUser = TestUser{
 		IdpUserID: "member-test-user-456",
 		Email:     "member@test.com",
-		Roles:     []models.Role{models.RoleMember},
+		Roles:     []auth.Role{auth.RoleMember},
 	}
 
 	// SystemUser has system-level read access
 	SystemUser = TestUser{
 		IdpUserID: "system-test-user-789",
 		Email:     "system@test.com",
-		Roles:     []models.Role{models.RoleSystem},
+		Roles:     []auth.Role{auth.RoleSystem},
 	}
 )
 
@@ -52,22 +51,22 @@ func init() {
 }
 
 // createTestUser creates an AuthenticatedUser from test data
-func createTestUser(idpUserID, email string, roles []models.Role) *models.AuthenticatedUser {
+func createTestUser(idpUserID, email string, roles []auth.Role) *auth.AuthenticatedUser {
 	// Convert roles to string slice for UserClaims
 	roleStrings := make([]string, len(roles))
 	for i, role := range roles {
 		roleStrings[i] = string(role)
 	}
 
-	claims := &models.UserClaims{
+	claims := &auth.UserClaims{
 		IdpUserID: idpUserID,
 		Email:     email,
 		FirstName: "Test",
 		LastName:  "User",
-		Roles:     models.FlexibleStringSlice(roleStrings),
+		Roles:     auth.FlexibleStringSlice(roleStrings),
 	}
 
-	user, err := models.NewAuthenticatedUser(claims)
+	user, err := auth.NewAuthenticatedUser(claims)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create test user: %v", err))
 	}
@@ -76,7 +75,7 @@ func createTestUser(idpUserID, email string, roles []models.Role) *models.Authen
 
 // WithAuth creates a new HTTP request with the specified user authentication context
 func WithAuth(req *http.Request, testUser TestUser) *http.Request {
-	ctx := utils.SetAuthenticatedUser(req.Context(), testUser.User)
+	ctx := auth.SetAuthenticatedUser(req.Context(), testUser.User)
 	return req.WithContext(ctx)
 }
 
@@ -126,7 +125,7 @@ func NewUnauthenticatedRequest(method, url string, body io.Reader) *http.Request
 }
 
 // CreateCustomTestUser creates a test user with custom roles and permissions
-func CreateCustomTestUser(idpUserID, email string, roles []models.Role) TestUser {
+func CreateCustomTestUser(idpUserID, email string, roles []auth.Role) TestUser {
 	user := createTestUser(idpUserID, email, roles)
 	return TestUser{
 		IdpUserID: idpUserID,

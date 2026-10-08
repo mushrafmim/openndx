@@ -1,69 +1,14 @@
-package models
+// Package auth handles authentication and authorization for the Portal
+// Backend: JWT validation, the authenticated user, roles and permissions, and
+// the middleware that enforces them.
+package auth
 
 import (
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/golang-jwt/jwt/v5"
 )
-
-// UserClaims represents the JWT claims for a user
-type UserClaims struct {
-	Email       string              `json:"email"`
-	FirstName   string              `json:"given_name"`
-	LastName    string              `json:"family_name"`
-	PhoneNumber string              `json:"phone_number"`
-	Roles       FlexibleStringSlice `json:"roles"`
-	Groups      FlexibleStringSlice `json:"groups"`
-	IdpUserID   string              `json:"sub"` // Subject is typically the user ID from IdP
-	// Standard JWT claims - using int64 for Unix timestamps
-	Issuer    string              `json:"iss"`
-	Audience  FlexibleStringSlice `json:"aud"`
-	ExpiresAt int64               `json:"exp"`
-	IssuedAt  int64               `json:"iat"`
-	NotBefore int64               `json:"nbf"`
-}
-
-// GetExpirationTime implements jwt.Claims interface
-func (c *UserClaims) GetExpirationTime() (*jwt.NumericDate, error) {
-	if c.ExpiresAt == 0 {
-		return nil, nil
-	}
-	return jwt.NewNumericDate(time.Unix(c.ExpiresAt, 0)), nil
-}
-
-// GetIssuedAt implements jwt.Claims interface
-func (c *UserClaims) GetIssuedAt() (*jwt.NumericDate, error) {
-	if c.IssuedAt == 0 {
-		return nil, nil
-	}
-	return jwt.NewNumericDate(time.Unix(c.IssuedAt, 0)), nil
-}
-
-// GetNotBefore implements jwt.Claims interface
-func (c *UserClaims) GetNotBefore() (*jwt.NumericDate, error) {
-	if c.NotBefore == 0 {
-		return nil, nil
-	}
-	return jwt.NewNumericDate(time.Unix(c.NotBefore, 0)), nil
-}
-
-// GetIssuer implements jwt.Claims interface
-func (c *UserClaims) GetIssuer() (string, error) {
-	return c.Issuer, nil
-}
-
-// GetSubject implements jwt.Claims interface
-func (c *UserClaims) GetSubject() (string, error) {
-	return c.IdpUserID, nil
-}
-
-// GetAudience implements jwt.Claims interface
-func (c *UserClaims) GetAudience() (jwt.ClaimStrings, error) {
-	return jwt.ClaimStrings(c.Audience.ToStringSlice()), nil
-}
 
 // AuthenticatedUser represents the authenticated user context
 type AuthenticatedUser struct {

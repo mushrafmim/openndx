@@ -11,8 +11,7 @@ import (
 	"time"
 
 	"github.com/LSFLK/argus/pkg/audit"
-	"github.com/openndx/openndx-core/internal/pb/models"
-	"github.com/openndx/openndx-core/internal/pb/utils"
+	"github.com/openndx/openndx-core/internal/pb/auth"
 )
 
 // mockAuditClient implements audit.Auditor interface for testing
@@ -107,7 +106,7 @@ func TestLogAuditEvent_GlobalFunction(t *testing.T) {
 
 	// This should not panic even if the audit service is not available
 	resourceID := "test-id-123"
-	LogAuditEvent(req, "TEST_RESOURCE", &resourceID, string(models.AuditStatusSuccess))
+	LogAuditEvent(req, "TEST_RESOURCE", &resourceID, string(AuditStatusSuccess))
 }
 
 func TestLogAudit_SkipsReadOperations(t *testing.T) {
@@ -116,7 +115,7 @@ func TestLogAudit_SkipsReadOperations(t *testing.T) {
 	// GET request should be skipped
 	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	resourceID := "test-id"
-	LogAudit(mockClient, req, "TEST_RESOURCE", &resourceID, string(models.AuditStatusSuccess))
+	LogAudit(mockClient, req, "TEST_RESOURCE", &resourceID, string(AuditStatusSuccess))
 
 	// This test passes if no panic occurs - we can't easily test HTTP calls without a mock server
 }
@@ -130,7 +129,7 @@ func TestLogAudit_ProcessesWriteOperations(t *testing.T) {
 	req.Header.Set("X-User-Role", "MEMBER")
 
 	resourceID := "test-id"
-	LogAudit(mockClient, req, "TEST_RESOURCE", &resourceID, string(models.AuditStatusSuccess))
+	LogAudit(mockClient, req, "TEST_RESOURCE", &resourceID, string(AuditStatusSuccess))
 
 	// This test passes if no panic occurs - we can't easily test HTTP calls without a mock server
 }
@@ -178,7 +177,7 @@ func TestAuditMiddleware_ThreadSafety(t *testing.T) {
 
 	// This should not panic
 	resourceID := "test-id-concurrent"
-	LogAuditEvent(req, "TEST_RESOURCE", &resourceID, string(models.AuditStatusSuccess))
+	LogAuditEvent(req, "TEST_RESOURCE", &resourceID, string(AuditStatusSuccess))
 }
 
 func TestLogAuditEvent_WithoutInitialization(t *testing.T) {
@@ -192,7 +191,7 @@ func TestLogAuditEvent_WithoutInitialization(t *testing.T) {
 
 	// Should not panic
 	resourceID := "test-resource"
-	LogAuditEvent(req, "TEST_RESOURCE", &resourceID, string(models.AuditStatusSuccess))
+	LogAuditEvent(req, "TEST_RESOURCE", &resourceID, string(AuditStatusSuccess))
 }
 
 func TestLogAudit_SendsRequest(t *testing.T) {
@@ -223,25 +222,25 @@ func TestLogAudit_SendsRequest(t *testing.T) {
 
 	// Create an authenticated user to put in context
 	now := time.Now().Unix()
-	claims := &models.UserClaims{
+	claims := &auth.UserClaims{
 		IdpUserID: "test-user-id",
 		Email:     "test@example.com",
-		Roles:     models.FlexibleStringSlice([]string{"OpenNDX_Member"}),
+		Roles:     auth.FlexibleStringSlice([]string{"OpenNDX_Member"}),
 		IssuedAt:  now,
 		ExpiresAt: now + 3600,
 	}
 
-	user, err := models.NewAuthenticatedUser(claims)
+	user, err := auth.NewAuthenticatedUser(claims)
 	if err != nil {
 		t.Fatalf("Failed to create authenticated user: %v", err)
 	}
 
 	// Set user in request context using the proper utility function
-	ctx := utils.SetAuthenticatedUser(req.Context(), user)
+	ctx := auth.SetAuthenticatedUser(req.Context(), user)
 	req = req.WithContext(ctx)
 
 	resourceID := "test-resource-id"
-	LogAudit(sharedClient, req, "TEST_RESOURCE", &resourceID, string(models.AuditStatusSuccess))
+	LogAudit(sharedClient, req, "TEST_RESOURCE", &resourceID, string(AuditStatusSuccess))
 
 	// Wait for async log to complete
 	// Note: In real code, we can't easily wait for the goroutine.

@@ -1,4 +1,4 @@
-package middleware
+package auth
 
 import (
 	"context"
@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/openndx/openndx-core/internal/pb/models"
-	authutils "github.com/openndx/openndx-core/internal/pb/utils"
 	"github.com/openndx/openndx-core/internal/utils"
 )
 
@@ -36,9 +34,9 @@ type JWK struct {
 	E   string `json:"e"`
 }
 
-// JWTAuthMiddleware provides JWT authentication functionality
+// JWTMiddleware provides JWT authentication functionality
 // Thread-safe: All methods can be called concurrently from multiple goroutines
-type JWTAuthMiddleware struct {
+type JWTMiddleware struct {
 	jwksURL        string
 	expectedIssuer string
 	validClientIDs []string
@@ -51,8 +49,8 @@ type JWTAuthMiddleware struct {
 	lastFetch time.Time
 }
 
-// JWTAuthConfig contains configuration for JWT authentication
-type JWTAuthConfig struct {
+// JWTConfig contains configuration for JWT authentication
+type JWTConfig struct {
 	JWKSURL        string
 	ExpectedIssuer string
 	ValidClientIDs []string // Multiple valid client IDs for different portals
@@ -65,7 +63,7 @@ type JWTAuthConfig struct {
 }
 
 // Validate checks if the JWT configuration is valid
-func (c JWTAuthConfig) Validate() error {
+func (c JWTConfig) Validate() error {
 	if c.JWKSURL == "" {
 		return fmt.Errorf("JWKSURL is required for JWT authentication")
 	}
@@ -88,8 +86,8 @@ func (c JWTAuthConfig) Validate() error {
 	return nil
 }
 
-// NewJWTAuthMiddleware creates a new JWT authentication middleware
-func NewJWTAuthMiddleware(config JWTAuthConfig) *JWTAuthMiddleware {
+// NewJWTMiddleware creates a new JWT authentication middleware
+func NewJWTMiddleware(config JWTConfig) *JWTMiddleware {
 	timeout := config.Timeout
 	if timeout == 0 {
 		timeout = 10 * time.Second
@@ -102,7 +100,7 @@ func NewJWTAuthMiddleware(config JWTAuthConfig) *JWTAuthMiddleware {
 		}
 	}
 
-	return &JWTAuthMiddleware{
+	return &JWTMiddleware{
 		jwksURL:        config.JWKSURL,
 		expectedIssuer: config.ExpectedIssuer,
 		validClientIDs: config.ValidClientIDs,
@@ -112,7 +110,7 @@ func NewJWTAuthMiddleware(config JWTAuthConfig) *JWTAuthMiddleware {
 }
 
 // AuthenticateJWT returns a middleware function that validates JWT tokens
-func (j *JWTAuthMiddleware) AuthenticateJWT(next http.Handler) http.Handler {
+func (j *JWTMiddleware) AuthenticateJWT(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip authentication for health and debug endpoints
 		if j.shouldSkipAuth(r.URL.Path) {
@@ -121,7 +119,7 @@ func (j *JWTAuthMiddleware) AuthenticateJWT(next http.Handler) http.Handler {
 		}
 
 		// Extract token from Authorization header
-		tokenString, err := authutils.ExtractBearerToken(r)
+		tokenString, err := ExtractBearerToken(r)
 		if err != nil {
 			slog.Warn("Failed to extract bearer token", "error", err, "path", r.URL.Path, "method", r.Method)
 			utils.RespondWithError(w, http.StatusUnauthorized, "Invalid or missing authorization header")
@@ -144,8 +142,8 @@ func (j *JWTAuthMiddleware) AuthenticateJWT(next http.Handler) http.Handler {
 		}
 
 		// Add user and auth context to request context
-		ctx := authutils.SetAuthenticatedUser(r.Context(), user)
-		ctx = authutils.SetAuthContext(ctx, authCtx)
+		ctx := SetAuthenticatedUser(r.Context(), user)
+		ctx = SetAuthContext(ctx, authCtx)
 
 		// Log successful authentication
 		slog.Info("User authenticated successfully",
@@ -161,14 +159,14 @@ func (j *JWTAuthMiddleware) AuthenticateJWT(next http.Handler) http.Handler {
 }
 
 // validateToken validates a JWT token and returns the authenticated user
-func (j *JWTAuthMiddleware) validateToken(tokenString string) (*models.AuthenticatedUser, *models.AuthContext, error) {
+func (j *JWTMiddleware) validateToken(tokenString string) (*AuthenticatedUser, *AuthContext, error) {
 	// Ensure we have fresh JWKS keys
 	if err := j.ensureKeysFresh(); err != nil {
 		return nil, nil, fmt.Errorf("failed to ensure fresh keys: %w", err)
 	}
 
 	// Parse and validate the token
-	token, err := jwt.ParseWithClaims(tokenString, &models.UserClaims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
 		// Verify signing method
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -209,7 +207,7 @@ func (j *JWTAuthMiddleware) validateToken(tokenString string) (*models.Authentic
 	}
 
 	// Extract claims
-	claims, ok := token.Claims.(*models.UserClaims)
+	claims, ok := token.Claims.(*UserClaims)
 	if !ok || !token.Valid {
 		return nil, nil, fmt.Errorf("invalid token claims")
 	}
@@ -220,13 +218,13 @@ func (j *JWTAuthMiddleware) validateToken(tokenString string) (*models.Authentic
 	}
 
 	// Create authenticated user from claims
-	user, err := models.NewAuthenticatedUser(claims)
+	user, err := NewAuthenticatedUser(claims)
 	if err != nil {
 		return nil, nil, fmt.Errorf("user creation failed: %w", err)
 	}
 
 	// Create auth context
-	authCtx := &models.AuthContext{
+	authCtx := &AuthContext{
 		User:        user,
 		Token:       tokenString,
 		IssuedBy:    claims.Issuer,
@@ -238,7 +236,7 @@ func (j *JWTAuthMiddleware) validateToken(tokenString string) (*models.Authentic
 }
 
 // validateStandardClaims validates the standard JWT claims
-func (j *JWTAuthMiddleware) validateStandardClaims(claims *models.UserClaims) error {
+func (j *JWTMiddleware) validateStandardClaims(claims *UserClaims) error {
 	now := time.Now()
 
 	// Check if token is expired
@@ -274,7 +272,7 @@ func (j *JWTAuthMiddleware) validateStandardClaims(claims *models.UserClaims) er
 }
 
 // containsValidClientID checks if the audience list contains any of the valid client IDs
-func (j *JWTAuthMiddleware) containsValidClientID(audiences models.FlexibleStringSlice) bool {
+func (j *JWTMiddleware) containsValidClientID(audiences FlexibleStringSlice) bool {
 	audienceSlice := audiences.ToStringSlice()
 	for _, aud := range audienceSlice {
 		for _, validClientID := range j.validClientIDs {
@@ -288,7 +286,7 @@ func (j *JWTAuthMiddleware) containsValidClientID(audiences models.FlexibleStrin
 
 // fetchJWKS fetches the JWKS from the configured endpoint
 // Thread-safe: Updates keys and lastFetch atomically under write lock
-func (j *JWTAuthMiddleware) fetchJWKS() error {
+func (j *JWTMiddleware) fetchJWKS() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -343,7 +341,7 @@ func (j *JWTAuthMiddleware) fetchJWKS() error {
 }
 
 // buildRSAPublicKey constructs an RSA public key from modulus and exponent
-func (j *JWTAuthMiddleware) buildRSAPublicKey(nStr, eStr string) (*rsa.PublicKey, error) {
+func (j *JWTMiddleware) buildRSAPublicKey(nStr, eStr string) (*rsa.PublicKey, error) {
 	// Decode base64url encoded modulus
 	nBytes, err := base64.RawURLEncoding.DecodeString(nStr)
 	if err != nil {
@@ -378,7 +376,7 @@ func (j *JWTAuthMiddleware) buildRSAPublicKey(nStr, eStr string) (*rsa.PublicKey
 
 // ensureKeysFresh ensures we have fresh JWKS keys (refreshes if older than 1 hour)
 // Thread-safe: Uses read lock to check freshness, delegates to fetchJWKS for updates
-func (j *JWTAuthMiddleware) ensureKeysFresh() error {
+func (j *JWTMiddleware) ensureKeysFresh() error {
 	// Check if refresh is needed with read lock
 	j.keysMutex.RLock()
 	needsRefresh := len(j.keys) == 0 || time.Since(j.lastFetch) > time.Hour
@@ -391,7 +389,7 @@ func (j *JWTAuthMiddleware) ensureKeysFresh() error {
 }
 
 // shouldSkipAuth determines if authentication should be skipped for this path
-func (j *JWTAuthMiddleware) shouldSkipAuth(path string) bool {
+func (j *JWTMiddleware) shouldSkipAuth(path string) bool {
 	skipPaths := []string{
 		"/health",
 		"/debug",

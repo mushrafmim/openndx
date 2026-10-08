@@ -146,13 +146,15 @@ cmd/pb/
 └── main.go                 # Application entry point
 
 internal/pb/
+├── auth/                  # JWT validation, roles/permissions & authorization middleware
 ├── database/              # GORM connection and migrations
 ├── handlers/              # HTTP request handlers
-├── middleware/            # Authentication, authorization, CORS & audit
+├── idp/                   # Identity provider integrations
+├── kernel/                # Types shared across domains (BaseModel, Status, Version)
+├── middleware/            # CORS & audit
 ├── models/                # Data models and DTOs
-├── services/              # Business logic layer
-├── utils/                 # Auth context helpers & GraphQL SDL parsing
-└── idp/                   # Identity provider integrations
+├── policy/                # Client for the Policy Decision Point (PDP)
+└── services/              # Business logic layer
 
 internal/utils/            # HTTP/server helpers shared across services
 ```

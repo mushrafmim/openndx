@@ -1,9 +1,7 @@
-package utils
+package auth
 
 import (
 	"testing"
-
-	"github.com/openndx/openndx-core/internal/pb/models"
 )
 
 func TestFindEndpointPermission(t *testing.T) {
@@ -15,7 +13,7 @@ func TestFindEndpointPermission(t *testing.T) {
 		method        string
 		path          string
 		expectedFound bool
-		expectedPerm  models.Permission
+		expectedPerm  Permission
 		expectedOwner bool
 	}{
 		{
@@ -23,7 +21,7 @@ func TestFindEndpointPermission(t *testing.T) {
 			method:        "GET",
 			path:          "/api/v1/schemas",
 			expectedFound: true,
-			expectedPerm:  models.PermissionReadSchema,
+			expectedPerm:  PermissionReadSchema,
 			expectedOwner: false,
 		},
 		{
@@ -31,7 +29,7 @@ func TestFindEndpointPermission(t *testing.T) {
 			method:        "POST",
 			path:          "/api/v1/members",
 			expectedFound: true,
-			expectedPerm:  models.PermissionCreateMember,
+			expectedPerm:  PermissionCreateMember,
 			expectedOwner: false,
 		},
 		{
@@ -39,7 +37,7 @@ func TestFindEndpointPermission(t *testing.T) {
 			method:        "GET",
 			path:          "/api/v1/schemas/12345",
 			expectedFound: true,
-			expectedPerm:  models.PermissionReadSchema,
+			expectedPerm:  PermissionReadSchema,
 			expectedOwner: true,
 		},
 		{
@@ -47,7 +45,7 @@ func TestFindEndpointPermission(t *testing.T) {
 			method:        "PUT",
 			path:          "/api/v1/applications/abcd-efgh",
 			expectedFound: true,
-			expectedPerm:  models.PermissionUpdateApplication,
+			expectedPerm:  PermissionUpdateApplication,
 			expectedOwner: true,
 		},
 		{
@@ -67,7 +65,7 @@ func TestFindEndpointPermission(t *testing.T) {
 			method:        "GET",
 			path:          "/api/v1/schemas/sch_1/policy-metadata",
 			expectedFound: true,
-			expectedPerm:  models.PermissionReadSchema,
+			expectedPerm:  PermissionReadSchema,
 			expectedOwner: true,
 		},
 		{
@@ -75,7 +73,7 @@ func TestFindEndpointPermission(t *testing.T) {
 			method:        "PATCH",
 			path:          "/api/v1/schemas/sch_1/policy-metadata/pm-1",
 			expectedFound: true,
-			expectedPerm:  models.PermissionUpdateSchema,
+			expectedPerm:  PermissionUpdateSchema,
 			expectedOwner: true,
 		},
 		{
@@ -83,7 +81,7 @@ func TestFindEndpointPermission(t *testing.T) {
 			method:        "DELETE",
 			path:          "/api/v1/schemas/sch_1/policy-metadata/pm-1",
 			expectedFound: true,
-			expectedPerm:  models.PermissionUpdateSchema,
+			expectedPerm:  PermissionUpdateSchema,
 			expectedOwner: true,
 		},
 		{
@@ -91,7 +89,7 @@ func TestFindEndpointPermission(t *testing.T) {
 			method:        "DELETE",
 			path:          "/api/v1/schemas/sch_1/policy-metadata/pm-1/allowlist/client-1",
 			expectedFound: true,
-			expectedPerm:  models.PermissionUpdateSchema,
+			expectedPerm:  PermissionUpdateSchema,
 			expectedOwner: true,
 		},
 		{
@@ -99,7 +97,7 @@ func TestFindEndpointPermission(t *testing.T) {
 			method:        "DELETE",
 			path:          "/api/v1/schemas/sch_1",
 			expectedFound: true,
-			expectedPerm:  models.PermissionDeleteSchema,
+			expectedPerm:  PermissionDeleteSchema,
 			expectedOwner: true,
 		},
 	}

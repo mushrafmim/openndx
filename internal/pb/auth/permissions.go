@@ -1,4 +1,4 @@
-package models
+package auth
 
 // AuthorizationMode defines how the system behaves when no explicit permission is defined for an endpoint
 type AuthorizationMode string

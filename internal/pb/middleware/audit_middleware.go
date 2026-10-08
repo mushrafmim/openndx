@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/LSFLK/argus/pkg/audit"
-	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/auth"
 )
 
 // LogAudit logs an audit event for portal-backend operations by extracting request info and creating an audit log
@@ -70,12 +70,12 @@ func LogAudit(client audit.Auditor, r *http.Request, resource string, resourceID
 // Security: Uses SYSTEM as default for unauthenticated/unknown roles to prevent privilege escalation
 func extractActorInfoFromRequest(r *http.Request) (actorType string, actorID *string, actorRole *string) {
 	// Try to get authenticated user first
-	user, err := GetUserFromRequest(r)
+	user, err := auth.GetUserFromRequest(r)
 	if err != nil || user == nil {
 		// Unauthenticated request: use SYSTEM actor type with request identifier
 		// This prevents misclassification and ensures unauthenticated actions are clearly marked
 		systemActorID := "unauthenticated-request"
-		systemActorType := string(models.ActorTypeSystem)
+		systemActorType := string(ActorTypeSystem)
 		slog.Warn("Audit log for unauthenticated request - using SYSTEM actor type",
 			"path", r.URL.Path,
 			"method", r.Method,
@@ -89,19 +89,19 @@ func extractActorInfoFromRequest(r *http.Request) (actorType string, actorID *st
 
 	// Map user's primary role to actor type
 	primaryRole := user.GetPrimaryRole()
-	var actorTypeConst models.ActorType
+	var actorTypeConst ActorType
 
 	switch primaryRole {
-	case models.RoleAdmin:
-		actorTypeConst = models.ActorTypeAdmin
-	case models.RoleMember:
-		actorTypeConst = models.ActorTypeMember
-	case models.RoleSystem:
-		actorTypeConst = models.ActorTypeSystem
+	case auth.RoleAdmin:
+		actorTypeConst = ActorTypeAdmin
+	case auth.RoleMember:
+		actorTypeConst = ActorTypeMember
+	case auth.RoleSystem:
+		actorTypeConst = ActorTypeSystem
 	default:
 		// Security: Use SYSTEM for unknown roles instead of MEMBER to prevent privilege escalation
 		// Unknown roles should be investigated and properly mapped
-		actorTypeConst = models.ActorTypeSystem
+		actorTypeConst = ActorTypeSystem
 		slog.Warn("Unknown role encountered in audit log - using SYSTEM actor type as safe default",
 			"user_id", userID,
 			"primary_role", primaryRole,
