@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/pb/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +31,7 @@ type pdpCall struct {
 // records the requests it receives.
 type fakePDP struct {
 	schemaID string
-	records  []models.PolicyMetadataResponse
+	records  []policy.PolicyMetadataResponse
 	// writeStatus and writeBody override the response to PATCH/DELETE requests
 	writeStatus int
 	writeBody   string
@@ -44,12 +45,12 @@ func (f *fakePDP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method == http.MethodGet {
-		records := []models.PolicyMetadataResponse{}
+		records := []policy.PolicyMetadataResponse{}
 		if r.URL.Query().Get("schemaId") == f.schemaID {
 			records = f.records
 		}
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(models.PolicyMetadataListResponse{Records: records})
+		_ = json.NewEncoder(w).Encode(policy.PolicyMetadataListResponse{Records: records})
 		return
 	}
 
@@ -101,21 +102,21 @@ func newPolicyMetadataTestEnv(t *testing.T) *policyMetadataTestEnv {
 
 	pdp := &fakePDP{
 		schemaID: schemaID,
-		records: []models.PolicyMetadataResponse{
+		records: []policy.PolicyMetadataResponse{
 			{
 				ID:                "pm-1",
 				SchemaID:          schemaID,
 				FieldName:         "person.name",
-				Source:            models.SourcePrimary,
-				AccessControlType: models.AccessControlTypeRestricted,
-				AllowList:         models.AllowList{"client-1": models.AllowListEntry{}},
+				Source:            policy.SourcePrimary,
+				AccessControlType: policy.AccessControlTypeRestricted,
+				AllowList:         policy.AllowList{"client-1": policy.AllowListEntry{}},
 			},
 		},
 	}
 	server := httptest.NewServer(pdp)
 	t.Cleanup(server.Close)
 
-	pdpService := services.NewPDPService(server.URL)
+	pdpService := policy.NewClient(server.URL)
 	mockIDP := new(MockIdentityProviderAPI)
 	handler := &V1Handler{
 		memberService:      services.NewMemberService(db, mockIDP),
@@ -172,7 +173,7 @@ func TestSchemaPolicyMetadataEndpoints_List(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 		var response struct {
-			Items []models.PolicyMetadataResponse `json:"items"`
+			Items []policy.PolicyMetadataResponse `json:"items"`
 			Count int                             `json:"count"`
 		}
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
@@ -238,7 +239,7 @@ func TestSchemaPolicyMetadataEndpoints_Patch(t *testing.T) {
 		w := env.serve(NewAuthenticatedRequest(http.MethodPatch, env.url("/pm-1"), strings.NewReader(body), owner))
 
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-		var response models.PolicyMetadataResponse
+		var response policy.PolicyMetadataResponse
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 		assert.Equal(t, "Patched", *response.DisplayName)
 

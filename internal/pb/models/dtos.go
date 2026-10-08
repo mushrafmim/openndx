@@ -1,5 +1,7 @@
 package models
 
+import "github.com/openndx/openndx-core/internal/pb/policy"
+
 // Request/Response DTOs for V1 API endpoints
 
 // CreateSchemaSubmissionRequest Provider Schema Submission DTOs
@@ -36,9 +38,9 @@ type CreateSchemaRequest struct {
 	// SDL/GraphQL parsing entirely - each FieldName is used as-is (no forced
 	// typename.fieldName prefix the way SDL-derived field paths get).
 	// Mutually exclusive with SDL.
-	Fields   []PolicyMetadataCreateRequestRecord `json:"fields,omitempty"`
-	Endpoint string                              `json:"endpoint" validate:"required"`
-	MemberID string                              `json:"memberId" validate:"required"`
+	Fields   []policy.PolicyMetadataCreateRequestRecord `json:"fields,omitempty"`
+	Endpoint string                                     `json:"endpoint" validate:"required"`
+	MemberID string                                     `json:"memberId" validate:"required"`
 }
 
 // UpdateSchemaRequest updates an existing provider schema
@@ -52,29 +54,29 @@ type UpdateSchemaRequest struct {
 
 // CreateApplicationSubmissionRequest Consumer Application Submission DTOs
 type CreateApplicationSubmissionRequest struct {
-	ApplicationName        string                `json:"applicationName" validate:"required"`
-	ApplicationDescription *string               `json:"applicationDescription,omitempty"`
-	SelectedFields         []SelectedFieldRecord `json:"selectedFields" validate:"required,min=1"`
-	PreviousApplicationID  *string               `json:"previousApplicationId,omitempty"`
-	MemberID               string                `json:"memberId" validate:"required"`
+	ApplicationName        string                       `json:"applicationName" validate:"required"`
+	ApplicationDescription *string                      `json:"applicationDescription,omitempty"`
+	SelectedFields         []policy.SelectedFieldRecord `json:"selectedFields" validate:"required,min=1"`
+	PreviousApplicationID  *string                      `json:"previousApplicationId,omitempty"`
+	MemberID               string                       `json:"memberId" validate:"required"`
 }
 
 // UpdateApplicationSubmissionRequest updates the status of a consumer application submission
 type UpdateApplicationSubmissionRequest struct {
-	ApplicationName        *string                `json:"applicationName,omitempty"`
-	ApplicationDescription *string                `json:"applicationDescription,omitempty"`
-	SelectedFields         *[]SelectedFieldRecord `json:"selectedFields,omitempty"`
-	Status                 *string                `json:"status,omitempty"`
-	PreviousApplicationID  *string                `json:"previousApplicationId,omitempty"`
-	Review                 *string                `json:"review,omitempty"`
+	ApplicationName        *string                       `json:"applicationName,omitempty"`
+	ApplicationDescription *string                       `json:"applicationDescription,omitempty"`
+	SelectedFields         *[]policy.SelectedFieldRecord `json:"selectedFields,omitempty"`
+	Status                 *string                       `json:"status,omitempty"`
+	PreviousApplicationID  *string                       `json:"previousApplicationId,omitempty"`
+	Review                 *string                       `json:"review,omitempty"`
 }
 
 // CreateApplicationRequest creates a new consumer application
 type CreateApplicationRequest struct {
-	ApplicationName        string                `json:"applicationName" validate:"required"`
-	ApplicationDescription *string               `json:"applicationDescription,omitempty"`
-	SelectedFields         []SelectedFieldRecord `json:"selectedFields" validate:"required,min=1"`
-	MemberID               string                `json:"memberId" validate:"required"`
+	ApplicationName        string                       `json:"applicationName" validate:"required"`
+	ApplicationDescription *string                      `json:"applicationDescription,omitempty"`
+	SelectedFields         []policy.SelectedFieldRecord `json:"selectedFields" validate:"required,min=1"`
+	MemberID               string                       `json:"memberId" validate:"required"`
 	// IdpApplicationID and IdpClientID let a caller register an application whose
 	// OAuth2 client was already provisioned directly in the IDP (e.g. manually via
 	// ThunderID's console, since idpfactory only implements Asgardeo's admin API
@@ -97,8 +99,8 @@ type UpdateApplicationRequest struct {
 // UpdateApplicationPolicyRequest replaces an existing application's allow-list (its
 // requested schema fields and their PDP grant duration).
 type UpdateApplicationPolicyRequest struct {
-	SelectedFields []SelectedFieldRecord `json:"selectedFields" validate:"required,min=1"`
-	GrantDuration  *GrantDurationType    `json:"grantDuration,omitempty" validate:"omitempty,grant_duration_type_enum"`
+	SelectedFields []policy.SelectedFieldRecord `json:"selectedFields" validate:"required,min=1"`
+	GrantDuration  *policy.GrantDurationType    `json:"grantDuration,omitempty" validate:"omitempty,grant_duration_type_enum"`
 }
 
 type CreateMemberRequest struct {
@@ -168,16 +170,16 @@ type SchemaSubmissionResponse struct {
 }
 
 type ApplicationResponse struct {
-	ApplicationID          string                `json:"applicationId"`
-	ApplicationName        string                `json:"applicationName"`
-	ApplicationDescription *string               `json:"applicationDescription,omitempty"`
-	SelectedFields         []SelectedFieldRecord `json:"selectedFields"`
-	MemberID               string                `json:"memberId"`
-	Version                string                `json:"version"`
-	IdpApplicationID       *string               `json:"idpApplicationId,omitempty"`
-	IdpClientID            *string               `json:"idpClientId,omitempty"`
-	CreatedAt              string                `json:"createdAt"`
-	UpdatedAt              string                `json:"updatedAt"`
+	ApplicationID          string                       `json:"applicationId"`
+	ApplicationName        string                       `json:"applicationName"`
+	ApplicationDescription *string                      `json:"applicationDescription,omitempty"`
+	SelectedFields         []policy.SelectedFieldRecord `json:"selectedFields"`
+	MemberID               string                       `json:"memberId"`
+	Version                string                       `json:"version"`
+	IdpApplicationID       *string                      `json:"idpApplicationId,omitempty"`
+	IdpClientID            *string                      `json:"idpClientId,omitempty"`
+	CreatedAt              string                       `json:"createdAt"`
+	UpdatedAt              string                       `json:"updatedAt"`
 }
 
 type ApplicationIDResponse struct {
@@ -185,16 +187,16 @@ type ApplicationIDResponse struct {
 }
 
 type ApplicationSubmissionResponse struct {
-	SubmissionID           string                `json:"submissionId"`
-	PreviousApplicationID  *string               `json:"previousApplicationId,omitempty"`
-	ApplicationName        string                `json:"applicationName"`
-	ApplicationDescription *string               `json:"applicationDescription,omitempty"`
-	SelectedFields         []SelectedFieldRecord `json:"selectedFields"`
-	MemberID               string                `json:"memberId"`
-	Status                 string                `json:"status"`
-	CreatedAt              string                `json:"createdAt"`
-	UpdatedAt              string                `json:"updatedAt"`
-	Review                 *string               `json:"review,omitempty"`
+	SubmissionID           string                       `json:"submissionId"`
+	PreviousApplicationID  *string                      `json:"previousApplicationId,omitempty"`
+	ApplicationName        string                       `json:"applicationName"`
+	ApplicationDescription *string                      `json:"applicationDescription,omitempty"`
+	SelectedFields         []policy.SelectedFieldRecord `json:"selectedFields"`
+	MemberID               string                       `json:"memberId"`
+	Status                 string                       `json:"status"`
+	CreatedAt              string                       `json:"createdAt"`
+	UpdatedAt              string                       `json:"updatedAt"`
+	Review                 *string                      `json:"review,omitempty"`
 }
 
 // CollectionResponse Generic collection response

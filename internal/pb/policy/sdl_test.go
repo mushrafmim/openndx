@@ -1,16 +1,15 @@
-package utils
+package policy
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
-func TestGraphQLHandler_buildFieldPath(t *testing.T) {
-	handler := NewGraphQLHandler()
+func TestSDLParser_buildFieldPath(t *testing.T) {
+	parser := newSDLParser()
 
 	tests := []struct {
 		name      string
@@ -25,14 +24,14 @@ func TestGraphQLHandler_buildFieldPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := handler.buildFieldPath(tt.typeName, tt.fieldName)
+			result := parser.buildFieldPath(tt.typeName, tt.fieldName)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestGraphQLHandler_getDirectiveValue(t *testing.T) {
-	handler := NewGraphQLHandler()
+func TestSDLParser_getDirectiveValue(t *testing.T) {
+	parser := newSDLParser()
 
 	// Create a directive list with test data
 	directives := ast.DirectiveList{
@@ -63,30 +62,30 @@ func TestGraphQLHandler_getDirectiveValue(t *testing.T) {
 	}
 
 	t.Run("GetExistingDirective", func(t *testing.T) {
-		result := handler.getDirectiveValue(directives, "accessControl", "type")
+		result := parser.getDirectiveValue(directives, "accessControl", "type")
 		// The value should have quotes stripped
 		assert.Contains(t, result, "public")
 	})
 
 	t.Run("GetNonExistentDirective", func(t *testing.T) {
-		result := handler.getDirectiveValue(directives, "nonExistent", "type")
+		result := parser.getDirectiveValue(directives, "nonExistent", "type")
 		assert.Empty(t, result)
 	})
 
 	t.Run("GetNonExistentArgument", func(t *testing.T) {
-		result := handler.getDirectiveValue(directives, "accessControl", "nonExistent")
+		result := parser.getDirectiveValue(directives, "accessControl", "nonExistent")
 		assert.Empty(t, result)
 	})
 }
 
-func TestGraphQLHandler_getBaseTypeName(t *testing.T) {
-	handler := NewGraphQLHandler()
+func TestSDLParser_getBaseTypeName(t *testing.T) {
+	parser := newSDLParser()
 
 	t.Run("SimpleType", func(t *testing.T) {
 		fieldType := &ast.Type{
 			NamedType: "User",
 		}
-		result := handler.getBaseTypeName(fieldType)
+		result := parser.getBaseTypeName(fieldType)
 		assert.Equal(t, "User", result)
 	})
 
@@ -96,7 +95,7 @@ func TestGraphQLHandler_getBaseTypeName(t *testing.T) {
 				NamedType: "User",
 			},
 		}
-		result := handler.getBaseTypeName(fieldType)
+		result := parser.getBaseTypeName(fieldType)
 		assert.Equal(t, "User", result)
 	})
 
@@ -107,13 +106,13 @@ func TestGraphQLHandler_getBaseTypeName(t *testing.T) {
 				NamedType: "User",
 			},
 		}
-		result := handler.getBaseTypeName(fieldType)
+		result := parser.getBaseTypeName(fieldType)
 		assert.Equal(t, "User", result)
 	})
 }
 
-func TestGraphQLHandler_isBuiltInType(t *testing.T) {
-	handler := NewGraphQLHandler()
+func TestSDLParser_isBuiltInType(t *testing.T) {
+	parser := newSDLParser()
 
 	tests := []struct {
 		name     string
@@ -133,14 +132,14 @@ func TestGraphQLHandler_isBuiltInType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := handler.isBuiltInType(tt.typeName)
+			result := parser.isBuiltInType(tt.typeName)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestGraphQLHandler_isRootType(t *testing.T) {
-	handler := NewGraphQLHandler()
+func TestSDLParser_isRootType(t *testing.T) {
+	parser := newSDLParser()
 
 	tests := []struct {
 		name     string
@@ -156,26 +155,26 @@ func TestGraphQLHandler_isRootType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := handler.isRootType(tt.typeName)
+			result := parser.isRootType(tt.typeName)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestGraphQLHandler_ParseSDLToPolicyRequest_InvalidSDL(t *testing.T) {
-	handler := NewGraphQLHandler()
+func TestSDLParser_ParseSDLToPolicyRequest_InvalidSDL(t *testing.T) {
+	parser := newSDLParser()
 
 	invalidSDL := `type User { id: ID!` // Missing closing brace
 
-	_, err := handler.ParseSDLToPolicyRequest("test-schema", invalidSDL)
+	_, err := parser.ParseSDLToPolicyRequest("test-schema", invalidSDL)
 	assert.Error(t, err)
 	if err != nil {
 		assert.Contains(t, err.Error(), "failed to parse GraphQL schema")
 	}
 }
 
-func TestGraphQLHandler_ParseSDLToPolicyRequest_WithNestedFields(t *testing.T) {
-	handler := NewGraphQLHandler()
+func TestSDLParser_ParseSDLToPolicyRequest_WithNestedFields(t *testing.T) {
+	parser := newSDLParser()
 
 	sdl := `
 	directive @accessControl(type: String) on FIELD_DEFINITION
@@ -196,7 +195,7 @@ func TestGraphQLHandler_ParseSDLToPolicyRequest_WithNestedFields(t *testing.T) {
 	}
 	`
 
-	request, err := handler.ParseSDLToPolicyRequest("test-schema", sdl)
+	request, err := parser.ParseSDLToPolicyRequest("test-schema", sdl)
 	assert.NoError(t, err)
 	assert.NotNil(t, request)
 	assert.Equal(t, "test-schema", request.SchemaID)
@@ -216,8 +215,8 @@ func TestGraphQLHandler_ParseSDLToPolicyRequest_WithNestedFields(t *testing.T) {
 	assert.True(t, hasNestedField, "Should have nested field. Got fields: %v", fieldNames)
 }
 
-func TestGraphQLHandler_ParseSDLToPolicyRequest_WithDirectives(t *testing.T) {
-	handler := NewGraphQLHandler()
+func TestSDLParser_ParseSDLToPolicyRequest_WithDirectives(t *testing.T) {
+	parser := newSDLParser()
 
 	sdl := `
 	directive @accessControl(type: String) on FIELD_DEFINITION
@@ -236,12 +235,12 @@ func TestGraphQLHandler_ParseSDLToPolicyRequest_WithDirectives(t *testing.T) {
 	}
 	`
 
-	request, err := handler.ParseSDLToPolicyRequest("test-schema", sdl)
+	request, err := parser.ParseSDLToPolicyRequest("test-schema", sdl)
 	assert.NoError(t, err)
 	assert.NotNil(t, request)
 
 	// Find the user.id record
-	var userIDRecord *models.PolicyMetadataCreateRequestRecord
+	var userIDRecord *PolicyMetadataCreateRequestRecord
 	for i := range request.Records {
 		if request.Records[i].FieldName == "user.id" {
 			userIDRecord = &request.Records[i]
@@ -250,19 +249,19 @@ func TestGraphQLHandler_ParseSDLToPolicyRequest_WithDirectives(t *testing.T) {
 	}
 
 	assert.NotNil(t, userIDRecord)
-	assert.Equal(t, models.AccessControlType("restricted"), userIDRecord.AccessControlType)
-	assert.Equal(t, models.Source("drc"), userIDRecord.Source)
+	assert.Equal(t, AccessControlType("restricted"), userIDRecord.AccessControlType)
+	assert.Equal(t, Source("drc"), userIDRecord.Source)
 	assert.NotNil(t, userIDRecord.DisplayName)
 	assert.Equal(t, "User ID", *userIDRecord.DisplayName)
 	assert.NotNil(t, userIDRecord.Description)
 	assert.Equal(t, "Unique identifier", *userIDRecord.Description)
 	assert.True(t, userIDRecord.IsOwner)
 	assert.NotNil(t, userIDRecord.Owner)
-	assert.Equal(t, models.Owner("member"), *userIDRecord.Owner)
+	assert.Equal(t, Owner("member"), *userIDRecord.Owner)
 }
 
-func TestGraphQLHandler_ParseSDLToPolicyRequest_NoDirectives(t *testing.T) {
-	handler := NewGraphQLHandler()
+func TestSDLParser_ParseSDLToPolicyRequest_NoDirectives(t *testing.T) {
+	parser := newSDLParser()
 
 	sdl := `
 	type User {
@@ -275,7 +274,7 @@ func TestGraphQLHandler_ParseSDLToPolicyRequest_NoDirectives(t *testing.T) {
 	}
 	`
 
-	request, err := handler.ParseSDLToPolicyRequest("test-schema", sdl)
+	request, err := parser.ParseSDLToPolicyRequest("test-schema", sdl)
 	assert.NoError(t, err)
 	assert.NotNil(t, request)
 	// Should have no records since no directives are present

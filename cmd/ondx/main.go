@@ -19,6 +19,7 @@ import (
 	"github.com/openndx/openndx-core/internal/cli/pbclient"
 	"github.com/openndx/openndx-core/internal/cli/profile"
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/policy"
 )
 
 // newHTTPClient builds an HTTP client for talking to the identity provider or
@@ -444,13 +445,13 @@ func runPolicyUpdate(ctx context.Context, args []string) error {
 		return fmt.Errorf("--pb-url is required (or set NDX_PB_URL, or configure it in a profile)")
 	}
 
-	selectedFields := make([]models.SelectedFieldRecord, 0, len(fields))
+	selectedFields := make([]policy.SelectedFieldRecord, 0, len(fields))
 	for _, f := range fields {
 		schemaID, fieldName, found := strings.Cut(f, ":")
 		if !found || schemaID == "" || fieldName == "" {
 			return fmt.Errorf("invalid --field %q: expected schemaId:fieldName", f)
 		}
-		selectedFields = append(selectedFields, models.SelectedFieldRecord{
+		selectedFields = append(selectedFields, policy.SelectedFieldRecord{
 			SchemaID:  schemaID,
 			FieldName: fieldName,
 		})
@@ -458,7 +459,7 @@ func runPolicyUpdate(ctx context.Context, args []string) error {
 
 	req := &models.UpdateApplicationPolicyRequest{SelectedFields: selectedFields}
 	if *grantDuration != "" {
-		gd := models.GrantDurationType(*grantDuration)
+		gd := policy.GrantDurationType(*grantDuration)
 		req.GrantDuration = &gd
 	}
 
@@ -636,7 +637,7 @@ func runSchemasCreate(ctx context.Context, args []string) error {
 		return fmt.Errorf("--pb-url is required (or set NDX_PB_URL, or configure it in a profile)")
 	}
 
-	records := make([]models.PolicyMetadataCreateRequestRecord, 0, len(fields))
+	records := make([]policy.PolicyMetadataCreateRequestRecord, 0, len(fields))
 	for _, f := range fields {
 		parts := strings.Split(f, ":")
 		if len(parts) < 3 || len(parts) > 4 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
@@ -650,17 +651,17 @@ func runSchemasCreate(ctx context.Context, args []string) error {
 			isOwner = true
 		}
 
-		record := models.PolicyMetadataCreateRequestRecord{
+		record := policy.PolicyMetadataCreateRequestRecord{
 			FieldName:         parts[0],
-			AccessControlType: models.AccessControlType(parts[1]),
-			Source:            models.Source(parts[2]),
+			AccessControlType: policy.AccessControlType(parts[1]),
+			Source:            policy.Source(parts[2]),
 			IsOwner:           isOwner,
 		}
 		// The PDP requires owner to be set when isOwner is false, and unset
 		// when isOwner is true - "citizen" is the only owner value this
 		// system currently supports.
 		if !isOwner {
-			owner := models.OwnerCitizen
+			owner := policy.OwnerCitizen
 			record.Owner = &owner
 		}
 		records = append(records, record)
@@ -766,13 +767,13 @@ func runApplicationsCreate(ctx context.Context, args []string) error {
 		return fmt.Errorf("--pb-url is required (or set NDX_PB_URL, or configure it in a profile)")
 	}
 
-	selectedFields := make([]models.SelectedFieldRecord, 0, len(fields))
+	selectedFields := make([]policy.SelectedFieldRecord, 0, len(fields))
 	for _, f := range fields {
 		schemaID, fieldName, found := strings.Cut(f, ":")
 		if !found || schemaID == "" || fieldName == "" {
 			return fmt.Errorf("invalid --field %q: expected schemaId:fieldName", f)
 		}
-		selectedFields = append(selectedFields, models.SelectedFieldRecord{
+		selectedFields = append(selectedFields, policy.SelectedFieldRecord{
 			SchemaID:  schemaID,
 			FieldName: fieldName,
 		})

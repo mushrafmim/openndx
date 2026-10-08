@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/policy"
 	"gorm.io/gorm"
 )
 
@@ -19,11 +20,11 @@ var ErrPolicyMetadataNotFound = errors.New("policy metadata not found")
 // SchemaService handles schema-related operations
 type SchemaService struct {
 	db            *gorm.DB
-	policyService *PDPService
+	policyService *policy.Client
 }
 
 // NewSchemaService creates a new schema service
-func NewSchemaService(db *gorm.DB, policyService *PDPService) *SchemaService {
+func NewSchemaService(db *gorm.DB, policyService *policy.Client) *SchemaService {
 	return &SchemaService{db: db, policyService: policyService}
 }
 
@@ -203,12 +204,12 @@ func (s *SchemaService) GetSchemas(memberID *string) ([]*models.SchemaResponse, 
 }
 
 // ListPolicyMetadata lists the PDP policy metadata records of a schema
-func (s *SchemaService) ListPolicyMetadata(schemaID string) (*models.PolicyMetadataListResponse, error) {
+func (s *SchemaService) ListPolicyMetadata(schemaID string) (*policy.PolicyMetadataListResponse, error) {
 	return s.policyService.ListPolicyMetadata(schemaID)
 }
 
 // PatchPolicyMetadata updates selected properties of one of a schema's policy metadata records
-func (s *SchemaService) PatchPolicyMetadata(schemaID, id string, req *models.PolicyMetadataPatchRequest) (*models.PolicyMetadataResponse, error) {
+func (s *SchemaService) PatchPolicyMetadata(schemaID, id string, req *policy.PolicyMetadataPatchRequest) (*policy.PolicyMetadataResponse, error) {
 	if err := s.ensurePolicyMetadataInSchema(schemaID, id); err != nil {
 		return nil, err
 	}

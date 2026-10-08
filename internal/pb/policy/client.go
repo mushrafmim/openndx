@@ -1,4 +1,7 @@
-package services
+// Package policy is the Portal Backend's client for the Policy Decision Point
+// (PDP). It owns the PDP request/response types the Portal Backend relies on,
+// so the rest of the Portal Backend never depends on PDP internals.
+package policy
 
 import (
 	"bytes"
@@ -10,25 +13,22 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/openndx/openndx-core/internal/pb/models"
-	"github.com/openndx/openndx-core/internal/pb/utils"
 )
 
-// PDPService handles communication with the Policy Decision Point
-type PDPService struct {
+// Client handles communication with the Policy Decision Point
+type Client struct {
 	// baseURL is the endpoint of the PDP
 	baseURL string
 	// HTTPClient is used to make requests to the PDP
 	HTTPClient *http.Client
 }
 
-// NewPDPService creates a new instance of PDPService.
+// NewClient creates a new instance of Client.
 // The PDP is reached through a trusted API gateway, so no API key is required.
-func NewPDPService(baseURL string) *PDPService {
+func NewClient(baseURL string) *Client {
 	// Trim any trailing slash to avoid double slashes in constructed URLs.
 	baseURL = strings.TrimSuffix(baseURL, "/")
-	return &PDPService{
+	return &Client{
 		baseURL:    baseURL,
 		HTTPClient: &http.Client{Timeout: 10 * time.Second},
 	}
@@ -36,26 +36,25 @@ func NewPDPService(baseURL string) *PDPService {
 
 // CreatePolicyMetadata sends a request to create policy metadata in the PDP,
 // parsing the field records out of a GraphQL SDL string.
-func (s *PDPService) CreatePolicyMetadata(schemaId string, sdl string) (*models.PolicyMetadataCreateResponse, error) {
-	handler := utils.NewGraphQLHandler()
-	policyRequest, err := handler.ParseSDLToPolicyRequest(schemaId, sdl)
+func (c *Client) CreatePolicyMetadata(schemaId string, sdl string) (*PolicyMetadataCreateResponse, error) {
+	policyRequest, err := newSDLParser().ParseSDLToPolicyRequest(schemaId, sdl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse SDL: %w", err)
 	}
-	return s.createPolicyMetadata(policyRequest)
+	return c.createPolicyMetadata(policyRequest)
 }
 
 // CreatePolicyMetadataFromRecords sends a request to create policy metadata
 // in the PDP from caller-supplied records directly, skipping SDL/GraphQL
 // parsing entirely.
-func (s *PDPService) CreatePolicyMetadataFromRecords(schemaId string, records []models.PolicyMetadataCreateRequestRecord) (*models.PolicyMetadataCreateResponse, error) {
-	return s.createPolicyMetadata(&models.PolicyMetadataCreateRequest{
+func (c *Client) CreatePolicyMetadataFromRecords(schemaId string, records []PolicyMetadataCreateRequestRecord) (*PolicyMetadataCreateResponse, error) {
+	return c.createPolicyMetadata(&PolicyMetadataCreateRequest{
 		SchemaID: schemaId,
 		Records:  records,
 	})
 }
 
-func (s *PDPService) createPolicyMetadata(policyRequest *models.PolicyMetadataCreateRequest) (*models.PolicyMetadataCreateResponse, error) {
+func (c *Client) createPolicyMetadata(policyRequest *PolicyMetadataCreateRequest) (*PolicyMetadataCreateResponse, error) {
 	// Marshal request to JSON
 	reqBody, err := json.Marshal(policyRequest)
 	if err != nil {
@@ -63,7 +62,7 @@ func (s *PDPService) createPolicyMetadata(policyRequest *models.PolicyMetadataCr
 	}
 
 	// Create HTTP request
-	url := fmt.Sprintf("%s/api/v1/policy/metadata", s.baseURL)
+	url := fmt.Sprintf("%s/api/v1/policy/metadata", c.baseURL)
 	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -72,7 +71,7 @@ func (s *PDPService) createPolicyMetadata(policyRequest *models.PolicyMetadataCr
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	// Send request to PDP
-	resp, err := s.HTTPClient.Do(httpReq)
+	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request to PDP: %w", err)
 	}
@@ -98,7 +97,7 @@ func (s *PDPService) createPolicyMetadata(policyRequest *models.PolicyMetadataCr
 	}
 
 	// Parse response
-	var response models.PolicyMetadataCreateResponse
+	var response PolicyMetadataCreateResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
@@ -108,7 +107,7 @@ func (s *PDPService) createPolicyMetadata(policyRequest *models.PolicyMetadataCr
 }
 
 // UpdateAllowList sends a request to update the allow list in the PDP
-func (s *PDPService) UpdateAllowList(request models.AllowListUpdateRequest) (*models.AllowListUpdateResponse, error) {
+func (c *Client) UpdateAllowList(request AllowListUpdateRequest) (*AllowListUpdateResponse, error) {
 	// Marshal request to JSON
 	reqBody, err := json.Marshal(request)
 	if err != nil {
@@ -116,7 +115,7 @@ func (s *PDPService) UpdateAllowList(request models.AllowListUpdateRequest) (*mo
 	}
 
 	// Create HTTP request
-	url := fmt.Sprintf("%s/api/v1/policy/update-allowlist", s.baseURL)
+	url := fmt.Sprintf("%s/api/v1/policy/update-allowlist", c.baseURL)
 	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -126,7 +125,7 @@ func (s *PDPService) UpdateAllowList(request models.AllowListUpdateRequest) (*mo
 
 	// Send request
 	slog.Debug("Sending allow list update request to PDP", "url", url, "applicationId", request.ApplicationID)
-	resp, err := s.HTTPClient.Do(httpReq)
+	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request to PDP: %w", err)
 	}
@@ -150,7 +149,7 @@ func (s *PDPService) UpdateAllowList(request models.AllowListUpdateRequest) (*mo
 	}
 
 	// Parse response
-	var response models.AllowListUpdateResponse
+	var response AllowListUpdateResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
@@ -159,23 +158,23 @@ func (s *PDPService) UpdateAllowList(request models.AllowListUpdateRequest) (*mo
 	return &response, nil
 }
 
-// PDPError is returned when the PDP responds with an unexpected status code,
+// Error is returned when the PDP responds with an unexpected status code,
 // so callers can map the PDP's status back onto their own response.
-type PDPError struct {
+type Error struct {
 	StatusCode int
 	Message    string
 }
 
-func (e *PDPError) Error() string {
+func (e *Error) Error() string {
 	return fmt.Sprintf("PDP returned status %d: %s", e.StatusCode, e.Message)
 }
 
 // ListPolicyMetadata lists the policy metadata records of a schema in the PDP
-func (s *PDPService) ListPolicyMetadata(schemaID string) (*models.PolicyMetadataListResponse, error) {
+func (c *Client) ListPolicyMetadata(schemaID string) (*PolicyMetadataListResponse, error) {
 	path := "/api/v1/policy/metadata?schemaId=" + url.QueryEscape(schemaID)
 
-	var response models.PolicyMetadataListResponse
-	if err := s.doRequest(http.MethodGet, path, nil, http.StatusOK, &response); err != nil {
+	var response PolicyMetadataListResponse
+	if err := c.doRequest(http.MethodGet, path, nil, http.StatusOK, &response); err != nil {
 		return nil, err
 	}
 
@@ -183,11 +182,11 @@ func (s *PDPService) ListPolicyMetadata(schemaID string) (*models.PolicyMetadata
 }
 
 // PatchPolicyMetadata updates selected properties of one policy metadata record in the PDP
-func (s *PDPService) PatchPolicyMetadata(id string, request *models.PolicyMetadataPatchRequest) (*models.PolicyMetadataResponse, error) {
+func (c *Client) PatchPolicyMetadata(id string, request *PolicyMetadataPatchRequest) (*PolicyMetadataResponse, error) {
 	path := "/api/v1/policy/metadata/" + url.PathEscape(id)
 
-	var response models.PolicyMetadataResponse
-	if err := s.doRequest(http.MethodPatch, path, request, http.StatusOK, &response); err != nil {
+	var response PolicyMetadataResponse
+	if err := c.doRequest(http.MethodPatch, path, request, http.StatusOK, &response); err != nil {
 		return nil, err
 	}
 
@@ -196,10 +195,10 @@ func (s *PDPService) PatchPolicyMetadata(id string, request *models.PolicyMetada
 }
 
 // DeletePolicyMetadata deletes one policy metadata record in the PDP
-func (s *PDPService) DeletePolicyMetadata(id string) error {
+func (c *Client) DeletePolicyMetadata(id string) error {
 	path := "/api/v1/policy/metadata/" + url.PathEscape(id)
 
-	if err := s.doRequest(http.MethodDelete, path, nil, http.StatusNoContent, nil); err != nil {
+	if err := c.doRequest(http.MethodDelete, path, nil, http.StatusNoContent, nil); err != nil {
 		return err
 	}
 
@@ -208,10 +207,10 @@ func (s *PDPService) DeletePolicyMetadata(id string) error {
 }
 
 // RevokeAllowListEntry removes one application from a field's allow-list in the PDP
-func (s *PDPService) RevokeAllowListEntry(id string, applicationID string) error {
+func (c *Client) RevokeAllowListEntry(id string, applicationID string) error {
 	path := fmt.Sprintf("/api/v1/policy/metadata/%s/allowlist/%s", url.PathEscape(id), url.PathEscape(applicationID))
 
-	if err := s.doRequest(http.MethodDelete, path, nil, http.StatusNoContent, nil); err != nil {
+	if err := c.doRequest(http.MethodDelete, path, nil, http.StatusNoContent, nil); err != nil {
 		return err
 	}
 
@@ -220,8 +219,8 @@ func (s *PDPService) RevokeAllowListEntry(id string, applicationID string) error
 }
 
 // doRequest sends a JSON request to the PDP and decodes the response into out.
-// A response with a status other than expectedStatus is returned as a *PDPError.
-func (s *PDPService) doRequest(method, path string, body any, expectedStatus int, out any) error {
+// A response with a status other than expectedStatus is returned as an *Error.
+func (c *Client) doRequest(method, path string, body any, expectedStatus int, out any) error {
 	var reqBody io.Reader
 	if body != nil {
 		payload, err := json.Marshal(body)
@@ -231,7 +230,7 @@ func (s *PDPService) doRequest(method, path string, body any, expectedStatus int
 		reqBody = bytes.NewReader(payload)
 	}
 
-	httpReq, err := http.NewRequest(method, s.baseURL+path, reqBody)
+	httpReq, err := http.NewRequest(method, c.baseURL+path, reqBody)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -239,7 +238,7 @@ func (s *PDPService) doRequest(method, path string, body any, expectedStatus int
 		httpReq.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := s.HTTPClient.Do(httpReq)
+	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("failed to send request to PDP: %w", err)
 	}
@@ -265,7 +264,7 @@ func (s *PDPService) doRequest(method, path string, body any, expectedStatus int
 		if json.Unmarshal(respBody, &errorResponse) == nil && errorResponse.Error != "" {
 			message = errorResponse.Error
 		}
-		return &PDPError{StatusCode: resp.StatusCode, Message: message}
+		return &Error{StatusCode: resp.StatusCode, Message: message}
 	}
 
 	if out == nil {

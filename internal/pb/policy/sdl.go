@@ -1,30 +1,29 @@
-package utils
+package policy
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
-// GraphQLHandler handles GraphQL SDL parsing and conversion to policy metadata requests
-type GraphQLHandler struct{}
+// sdlParser handles GraphQL SDL parsing and conversion to policy metadata requests
+type sdlParser struct{}
 
-// NewGraphQLHandler creates a new GraphQLHandler instance
-func NewGraphQLHandler() *GraphQLHandler {
-	return &GraphQLHandler{}
+// newSDLParser creates a new sdlParser instance
+func newSDLParser() *sdlParser {
+	return &sdlParser{}
 }
 
 // ParseSDLToPolicyRequest parses GraphQL SDL and creates a PolicyMetadataCreateRequest
-func (h *GraphQLHandler) ParseSDLToPolicyRequest(schemaID, sdl string) (*models.PolicyMetadataCreateRequest, error) {
+func (h *sdlParser) ParseSDLToPolicyRequest(schemaID, sdl string) (*PolicyMetadataCreateRequest, error) {
 	schema, err := gqlparser.LoadSchema(&ast.Source{Input: sdl})
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse GraphQL schema: %w", err)
 	}
 
-	var records []models.PolicyMetadataCreateRequestRecord
+	var records []PolicyMetadataCreateRequestRecord
 
 	// Process all types (excluding built-ins and Query/Mutation/Subscription)
 	for typeName, typeDefinition := range schema.Types {
@@ -48,14 +47,14 @@ func (h *GraphQLHandler) ParseSDLToPolicyRequest(schemaID, sdl string) (*models.
 		}
 	}
 
-	return &models.PolicyMetadataCreateRequest{
+	return &PolicyMetadataCreateRequest{
 		SchemaID: schemaID,
 		Records:  records,
 	}, nil
 }
 
 // createRecordFromField creates a PolicyMetadataCreateRequestRecord from a GraphQL field
-func (h *GraphQLHandler) createRecordFromField(fieldPath string, field *ast.FieldDefinition) *models.PolicyMetadataCreateRequestRecord {
+func (h *sdlParser) createRecordFromField(fieldPath string, field *ast.FieldDefinition) *PolicyMetadataCreateRequestRecord {
 	// Extract directives
 	accessControlType := h.getDirectiveValue(field.Directives, "accessControl", "type")
 	sourceValue := h.getDirectiveValue(field.Directives, "source", "value")
@@ -69,7 +68,7 @@ func (h *GraphQLHandler) createRecordFromField(fieldPath string, field *ast.Fiel
 		return nil
 	}
 
-	record := models.PolicyMetadataCreateRequestRecord{
+	record := PolicyMetadataCreateRequestRecord{
 		FieldName: fieldPath,
 	}
 
@@ -85,16 +84,16 @@ func (h *GraphQLHandler) createRecordFromField(fieldPath string, field *ast.Fiel
 
 	// Set source (default to "fallback" if not specified)
 	if sourceValue != "" {
-		record.Source = models.Source(sourceValue)
+		record.Source = Source(sourceValue)
 	} else {
-		record.Source = models.SourceFallback // default
+		record.Source = SourceFallback // default
 	}
 
 	// Set access control type (default to "public" if not specified)
 	if accessControlType != "" {
-		record.AccessControlType = models.AccessControlType(accessControlType)
+		record.AccessControlType = AccessControlType(accessControlType)
 	} else {
-		record.AccessControlType = models.AccessControlTypePublic // default
+		record.AccessControlType = AccessControlTypePublic // default
 	}
 
 	// Set isOwner (default to false)
@@ -105,7 +104,7 @@ func (h *GraphQLHandler) createRecordFromField(fieldPath string, field *ast.Fiel
 
 	// Set owner if specified (can be null)
 	if ownerValue != "" {
-		owner := models.Owner(ownerValue)
+		owner := Owner(ownerValue)
 		record.Owner = &owner
 	}
 
@@ -113,8 +112,8 @@ func (h *GraphQLHandler) createRecordFromField(fieldPath string, field *ast.Fiel
 }
 
 // processNestedFields recursively processes nested object fields
-func (h *GraphQLHandler) processNestedFields(schema *ast.Schema, basePath string, fieldType *ast.Type, parentField *ast.FieldDefinition) []models.PolicyMetadataCreateRequestRecord {
-	var records []models.PolicyMetadataCreateRequestRecord
+func (h *sdlParser) processNestedFields(schema *ast.Schema, basePath string, fieldType *ast.Type, parentField *ast.FieldDefinition) []PolicyMetadataCreateRequestRecord {
+	var records []PolicyMetadataCreateRequestRecord
 
 	// Get the actual type name (handle lists and non-nulls)
 	typeName := h.getBaseTypeName(fieldType)
@@ -140,12 +139,12 @@ func (h *GraphQLHandler) processNestedFields(schema *ast.Schema, basePath string
 }
 
 // buildFieldPath creates the dot-notation field path (e.g., "user.birthInfo")
-func (h *GraphQLHandler) buildFieldPath(typeName, fieldName string) string {
+func (h *sdlParser) buildFieldPath(typeName, fieldName string) string {
 	return strings.ToLower(typeName) + "." + fieldName
 }
 
 // getDirectiveValue extracts a value from a directive
-func (h *GraphQLHandler) getDirectiveValue(directives ast.DirectiveList, directiveName, argName string) string {
+func (h *sdlParser) getDirectiveValue(directives ast.DirectiveList, directiveName, argName string) string {
 	for _, directive := range directives {
 		if directive.Name == directiveName {
 			for _, arg := range directive.Arguments {
@@ -164,7 +163,7 @@ func (h *GraphQLHandler) getDirectiveValue(directives ast.DirectiveList, directi
 }
 
 // getBaseTypeName extracts the base type name from a potentially wrapped type
-func (h *GraphQLHandler) getBaseTypeName(fieldType *ast.Type) string {
+func (h *sdlParser) getBaseTypeName(fieldType *ast.Type) string {
 	if fieldType.Elem != nil {
 		return h.getBaseTypeName(fieldType.Elem)
 	}
@@ -172,7 +171,7 @@ func (h *GraphQLHandler) getBaseTypeName(fieldType *ast.Type) string {
 }
 
 // isBuiltInType checks if a type is a GraphQL built-in type
-func (h *GraphQLHandler) isBuiltInType(typeName string) bool {
+func (h *sdlParser) isBuiltInType(typeName string) bool {
 	builtIns := map[string]bool{
 		"String":              true,
 		"Int":                 true,
@@ -192,7 +191,7 @@ func (h *GraphQLHandler) isBuiltInType(typeName string) bool {
 }
 
 // isRootType checks if a type is a root operation type
-func (h *GraphQLHandler) isRootType(typeName string) bool {
+func (h *sdlParser) isRootType(typeName string) bool {
 	rootTypes := map[string]bool{
 		"Query":        true,
 		"Mutation":     true,
