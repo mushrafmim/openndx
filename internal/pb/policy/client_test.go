@@ -1,4 +1,4 @@
-package services
+package policy
 
 import (
 	"encoding/json"
@@ -8,15 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewPDPService(t *testing.T) {
+func TestNewClient(t *testing.T) {
 	baseURL := "http://localhost:8082"
 
-	service := NewPDPService(baseURL)
+	service := NewClient(baseURL)
 
 	assert.NotNil(t, service)
 	assert.Equal(t, baseURL, service.baseURL)
@@ -24,18 +23,18 @@ func TestNewPDPService(t *testing.T) {
 	assert.Equal(t, 10*time.Second, service.HTTPClient.Timeout)
 }
 
-func TestPDPService_CreatePolicyMetadata_Success(t *testing.T) {
+func TestClient_CreatePolicyMetadata_Success(t *testing.T) {
 	schemaID := "test-schema-123"
-	expectedRecords := []models.PolicyMetadataResponse{
+	expectedRecords := []PolicyMetadataResponse{
 		{
 			ID:                "record-1",
 			SchemaID:          schemaID,
 			FieldName:         "personInfo.name",
 			DisplayName:       stringPtr("Name"),
-			Source:            models.SourcePrimary,
+			Source:            SourcePrimary,
 			IsOwner:           false,
-			AccessControlType: models.AccessControlTypeRestricted,
-			AllowList:         models.AllowList{},
+			AccessControlType: AccessControlTypeRestricted,
+			AllowList:         AllowList{},
 			CreatedAt:         "2024-01-01T00:00:00Z",
 			UpdatedAt:         "2024-01-01T00:00:00Z",
 		},
@@ -49,14 +48,14 @@ func TestPDPService_CreatePolicyMetadata_Success(t *testing.T) {
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 		// Verify request body
-		var req models.PolicyMetadataCreateRequest
+		var req PolicyMetadataCreateRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
 		require.NoError(t, err)
 		assert.Equal(t, schemaID, req.SchemaID)
 		// Note: Records may be empty if SDL has no directives, which is valid
 
 		// Send response
-		response := models.PolicyMetadataCreateResponse{
+		response := PolicyMetadataCreateResponse{
 			Records: expectedRecords,
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -65,7 +64,7 @@ func TestPDPService_CreatePolicyMetadata_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
 	// Use a simple SDL for testing (valid GraphQL without custom directives)
 	sdl := `
@@ -84,24 +83,24 @@ func TestPDPService_CreatePolicyMetadata_Success(t *testing.T) {
 	assert.Equal(t, expectedRecords[0].SchemaID, response.Records[0].SchemaID)
 }
 
-func TestPDPService_CreatePolicyMetadataFromRecords_Success(t *testing.T) {
+func TestClient_CreatePolicyMetadataFromRecords_Success(t *testing.T) {
 	schemaID := "test-schema-123"
-	records := []models.PolicyMetadataCreateRequestRecord{
+	records := []PolicyMetadataCreateRequestRecord{
 		{
 			FieldName:         "email",
-			Source:            models.SourcePrimary,
-			AccessControlType: models.AccessControlTypePublic,
+			Source:            SourcePrimary,
+			AccessControlType: AccessControlTypePublic,
 		},
 	}
 
-	var capturedReq models.PolicyMetadataCreateRequest
+	var capturedReq PolicyMetadataCreateRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "/api/v1/policy/metadata", r.URL.Path)
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedReq))
 
-		response := models.PolicyMetadataCreateResponse{
-			Records: []models.PolicyMetadataResponse{
+		response := PolicyMetadataCreateResponse{
+			Records: []PolicyMetadataResponse{
 				{ID: "record-1", SchemaID: schemaID, FieldName: "email"},
 			},
 		}
@@ -111,7 +110,7 @@ func TestPDPService_CreatePolicyMetadataFromRecords_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
 	response, err := service.CreatePolicyMetadataFromRecords(schemaID, records)
 
@@ -126,21 +125,21 @@ func TestPDPService_CreatePolicyMetadataFromRecords_Success(t *testing.T) {
 	assert.Equal(t, schemaID, capturedReq.SchemaID)
 	if assert.Len(t, capturedReq.Records, 1) {
 		assert.Equal(t, "email", capturedReq.Records[0].FieldName)
-		assert.Equal(t, models.SourcePrimary, capturedReq.Records[0].Source)
-		assert.Equal(t, models.AccessControlTypePublic, capturedReq.Records[0].AccessControlType)
+		assert.Equal(t, SourcePrimary, capturedReq.Records[0].Source)
+		assert.Equal(t, AccessControlTypePublic, capturedReq.Records[0].AccessControlType)
 	}
 }
 
-func TestPDPService_CreatePolicyMetadataFromRecords_Non200Status(t *testing.T) {
+func TestClient_CreatePolicyMetadataFromRecords_Non200Status(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error": "bad records"}`))
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
-	response, err := service.CreatePolicyMetadataFromRecords("schema-1", []models.PolicyMetadataCreateRequestRecord{
-		{FieldName: "email", Source: models.SourcePrimary, AccessControlType: models.AccessControlTypePublic},
+	service := NewClient(server.URL)
+	response, err := service.CreatePolicyMetadataFromRecords("schema-1", []PolicyMetadataCreateRequestRecord{
+		{FieldName: "email", Source: SourcePrimary, AccessControlType: AccessControlTypePublic},
 	})
 
 	assert.Error(t, err)
@@ -148,8 +147,8 @@ func TestPDPService_CreatePolicyMetadataFromRecords_Non200Status(t *testing.T) {
 	assert.Contains(t, err.Error(), "status 400")
 }
 
-func TestPDPService_CreatePolicyMetadata_InvalidSDL(t *testing.T) {
-	service := NewPDPService("http://localhost:8082")
+func TestClient_CreatePolicyMetadata_InvalidSDL(t *testing.T) {
+	service := NewClient("http://localhost:8082")
 
 	// Use invalid SDL
 	invalidSDL := "invalid graphql syntax {"
@@ -160,7 +159,7 @@ func TestPDPService_CreatePolicyMetadata_InvalidSDL(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse SDL")
 }
 
-func TestPDPService_CreatePolicyMetadata_Non200Status(t *testing.T) {
+func TestClient_CreatePolicyMetadata_Non200Status(t *testing.T) {
 	// Create a mock HTTP server that returns 400
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
@@ -168,7 +167,7 @@ func TestPDPService_CreatePolicyMetadata_Non200Status(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
 	sdl := `
 		type Person {
@@ -182,7 +181,7 @@ func TestPDPService_CreatePolicyMetadata_Non200Status(t *testing.T) {
 	assert.Contains(t, err.Error(), "PDP returned status 400")
 }
 
-func TestPDPService_CreatePolicyMetadata_InvalidJSONResponse(t *testing.T) {
+func TestClient_CreatePolicyMetadata_InvalidJSONResponse(t *testing.T) {
 	// Create a mock HTTP server that returns invalid JSON
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -191,7 +190,7 @@ func TestPDPService_CreatePolicyMetadata_InvalidJSONResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
 	sdl := `
 		type Person {
@@ -205,9 +204,9 @@ func TestPDPService_CreatePolicyMetadata_InvalidJSONResponse(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse response")
 }
 
-func TestPDPService_CreatePolicyMetadata_NetworkError(t *testing.T) {
+func TestClient_CreatePolicyMetadata_NetworkError(t *testing.T) {
 	// Use an invalid URL to simulate network error
-	service := NewPDPService("http://invalid-host:9999")
+	service := NewClient("http://invalid-host:9999")
 
 	sdl := `
 		type Person {
@@ -221,9 +220,9 @@ func TestPDPService_CreatePolicyMetadata_NetworkError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to send request to PDP")
 }
 
-func TestPDPService_UpdateAllowList_Success(t *testing.T) {
+func TestClient_UpdateAllowList_Success(t *testing.T) {
 	applicationID := "test-app-123"
-	expectedRecords := []models.AllowListUpdateResponseRecord{
+	expectedRecords := []AllowListUpdateResponseRecord{
 		{
 			FieldName: "personInfo.name",
 			SchemaID:  "test-schema-123",
@@ -240,15 +239,15 @@ func TestPDPService_UpdateAllowList_Success(t *testing.T) {
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 		// Verify request body
-		var req models.AllowListUpdateRequest
+		var req AllowListUpdateRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
 		require.NoError(t, err)
 		assert.Equal(t, applicationID, req.ApplicationID)
 		assert.NotEmpty(t, req.Records)
-		assert.Equal(t, models.GrantDurationTypeOneMonth, req.GrantDuration)
+		assert.Equal(t, GrantDurationTypeOneMonth, req.GrantDuration)
 
 		// Send response
-		response := models.AllowListUpdateResponse{
+		response := AllowListUpdateResponse{
 			Records: expectedRecords,
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -257,17 +256,17 @@ func TestPDPService_UpdateAllowList_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
-	request := models.AllowListUpdateRequest{
+	request := AllowListUpdateRequest{
 		ApplicationID: applicationID,
-		Records: []models.SelectedFieldRecord{
+		Records: []SelectedFieldRecord{
 			{
 				FieldName: "personInfo.name",
 				SchemaID:  "test-schema-123",
 			},
 		},
-		GrantDuration: models.GrantDurationTypeOneMonth,
+		GrantDuration: GrantDurationTypeOneMonth,
 	}
 
 	response, err := service.UpdateAllowList(request)
@@ -278,7 +277,7 @@ func TestPDPService_UpdateAllowList_Success(t *testing.T) {
 	assert.Equal(t, expectedRecords[0].SchemaID, response.Records[0].SchemaID)
 }
 
-func TestPDPService_UpdateAllowList_Non200Status(t *testing.T) {
+func TestClient_UpdateAllowList_Non200Status(t *testing.T) {
 	// Create a mock HTTP server that returns 400
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
@@ -286,17 +285,17 @@ func TestPDPService_UpdateAllowList_Non200Status(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
-	request := models.AllowListUpdateRequest{
+	request := AllowListUpdateRequest{
 		ApplicationID: "test-app",
-		Records: []models.SelectedFieldRecord{
+		Records: []SelectedFieldRecord{
 			{
 				FieldName: "personInfo.name",
 				SchemaID:  "test-schema",
 			},
 		},
-		GrantDuration: models.GrantDurationTypeOneMonth,
+		GrantDuration: GrantDurationTypeOneMonth,
 	}
 
 	response, err := service.UpdateAllowList(request)
@@ -305,7 +304,7 @@ func TestPDPService_UpdateAllowList_Non200Status(t *testing.T) {
 	assert.Contains(t, err.Error(), "PDP returned status 400")
 }
 
-func TestPDPService_UpdateAllowList_InvalidJSONResponse(t *testing.T) {
+func TestClient_UpdateAllowList_InvalidJSONResponse(t *testing.T) {
 	// Create a mock HTTP server that returns invalid JSON
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -314,17 +313,17 @@ func TestPDPService_UpdateAllowList_InvalidJSONResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
-	request := models.AllowListUpdateRequest{
+	request := AllowListUpdateRequest{
 		ApplicationID: "test-app",
-		Records: []models.SelectedFieldRecord{
+		Records: []SelectedFieldRecord{
 			{
 				FieldName: "personInfo.name",
 				SchemaID:  "test-schema",
 			},
 		},
-		GrantDuration: models.GrantDurationTypeOneMonth,
+		GrantDuration: GrantDurationTypeOneMonth,
 	}
 
 	response, err := service.UpdateAllowList(request)
@@ -333,19 +332,19 @@ func TestPDPService_UpdateAllowList_InvalidJSONResponse(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse response")
 }
 
-func TestPDPService_UpdateAllowList_NetworkError(t *testing.T) {
+func TestClient_UpdateAllowList_NetworkError(t *testing.T) {
 	// Use an invalid URL to simulate network error
-	service := NewPDPService("http://invalid-host:9999")
+	service := NewClient("http://invalid-host:9999")
 
-	request := models.AllowListUpdateRequest{
+	request := AllowListUpdateRequest{
 		ApplicationID: "test-app",
-		Records: []models.SelectedFieldRecord{
+		Records: []SelectedFieldRecord{
 			{
 				FieldName: "personInfo.name",
 				SchemaID:  "test-schema",
 			},
 		},
-		GrantDuration: models.GrantDurationTypeOneMonth,
+		GrantDuration: GrantDurationTypeOneMonth,
 	}
 
 	response, err := service.UpdateAllowList(request)
@@ -354,17 +353,17 @@ func TestPDPService_UpdateAllowList_NetworkError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to send request to PDP")
 }
 
-func TestPDPService_UpdateAllowList_MarshalError(t *testing.T) {
+func TestClient_UpdateAllowList_MarshalError(t *testing.T) {
 	// Create a valid request - marshal errors are unlikely with our models
-	request := models.AllowListUpdateRequest{
+	request := AllowListUpdateRequest{
 		ApplicationID: "test-app",
-		Records: []models.SelectedFieldRecord{
+		Records: []SelectedFieldRecord{
 			{
 				FieldName: "personInfo.name",
 				SchemaID:  "test-schema",
 			},
 		},
-		GrantDuration: models.GrantDurationTypeOneMonth,
+		GrantDuration: GrantDurationTypeOneMonth,
 	}
 
 	// This should work fine - marshal errors are very rare with our simple models
@@ -378,7 +377,7 @@ func stringPtr(s string) *string {
 	return &s
 }
 
-func TestPDPService_ListPolicyMetadata_Success(t *testing.T) {
+func TestClient_ListPolicyMetadata_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Equal(t, "/api/v1/policy/metadata", r.URL.Path)
@@ -390,16 +389,16 @@ func TestPDPService_ListPolicyMetadata_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
 	response, err := service.ListPolicyMetadata("sch_1&x")
 	require.NoError(t, err)
 	require.Len(t, response.Records, 1)
 	assert.Equal(t, "pm-1", response.Records[0].ID)
-	assert.Equal(t, models.AccessControlTypeRestricted, response.Records[0].AccessControlType)
+	assert.Equal(t, AccessControlTypeRestricted, response.Records[0].AccessControlType)
 }
 
-func TestPDPService_PatchPolicyMetadata_ForwardsOnlySetFields(t *testing.T) {
+func TestClient_PatchPolicyMetadata_ForwardsOnlySetFields(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPatch, r.Method)
 		assert.Equal(t, "/api/v1/policy/metadata/pm-1", r.URL.Path)
@@ -415,9 +414,9 @@ func TestPDPService_PatchPolicyMetadata_ForwardsOnlySetFields(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
-	var req models.PolicyMetadataPatchRequest
+	var req PolicyMetadataPatchRequest
 	require.NoError(t, json.Unmarshal([]byte(`{"displayName":"Name","description":null}`), &req))
 
 	response, err := service.PatchPolicyMetadata("pm-1", &req)
@@ -426,7 +425,7 @@ func TestPDPService_PatchPolicyMetadata_ForwardsOnlySetFields(t *testing.T) {
 	assert.Equal(t, "Name", *response.DisplayName)
 }
 
-func TestPDPService_DeletePolicyMetadata_Success(t *testing.T) {
+func TestClient_DeletePolicyMetadata_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodDelete, r.Method)
 		assert.Equal(t, "/api/v1/policy/metadata/pm-1", r.URL.Path)
@@ -434,12 +433,12 @@ func TestPDPService_DeletePolicyMetadata_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
 	assert.NoError(t, service.DeletePolicyMetadata("pm-1"))
 }
 
-func TestPDPService_RevokeAllowListEntry_Success(t *testing.T) {
+func TestClient_RevokeAllowListEntry_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodDelete, r.Method)
 		assert.Equal(t, "/api/v1/policy/metadata/pm-1/allowlist/client-1", r.URL.Path)
@@ -447,24 +446,24 @@ func TestPDPService_RevokeAllowListEntry_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
 	assert.NoError(t, service.RevokeAllowListEntry("pm-1", "client-1"))
 }
 
-func TestPDPService_RevokeAllowListEntry_EscapesPathSegments(t *testing.T) {
+func TestClient_RevokeAllowListEntry_EscapesPathSegments(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/v1/policy/metadata/pm-1/allowlist/client%2F1", r.URL.EscapedPath())
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
 	assert.NoError(t, service.RevokeAllowListEntry("pm-1", "client/1"))
 }
 
-func TestPDPService_PolicyMetadata_ReturnsPDPError(t *testing.T) {
+func TestClient_PolicyMetadata_ReturnsError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -472,22 +471,22 @@ func TestPDPService_PolicyMetadata_ReturnsPDPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := NewPDPService(server.URL)
+	service := NewClient(server.URL)
 
 	err := service.RevokeAllowListEntry("pm-1", "client-1")
-	var pdpErr *PDPError
+	var pdpErr *Error
 	require.ErrorAs(t, err, &pdpErr)
 	assert.Equal(t, http.StatusNotFound, pdpErr.StatusCode)
 	assert.Equal(t, "allow-list entry not found: client-1", pdpErr.Message)
 }
 
-func TestPDPService_PolicyMetadata_NetworkError(t *testing.T) {
-	service := NewPDPService("http://invalid-host:9999")
+func TestClient_PolicyMetadata_NetworkError(t *testing.T) {
+	service := NewClient("http://invalid-host:9999")
 
 	_, err := service.ListPolicyMetadata("sch_1")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to send request to PDP")
 
-	var pdpErr *PDPError
+	var pdpErr *Error
 	assert.False(t, errors.As(err, &pdpErr))
 }

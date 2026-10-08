@@ -15,6 +15,7 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/idp"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/pb/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -179,9 +180,9 @@ func NewTestV1HandlerWithMockPDP(t *testing.T, db *gorm.DB) *V1Handler {
 	mockIDPStore = new(MockIdentityProviderAPI)
 	memberService := services.NewMemberService(db, mockIDPStore) // mockIDPStore implements idp.IdentityProviderAPI
 
-	// For testing, we'll use a real PDPService but skip actual HTTP calls
+	// For testing, we'll use a real policy.Client but skip actual HTTP calls
 	// In a real test, you'd use a test HTTP server
-	mockPDP := services.NewPDPService("http://localhost:8082")
+	mockPDP := policy.NewClient("http://localhost:8082")
 
 	// Note: In a real scenario, you'd set up a test HTTP server to handle PDP requests
 	// For now, the tests will need to handle PDP failures gracefully or skip PDP-dependent operations
@@ -318,7 +319,7 @@ func newTestV1HandlerWithWorkingPDP(t *testing.T, db *gorm.DB, pdpStatusCode int
 			Header:     make(http.Header),
 		}, nil
 	})
-	pdpService := services.NewPDPService("http://mock-pdp")
+	pdpService := policy.NewClient("http://mock-pdp")
 	pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 	mockIDP := new(MockIdentityProviderAPI)
@@ -721,7 +722,7 @@ func TestApplicationEndpoints(t *testing.T) {
 		req := models.CreateApplicationRequest{
 			ApplicationName:        "Test Application",
 			ApplicationDescription: &desc,
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: testSchemaID},
 				{FieldName: "field2", SchemaID: testSchemaID},
 			},
@@ -853,7 +854,7 @@ func TestApplicationPolicyEndpoint(t *testing.T) {
 		applicationID := createTestApplicationWithClientID(t, db, memberID, "idp-client-abc")
 
 		req := models.UpdateApplicationPolicyRequest{
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-456"},
 			},
 		}
@@ -873,7 +874,7 @@ func TestApplicationPolicyEndpoint(t *testing.T) {
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Equal(t, applicationID, response.ApplicationID)
-		assert.Equal(t, req.SelectedFields, []models.SelectedFieldRecord(response.SelectedFields))
+		assert.Equal(t, req.SelectedFields, []policy.SelectedFieldRecord(response.SelectedFields))
 	})
 
 	t.Run("PUT /api/v1/applications/:id/policy - PDPFailure", func(t *testing.T) {
@@ -888,7 +889,7 @@ func TestApplicationPolicyEndpoint(t *testing.T) {
 		applicationID := createTestApplicationWithClientID(t, db, memberID, "idp-client-abc")
 
 		req := models.UpdateApplicationPolicyRequest{
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-456"},
 			},
 		}
@@ -911,7 +912,7 @@ func TestApplicationPolicyEndpoint(t *testing.T) {
 
 	t.Run("PUT /api/v1/applications/:id/policy - NotFound", func(t *testing.T) {
 		req := models.UpdateApplicationPolicyRequest{
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-456"},
 			},
 		}
@@ -958,7 +959,7 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 		req := models.CreateApplicationSubmissionRequest{
 			ApplicationName:        "Test Application Submission",
 			ApplicationDescription: &desc,
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: testSchemaID},
 			},
 			MemberID: testMemberID,

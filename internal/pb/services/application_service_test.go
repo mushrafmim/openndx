@@ -14,6 +14,7 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/idp"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
 )
@@ -24,7 +25,7 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 		defer cleanup()
 
 		// Mock PDP, capturing the allow-list request body so we can assert the key.
-		var capturedAllowList models.AllowListUpdateRequest
+		var capturedAllowList policy.AllowListUpdateRequest
 		mockTransport := &MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				if req.Body != nil {
@@ -38,7 +39,7 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 				}, nil
 			},
 		}
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &MockIDP{}
@@ -48,7 +49,7 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 		req := &models.CreateApplicationRequest{
 			ApplicationName:        "Test Application",
 			ApplicationDescription: &desc,
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
 			},
 			MemberID: "member-123",
@@ -96,7 +97,7 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 				}, nil
 			},
 		}
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &MockIDP{}
@@ -106,7 +107,7 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 		req := &models.CreateApplicationRequest{
 			ApplicationName:        "Test Application",
 			ApplicationDescription: &desc,
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
 			},
 			MemberID: "member-123",
@@ -138,7 +139,7 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		var capturedAllowList models.AllowListUpdateRequest
+		var capturedAllowList policy.AllowListUpdateRequest
 		mockTransport := &MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				if req.Body != nil {
@@ -152,7 +153,7 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 				}, nil
 			},
 		}
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &MockIDP{
@@ -172,7 +173,7 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 		idpClientID := "THUNDER_PROVISIONED_CLIENT"
 		req := &models.CreateApplicationRequest{
 			ApplicationName: "Manually Onboarded App",
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
 			},
 			MemberID:         "member-123",
@@ -202,14 +203,14 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 		db, _, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
 		idpAppID := "thunder-app-01900000-0000-7000-8000-0000000000c0"
 		req := &models.CreateApplicationRequest{
 			ApplicationName: "Bad Request App",
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
 			},
 			MemberID:         "member-123",
@@ -228,7 +229,7 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 		db, _, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -236,7 +237,7 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 		idpClientID := "some-client-id"
 		req := &models.CreateApplicationRequest{
 			ApplicationName: "Bad Request App",
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
 			},
 			MemberID:         "member-123",
@@ -264,7 +265,7 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 				}, nil
 			},
 		}
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &MockIDP{
@@ -279,7 +280,7 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 		idpClientID := "THUNDER_PROVISIONED_CLIENT"
 		req := &models.CreateApplicationRequest{
 			ApplicationName: "Manually Onboarded App",
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
 			},
 			MemberID:         "member-123",
@@ -308,7 +309,7 @@ func TestApplicationService_UpdateApplication(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -347,7 +348,7 @@ func TestApplicationService_UpdateApplication(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -375,7 +376,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		var capturedAllowList models.AllowListUpdateRequest
+		var capturedAllowList policy.AllowListUpdateRequest
 		mockTransport := &MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				if req.Body != nil {
@@ -389,7 +390,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 				}, nil
 			},
 		}
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &MockIDP{}
@@ -404,7 +405,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		req := &models.UpdateApplicationPolicyRequest{
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-123"},
 			},
 		}
@@ -414,13 +415,13 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
 		if result != nil {
-			assert.Equal(t, req.SelectedFields, []models.SelectedFieldRecord(result.SelectedFields))
+			assert.Equal(t, req.SelectedFields, []policy.SelectedFieldRecord(result.SelectedFields))
 		}
 
 		// The allow-list is keyed by the IdP client_id, not the portal application ID.
 		assert.Equal(t, clientID, capturedAllowList.ApplicationID)
 		// GrantDuration defaults to one month when the request omits it.
-		assert.Equal(t, models.GrantDurationTypeOneMonth, capturedAllowList.GrantDuration)
+		assert.Equal(t, policy.GrantDurationTypeOneMonth, capturedAllowList.GrantDuration)
 
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -429,7 +430,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		var capturedAllowList models.AllowListUpdateRequest
+		var capturedAllowList policy.AllowListUpdateRequest
 		mockTransport := &MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				if req.Body != nil {
@@ -443,7 +444,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 				}, nil
 			},
 		}
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &MockIDP{}
@@ -457,9 +458,9 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 		mock.ExpectExec(`UPDATE "applications"`).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
-		grantDuration := models.GrantDurationTypeOneYear
+		grantDuration := policy.GrantDurationTypeOneYear
 		req := &models.UpdateApplicationPolicyRequest{
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-123"},
 			},
 			GrantDuration: &grantDuration,
@@ -469,7 +470,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
-		assert.Equal(t, models.GrantDurationTypeOneYear, capturedAllowList.GrantDuration)
+		assert.Equal(t, policy.GrantDurationTypeOneYear, capturedAllowList.GrantDuration)
 
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -478,7 +479,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -486,7 +487,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 			WillReturnError(gorm.ErrRecordNotFound)
 
 		req := &models.UpdateApplicationPolicyRequest{
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-123"},
 			},
 		}
@@ -504,7 +505,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -514,7 +515,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 				AddRow("app_123", "Test Application", "member-123", "v1"))
 
 		req := &models.UpdateApplicationPolicyRequest{
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-123"},
 			},
 		}
@@ -541,7 +542,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 				}, nil
 			},
 		}
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &MockIDP{}
@@ -554,7 +555,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 		// No ExpectExec for UPDATE: a failed PDP call must not touch the DB.
 
 		req := &models.UpdateApplicationPolicyRequest{
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-123"},
 			},
 		}
@@ -574,7 +575,7 @@ func TestApplicationService_GetApplication(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -605,7 +606,7 @@ func TestApplicationService_GetApplication(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -628,7 +629,7 @@ func TestApplicationService_GetApplications(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -659,7 +660,7 @@ func TestApplicationService_GetApplications(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -692,7 +693,7 @@ func TestApplicationService_CreateApplicationSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -709,7 +710,7 @@ func TestApplicationService_CreateApplicationSubmission(t *testing.T) {
 		req := &models.CreateApplicationSubmissionRequest{
 			ApplicationName:        "Test Submission",
 			ApplicationDescription: &desc,
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
 			},
 			MemberID: "member-123",
@@ -731,7 +732,7 @@ func TestApplicationService_CreateApplicationSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -743,7 +744,7 @@ func TestApplicationService_CreateApplicationSubmission(t *testing.T) {
 		req := &models.CreateApplicationSubmissionRequest{
 			ApplicationName:        "Test Submission",
 			ApplicationDescription: &desc,
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
 			},
 			MemberID: "non-existent-member",
@@ -764,7 +765,7 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -798,7 +799,7 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -831,7 +832,7 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 				}, nil
 			},
 		}
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &MockIDP{}
@@ -879,7 +880,7 @@ func TestApplicationService_GetApplicationSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -914,7 +915,7 @@ func TestApplicationService_GetApplicationSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -937,7 +938,7 @@ func TestApplicationService_GetApplicationSubmissions(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -965,7 +966,7 @@ func TestApplicationService_GetApplicationSubmissions(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -995,7 +996,7 @@ func TestApplicationService_GetApplicationSubmissions(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -1028,13 +1029,13 @@ func TestApplicationService_CreateApplication_EdgeCases(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
 		req := &models.CreateApplicationRequest{
 			ApplicationName: "Test Application",
-			SelectedFields:  []models.SelectedFieldRecord{},
+			SelectedFields:  []policy.SelectedFieldRecord{},
 			MemberID:        "member-123",
 		}
 
@@ -1078,7 +1079,7 @@ func TestApplicationService_UpdateApplication_EdgeCases(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -1119,7 +1120,7 @@ func TestApplicationService_CreateApplicationSubmission_EdgeCases(t *testing.T) 
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -1141,7 +1142,7 @@ func TestApplicationService_CreateApplicationSubmission_EdgeCases(t *testing.T) 
 		req := &models.CreateApplicationSubmissionRequest{
 			ApplicationName:        "Test Submission",
 			ApplicationDescription: &desc,
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
 			},
 			MemberID:              "member-123",
@@ -1163,7 +1164,7 @@ func TestApplicationService_CreateApplicationSubmission_EdgeCases(t *testing.T) 
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -1175,7 +1176,7 @@ func TestApplicationService_CreateApplicationSubmission_EdgeCases(t *testing.T) 
 		invalidAppID := "non-existent-app"
 		req := &models.CreateApplicationSubmissionRequest{
 			ApplicationName:       "New Submission",
-			SelectedFields:        []models.SelectedFieldRecord{{FieldName: "field1", SchemaID: "schema-123"}},
+			SelectedFields:        []policy.SelectedFieldRecord{{FieldName: "field1", SchemaID: "schema-123"}},
 			MemberID:              "member-123",
 			PreviousApplicationID: &invalidAppID,
 		}
@@ -1195,7 +1196,7 @@ func TestApplicationService_GetApplicationIdByIdpClientId(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -1230,7 +1231,7 @@ func TestApplicationService_GetApplicationIdByIdpClientId(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -1256,7 +1257,7 @@ func TestApplicationService_GetApplicationIdByIdpClientId(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 
@@ -1282,7 +1283,7 @@ func TestApplicationService_GetApplicationIdByIdpClientId(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &MockIDP{}
 		service := NewApplicationService(db, pdpService, mockIDP)
 

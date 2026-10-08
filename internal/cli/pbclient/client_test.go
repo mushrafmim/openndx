@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,8 +38,8 @@ func TestCreateSchema_Success(t *testing.T) {
 		SchemaName: "Citizen Info",
 		Endpoint:   "http://example.com/graphql",
 		MemberID:   "member-1",
-		Fields: []models.PolicyMetadataCreateRequestRecord{
-			{FieldName: "email", AccessControlType: models.AccessControlTypePublic, Source: models.SourcePrimary},
+		Fields: []policy.PolicyMetadataCreateRequestRecord{
+			{FieldName: "email", AccessControlType: policy.AccessControlTypePublic, Source: policy.SourcePrimary},
 		},
 	}
 
@@ -166,7 +167,7 @@ func TestCreateApplication_Success(t *testing.T) {
 	idpClientID := "THUNDER_CLIENT"
 	req := &models.CreateApplicationRequest{
 		ApplicationName: "New App",
-		SelectedFields: []models.SelectedFieldRecord{
+		SelectedFields: []policy.SelectedFieldRecord{
 			{FieldName: "email", SchemaID: "schema-1"},
 		},
 		MemberID:         "member-1",
@@ -196,7 +197,7 @@ func TestCreateApplication_ErrorResponse(t *testing.T) {
 	client := NewClient(server.URL, "token")
 	resp, err := client.CreateApplication(context.Background(), &models.CreateApplicationRequest{
 		ApplicationName: "New App",
-		SelectedFields:  []models.SelectedFieldRecord{{FieldName: "email", SchemaID: "schema-1"}},
+		SelectedFields:  []policy.SelectedFieldRecord{{FieldName: "email", SchemaID: "schema-1"}},
 		MemberID:        "member-1",
 	})
 
@@ -216,7 +217,7 @@ func TestGetApplication_Success(t *testing.T) {
 		resp := models.ApplicationResponse{
 			ApplicationID:   "app_123",
 			ApplicationName: "Test App",
-			SelectedFields: []models.SelectedFieldRecord{
+			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-1"},
 			},
 			MemberID: "member-1",
@@ -342,9 +343,9 @@ func TestUpdateApplicationPolicy_Success(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-token")
-	grantDuration := models.GrantDurationTypeOneYear
+	grantDuration := policy.GrantDurationTypeOneYear
 	req := &models.UpdateApplicationPolicyRequest{
-		SelectedFields: []models.SelectedFieldRecord{
+		SelectedFields: []policy.SelectedFieldRecord{
 			{FieldName: "email", SchemaID: "schema-1"},
 		},
 		GrantDuration: &grantDuration,
@@ -355,7 +356,7 @@ func TestUpdateApplicationPolicy_Success(t *testing.T) {
 	assert.NoError(t, err)
 	if assert.NotNil(t, resp) {
 		assert.Equal(t, "app_123", resp.ApplicationID)
-		assert.Equal(t, req.SelectedFields, []models.SelectedFieldRecord(resp.SelectedFields))
+		assert.Equal(t, req.SelectedFields, []policy.SelectedFieldRecord(resp.SelectedFields))
 	}
 
 	assert.Equal(t, "Bearer test-token", capturedAuth)
@@ -375,7 +376,7 @@ func TestUpdateApplicationPolicy_TrimsTrailingSlashInBaseURL(t *testing.T) {
 
 	client := NewClient(server.URL+"/", "token")
 	_, err := client.UpdateApplicationPolicy(context.Background(), "app_1", &models.UpdateApplicationPolicyRequest{
-		SelectedFields: []models.SelectedFieldRecord{{FieldName: "f", SchemaID: "s"}},
+		SelectedFields: []policy.SelectedFieldRecord{{FieldName: "f", SchemaID: "s"}},
 	})
 
 	assert.NoError(t, err)
@@ -391,7 +392,7 @@ func TestUpdateApplicationPolicy_ErrorResponse(t *testing.T) {
 
 	client := NewClient(server.URL, "token")
 	resp, err := client.UpdateApplicationPolicy(context.Background(), "app_1", &models.UpdateApplicationPolicyRequest{
-		SelectedFields: []models.SelectedFieldRecord{{FieldName: "f", SchemaID: "s"}},
+		SelectedFields: []policy.SelectedFieldRecord{{FieldName: "f", SchemaID: "s"}},
 	})
 
 	assert.Error(t, err)
@@ -403,7 +404,7 @@ func TestUpdateApplicationPolicy_ErrorResponse(t *testing.T) {
 func TestUpdateApplicationPolicy_Unreachable(t *testing.T) {
 	client := NewClient("http://127.0.0.1:1", "token")
 	resp, err := client.UpdateApplicationPolicy(context.Background(), "app_1", &models.UpdateApplicationPolicyRequest{
-		SelectedFields: []models.SelectedFieldRecord{{FieldName: "f", SchemaID: "s"}},
+		SelectedFields: []policy.SelectedFieldRecord{{FieldName: "f", SchemaID: "s"}},
 	})
 
 	assert.Error(t, err)

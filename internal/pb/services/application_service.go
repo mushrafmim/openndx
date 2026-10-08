@@ -11,18 +11,19 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/idp"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/policy"
 	"gorm.io/gorm"
 )
 
 // ApplicationService handles application-related operations
 type ApplicationService struct {
 	db            *gorm.DB
-	policyService *PDPService
+	policyService *policy.Client
 	idp           idp.IdentityProviderAPI
 }
 
 // NewApplicationService creates a new application service
-func NewApplicationService(db *gorm.DB, pdpService *PDPService, idp idp.IdentityProviderAPI) *ApplicationService {
+func NewApplicationService(db *gorm.DB, pdpService *policy.Client, idp idp.IdentityProviderAPI) *ApplicationService {
 	return &ApplicationService{db: db, policyService: pdpService, idp: idp}
 }
 
@@ -109,10 +110,10 @@ func (s *ApplicationService) CreateApplication(ctx context.Context, req *models.
 	if application.IdpClientID == nil {
 		return nil, fmt.Errorf("cannot update allow list: application IdpClientID is nil")
 	}
-	policyReq := models.AllowListUpdateRequest{
+	policyReq := policy.AllowListUpdateRequest{
 		ApplicationID: *application.IdpClientID,
 		Records:       application.SelectedFields,
-		GrantDuration: models.GrantDurationTypeOneMonth, // Default duration
+		GrantDuration: policy.GrantDurationTypeOneMonth, // Default duration
 	}
 
 	_, err := s.policyService.UpdateAllowList(policyReq)
@@ -229,12 +230,12 @@ func (s *ApplicationService) UpdateApplicationPolicy(ctx context.Context, applic
 		return nil, fmt.Errorf("cannot update policy: application IdpClientID is nil")
 	}
 
-	grantDuration := models.GrantDurationTypeOneMonth
+	grantDuration := policy.GrantDurationTypeOneMonth
 	if req.GrantDuration != nil {
 		grantDuration = *req.GrantDuration
 	}
 
-	policyReq := models.AllowListUpdateRequest{
+	policyReq := policy.AllowListUpdateRequest{
 		ApplicationID: *application.IdpClientID,
 		Records:       req.SelectedFields,
 		GrantDuration: grantDuration,

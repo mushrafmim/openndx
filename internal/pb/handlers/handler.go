@@ -13,6 +13,7 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/idp/idpfactory"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/pb/services"
 	"github.com/openndx/openndx-core/internal/utils"
 	"gorm.io/gorm"
@@ -108,7 +109,7 @@ func NewV1Handler(db *gorm.DB) (*V1Handler, error) {
 		return nil, fmt.Errorf("PDP_SERVICE_URL must start with http:// or https://")
 	}
 
-	pdpService := services.NewPDPService(pdpServiceURL)
+	pdpService := policy.NewClient(pdpServiceURL)
 	slog.Info("PDP Service URL", "url", pdpServiceURL)
 
 	return &V1Handler{
@@ -756,7 +757,7 @@ func (h *V1Handler) PatchSchemaPolicyMetadata(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var req models.PolicyMetadataPatchRequest
+	var req policy.PolicyMetadataPatchRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
@@ -838,7 +839,7 @@ func respondWithPolicyMetadataError(w http.ResponseWriter, err error) {
 		return
 	}
 
-	var pdpErr *services.PDPError
+	var pdpErr *policy.Error
 	if errors.As(err, &pdpErr) {
 		switch pdpErr.StatusCode {
 		case http.StatusBadRequest, http.StatusNotFound, http.StatusConflict:

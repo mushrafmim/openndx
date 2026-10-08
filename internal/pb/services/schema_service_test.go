@@ -10,6 +10,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/stretchr/testify/assert"
 
 	"gorm.io/gorm"
@@ -31,7 +32,7 @@ func TestSchemaService_CreateSchema_WithFields(t *testing.T) {
 				}, nil
 			},
 		}
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		service := NewSchemaService(db, pdpService)
@@ -43,8 +44,8 @@ func TestSchemaService_CreateSchema_WithFields(t *testing.T) {
 			SchemaName: "Direct Fields Schema",
 			Endpoint:   "http://example.com/graphql",
 			MemberID:   "member-123",
-			Fields: []models.PolicyMetadataCreateRequestRecord{
-				{FieldName: "email", Source: models.SourcePrimary, AccessControlType: models.AccessControlTypePublic},
+			Fields: []policy.PolicyMetadataCreateRequestRecord{
+				{FieldName: "email", Source: policy.SourcePrimary, AccessControlType: policy.AccessControlTypePublic},
 			},
 		}
 
@@ -73,7 +74,7 @@ func TestSchemaService_CreateSchema_WithFields(t *testing.T) {
 				}, nil
 			},
 		}
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		service := NewSchemaService(db, pdpService)
@@ -87,8 +88,8 @@ func TestSchemaService_CreateSchema_WithFields(t *testing.T) {
 			SchemaName: "Direct Fields Schema",
 			Endpoint:   "http://example.com/graphql",
 			MemberID:   "member-123",
-			Fields: []models.PolicyMetadataCreateRequestRecord{
-				{FieldName: "email", Source: models.SourcePrimary, AccessControlType: models.AccessControlTypePublic},
+			Fields: []policy.PolicyMetadataCreateRequestRecord{
+				{FieldName: "email", Source: policy.SourcePrimary, AccessControlType: policy.AccessControlTypePublic},
 			},
 		}
 
@@ -105,7 +106,7 @@ func TestSchemaService_UpdateSchema(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		schemaID := "sch_123"
@@ -144,7 +145,7 @@ func TestSchemaService_UpdateSchema(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		// Mock: Find schema - not found
@@ -172,7 +173,7 @@ func TestSchemaService_GetSchema(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		schemaID := "sch_123"
@@ -200,7 +201,7 @@ func TestSchemaService_GetSchema(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		// Mock: Find schema - not found
@@ -223,7 +224,7 @@ func TestSchemaService_GetSchemas(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		// Mock: Find all schemas
@@ -244,7 +245,7 @@ func TestSchemaService_GetSchemas(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		memberID := "member-123"
@@ -272,7 +273,7 @@ func TestSchemaService_CreateSchemaSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		memberID := "member-123"
@@ -313,7 +314,7 @@ func TestSchemaService_CreateSchemaSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		// Mock: Check if member exists - not found
@@ -345,7 +346,7 @@ func TestSchemaService_UpdateSchemaSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		submissionID := "sub_123"
@@ -383,7 +384,7 @@ func TestSchemaService_UpdateSchemaSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		// Mock: Find submission - not found
@@ -406,7 +407,7 @@ func TestSchemaService_UpdateSchemaSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		submissionID := "sub_123"
@@ -434,7 +435,7 @@ func TestSchemaService_GetSchemaSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		submissionID := "sub_123"
@@ -461,7 +462,7 @@ func TestSchemaService_GetSchemaSubmission(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		// Mock: Find submission - not found
@@ -484,7 +485,7 @@ func TestSchemaService_GetSchemaSubmissions(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		// Mock: Find all submissions (with Preload)
@@ -509,7 +510,7 @@ func TestSchemaService_GetSchemaSubmissions(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		memberID := "member-123"
@@ -537,7 +538,7 @@ func TestSchemaService_GetSchemaSubmissions(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		statusFilter := []string{string(kernel.StatusApproved)}
@@ -569,7 +570,7 @@ func TestSchemaService_CreateSchema_EdgeCases(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		service := NewSchemaService(db, pdpService)
 
 		req := &models.CreateSchemaRequest{
@@ -590,14 +591,14 @@ func TestSchemaService_CreateSchema_EdgeCases(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		service := NewSchemaService(db, pdpService)
 
 		req := &models.CreateSchemaRequest{
 			SchemaName: "Test Schema",
 			SDL:        "type Query { test: String }",
-			Fields: []models.PolicyMetadataCreateRequestRecord{
-				{FieldName: "email", AccessControlType: models.AccessControlTypePublic, Source: models.SourcePrimary},
+			Fields: []policy.PolicyMetadataCreateRequestRecord{
+				{FieldName: "email", AccessControlType: policy.AccessControlTypePublic, Source: policy.SourcePrimary},
 			},
 		}
 
@@ -623,7 +624,7 @@ func TestSchemaService_CreateSchema_EdgeCases(t *testing.T) {
 				}, nil
 			},
 		}
-		pdpService := NewPDPService("http://mock-pdp")
+		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		service := NewSchemaService(db, pdpService)
@@ -657,7 +658,7 @@ func TestSchemaService_UpdateSchema_EdgeCases(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		schemaID := "sch_123"
@@ -698,7 +699,7 @@ func TestSchemaService_UpdateSchema_EdgeCases(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		schemaID := "sch_123"
@@ -744,7 +745,7 @@ func TestSchemaService_CreateSchemaSubmission_EdgeCases(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		memberID := "member-123"
@@ -789,7 +790,7 @@ func TestSchemaService_CreateSchemaSubmission_EdgeCases(t *testing.T) {
 		db, mock, cleanup := SetupMockDB(t)
 		defer cleanup()
 
-		pdpService := NewPDPService("http://localhost:9999")
+		pdpService := policy.NewClient("http://localhost:9999")
 		service := NewSchemaService(db, pdpService)
 
 		memberID := "member-123"
