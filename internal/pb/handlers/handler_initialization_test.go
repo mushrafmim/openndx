@@ -1,14 +1,13 @@
 package handlers
 
 import (
+	"context"
+	"errors"
 	"net/http/httptest"
 	"os"
 	"testing"
 
 	"github.com/openndx/openndx-core/internal/pb/auth"
-	"github.com/openndx/openndx-core/internal/pb/idp/idptest"
-	"github.com/openndx/openndx-core/internal/pb/models"
-	"github.com/openndx/openndx-core/internal/pb/services"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -101,66 +100,45 @@ func TestNewV1Handler_MissingEnvVars(t *testing.T) {
 	assert.NotNil(t, handler)
 }
 
-func TestGetUserMemberID_Caching(t *testing.T) {
-	testHandler := NewTestV1Handler(t)
+// stubMemberResolver records the arguments it was called with
+type stubMemberResolver struct {
+	gotCtx  context.Context
+	gotUser *auth.AuthenticatedUser
+	id      string
+	err     error
+}
 
-	// Re-create member service with a fresh mock IDP
-	testHandler.handler.memberService = services.NewMemberService(testHandler.db, &idptest.Mock{})
+func (s *stubMemberResolver) ResolveMemberID(ctx context.Context, user *auth.AuthenticatedUser) (string, error) {
+	s.gotCtx, s.gotUser = ctx, user
+	return s.id, s.err
+}
 
-	// Create a user
-	user := &auth.AuthenticatedUser{
-		IdpUserID: "test-user-id",
-		Email:     "test@example.com",
-	}
-
-	// Mock request
+// TestGetUserMemberID_DelegatesToResolver checks that getUserMemberID passes the
+// request context and user to the member resolver and returns its result.
+// Lookup and caching behavior is covered by member.TestResolveMemberID_Caching.
+func TestGetUserMemberID_DelegatesToResolver(t *testing.T) {
+	user := &auth.AuthenticatedUser{IdpUserID: "test-user-id"}
 	req := httptest.NewRequest("GET", "/", nil)
 
-	// Case 1: Member not found in DB
-	// Note: GetAllMembers uses DB, not IDP, so we don't need to mock IDP for this call
+	t.Run("returns resolved ID", func(t *testing.T) {
+		resolver := &stubMemberResolver{id: "mem_123"}
+		h := &V1Handler{members: resolver}
 
-	id, err := testHandler.handler.getUserMemberID(req, user)
-	assert.Error(t, err)
-	assert.Empty(t, id)
-	// MemberService.getFilteredMembers returns error when record not found
-	assert.Contains(t, err.Error(), "failed to fetch member")
+		id, err := h.getUserMemberID(req, user)
+		assert.NoError(t, err)
+		assert.Equal(t, "mem_123", id)
+		assert.Same(t, user, resolver.gotUser)
+		assert.Equal(t, req.Context(), resolver.gotCtx)
+	})
 
-	// Verify error is cached
-	errCached := user.GetCachedMemberIDError()
-	assert.Error(t, errCached)
-	assert.Equal(t, err, errCached)
+	t.Run("returns resolver error", func(t *testing.T) {
+		resolver := &stubMemberResolver{err: errors.New("user member record not found")}
+		h := &V1Handler{members: resolver}
 
-	// Case 2: Cached error is returned
-	id, err = testHandler.handler.getUserMemberID(req, user)
-	assert.Error(t, err)
-	assert.Equal(t, errCached, err)
-
-	// Case 3: Member exists
-	// Clear cache
-	user = &auth.AuthenticatedUser{
-		IdpUserID: "test-user-id-2",
-		Email:     "test2@example.com",
-	}
-
-	// Create member in DB
-	memberID := createTestMember(t, testHandler.db, "test2@example.com")
-	// Update member with correct IdpUserID
-	err = testHandler.db.Model(&models.Member{}).Where("member_id = ?", memberID).Update("idp_user_id", "test-user-id-2").Error
-	assert.NoError(t, err)
-
-	id, err = testHandler.handler.getUserMemberID(req, user)
-	assert.NoError(t, err)
-	assert.Equal(t, memberID, id)
-
-	// Verify ID is cached
-	cachedID, cached := user.GetCachedMemberID()
-	assert.True(t, cached)
-	assert.Equal(t, memberID, cachedID)
-
-	// Case 4: Cached ID is returned
-	id, err = testHandler.handler.getUserMemberID(req, user)
-	assert.NoError(t, err)
-	assert.Equal(t, memberID, id)
+		id, err := h.getUserMemberID(req, user)
+		assert.EqualError(t, err, "user member record not found")
+		assert.Empty(t, id)
+	})
 }
 
 func TestNewV1Handler_StandardOIDC_WithoutBaseURL(t *testing.T) {

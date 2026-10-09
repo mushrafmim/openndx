@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/stretchr/testify/assert"
@@ -77,14 +78,14 @@ func TestCreateSchema_ErrorResponse(t *testing.T) {
 
 func TestCreateMember_Success(t *testing.T) {
 	var capturedMethod, capturedPath string
-	var capturedBody models.CreateMemberRequest
+	var capturedBody member.CreateMemberRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedMethod = r.Method
 		capturedPath = r.URL.Path
 		assert.NoError(t, json.NewDecoder(r.Body).Decode(&capturedBody))
 
-		resp := models.MemberResponse{
+		resp := member.MemberResponse{
 			MemberID: "mem_new",
 			Name:     capturedBody.Name,
 			Email:    capturedBody.Email,
@@ -100,7 +101,7 @@ func TestCreateMember_Success(t *testing.T) {
 
 	client := NewClient(server.URL, "token")
 	idpUserID := "thunder-user-1"
-	req := &models.CreateMemberRequest{
+	req := &member.CreateMemberRequest{
 		Name:        "New Member",
 		Email:       "new@example.com",
 		PhoneNumber: "+1234567890",
@@ -127,7 +128,7 @@ func TestCreateMember_ErrorResponse(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	resp, err := client.CreateMember(context.Background(), &models.CreateMemberRequest{
+	resp, err := client.CreateMember(context.Background(), &member.CreateMemberRequest{
 		Name:        "New Member",
 		Email:       "new@example.com",
 		PhoneNumber: "+1234567890",

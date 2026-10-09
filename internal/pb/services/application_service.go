@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/openndx/openndx-core/internal/pb/idp"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
+	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"gorm.io/gorm"
@@ -359,8 +360,8 @@ func (s *ApplicationService) CreateApplicationSubmission(ctx context.Context, re
 	}
 
 	// Validate member ID
-	var member models.Member
-	err := s.db.WithContext(ctx).First(&member, "member_id = ?", req.MemberID).Error
+	var owner member.Member
+	err := s.db.WithContext(ctx).First(&owner, "member_id = ?", req.MemberID).Error
 	if err != nil {
 		return nil, err
 	}

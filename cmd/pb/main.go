@@ -14,6 +14,7 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/database"
 	"github.com/openndx/openndx-core/internal/pb/handlers"
+	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/utils"
@@ -45,7 +46,7 @@ func main() {
 
 	if os.Getenv("RUN_MIGRATION") == "true" {
 		err = database.AutoMigrate(gormDB,
-			&models.Member{},
+			&member.Member{},
 			&models.Schema{},
 			&models.Application{},
 			&models.SchemaSubmission{},
@@ -70,10 +71,10 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Member endpoints
-	mux.Handle("GET /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllMembers)))
-	mux.Handle("POST /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.CreateMember)))
-	mux.Handle("GET /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetMember)))
-	mux.Handle("PUT /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateMember)))
+	mux.Handle("GET /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.Members.GetAllMembers)))
+	mux.Handle("POST /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.Members.CreateMember)))
+	mux.Handle("GET /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.Members.GetMember)))
+	mux.Handle("PUT /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.Members.UpdateMember)))
 
 	// Schema endpoints
 	mux.Handle("GET /api/v1/schemas", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllSchemas)))

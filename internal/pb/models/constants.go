@@ -1,13 +1,5 @@
 package models
 
-// UserGroup represents different user groups in the system
-type UserGroup string
-
-const (
-	UserGroupAdmin  UserGroup = "OpenNDX_Admin"
-	UserGroupMember UserGroup = "OpenNDX_Members"
-)
-
 // Field length constraints remain as regular constants
 const (
 	MaxNameLength        = 255

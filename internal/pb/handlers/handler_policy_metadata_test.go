@@ -14,6 +14,7 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/auth/authtest"
 	"github.com/openndx/openndx-core/internal/pb/idp/idptest"
+	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/pb/services"
@@ -121,10 +122,12 @@ func newPolicyMetadataTestEnv(t *testing.T) *policyMetadataTestEnv {
 
 	pdpService := policy.NewClient(server.URL)
 	mockIDP := &idptest.Mock{}
+	memberService := member.NewService(db, mockIDP)
 	handler := &V1Handler{
-		memberService:      services.NewMemberService(db, mockIDP),
+		members:            memberService,
 		schemaService:      services.NewSchemaService(db, pdpService),
 		applicationService: services.NewApplicationService(db, pdpService, mockIDP),
+		Members:            member.NewHandler(memberService),
 	}
 
 	return &policyMetadataTestEnv{db: db, handler: handler, pdp: pdp, schemaID: schemaID}
@@ -135,15 +138,15 @@ func newPolicyMetadataTestEnv(t *testing.T) *policyMetadataTestEnv {
 // its member ID, which would otherwise leak between test databases.
 func (e *policyMetadataTestEnv) makeMemberOwner(t *testing.T) authtest.TestUser {
 	owner := authtest.CreateCustomTestUser(fmt.Sprintf("owner-%d", time.Now().UnixNano()), "owner@test.com", []auth.Role{auth.RoleMember})
-	member := models.Member{
+	m := member.Member{
 		MemberID:    "mem_owner_" + fmt.Sprintf("%d", time.Now().UnixNano()),
 		Name:        "Owner Member",
 		Email:       owner.Email,
 		PhoneNumber: "1234567890",
 		IdpUserID:   owner.IdpUserID,
 	}
-	require.NoError(t, e.db.Create(&member).Error)
-	require.NoError(t, e.db.Model(&models.Schema{}).Where("schema_id = ?", e.schemaID).Update("member_id", member.MemberID).Error)
+	require.NoError(t, e.db.Create(&m).Error)
+	require.NoError(t, e.db.Model(&models.Schema{}).Where("schema_id = ?", e.schemaID).Update("member_id", m.MemberID).Error)
 
 	return owner
 }

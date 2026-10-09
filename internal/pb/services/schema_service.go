@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
+	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"gorm.io/gorm"
@@ -253,8 +254,8 @@ func (s *SchemaService) ensurePolicyMetadataInSchema(schemaID, id string) error 
 // CreateSchemaSubmission creates a new schema
 func (s *SchemaService) CreateSchemaSubmission(req *models.CreateSchemaSubmissionRequest) (*models.SchemaSubmissionResponse, error) {
 	// Check if member exists
-	var member models.Member
-	if err := s.db.First(&member, "member_id = ?", req.MemberID).Error; err != nil {
+	var owner member.Member
+	if err := s.db.First(&owner, "member_id = ?", req.MemberID).Error; err != nil {
 		return nil, fmt.Errorf("member not found: %w", err)
 	}
 

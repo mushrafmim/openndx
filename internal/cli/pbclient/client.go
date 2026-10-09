@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
 )
 
@@ -96,16 +97,16 @@ func (c *Client) CreateSchema(ctx context.Context, req *models.CreateSchemaReque
 }
 
 // CreateMember calls POST /api/v1/members.
-func (c *Client) CreateMember(ctx context.Context, req *models.CreateMemberRequest) (*models.MemberResponse, error) {
+func (c *Client) CreateMember(ctx context.Context, req *member.CreateMemberRequest) (*member.MemberResponse, error) {
 	body, err := c.doJSON(ctx, http.MethodPost, "/api/v1/members", req)
 	if err != nil {
 		return nil, err
 	}
-	var member models.MemberResponse
-	if err := json.Unmarshal(body, &member); err != nil {
+	var resp member.MemberResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
-	return &member, nil
+	return &resp, nil
 }
 
 // GetApplication calls GET /api/v1/applications/{applicationId}.
