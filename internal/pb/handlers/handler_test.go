@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -64,7 +63,6 @@ func NewTestV1HandlerWithMockPDP(t *testing.T, db *gorm.DB, idpMock *idptest.Moc
 		members:            memberService,
 		schemaService:      services.NewSchemaService(db, mockPDP),
 		applicationService: services.NewApplicationService(db, mockPDP, idpMock),
-		Members:            member.NewHandler(memberService),
 	}
 }
 
@@ -168,7 +166,6 @@ func newTestV1HandlerWithWorkingPDP(t *testing.T, db *gorm.DB, pdpStatusCode int
 		members:            memberService,
 		schemaService:      services.NewSchemaService(db, pdpService),
 		applicationService: services.NewApplicationService(db, pdpService, mockIDP),
-		Members:            member.NewHandler(memberService),
 	}
 }
 
@@ -1010,143 +1007,5 @@ func TestSchemaSubmissionEndpoints_EdgeCases(t *testing.T) {
 		testHandler.handler.UpdateSchemaSubmission(w, httpReq)
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
-}
-
-// TestNewV1Handler tests the NewV1Handler constructor
-func TestNewV1Handler(t *testing.T) {
-	t.Run("NewV1Handler_MissingPDPURL", func(t *testing.T) {
-		originalURL := os.Getenv("PDP_SERVICE_URL")
-		defer func() {
-			if originalURL != "" {
-				os.Setenv("PDP_SERVICE_URL", originalURL)
-			} else {
-				os.Unsetenv("PDP_SERVICE_URL")
-			}
-		}()
-
-		os.Unsetenv("PDP_SERVICE_URL")
-
-		// Set IDP env vars to pass IDP check
-		os.Setenv("IDP_BASE_URL", "https://example.com")
-		os.Setenv("IDP_CLIENT_ID", "client-id")
-		os.Setenv("IDP_CLIENT_SECRET", "client-secret")
-		defer os.Unsetenv("IDP_BASE_URL")
-		defer os.Unsetenv("IDP_CLIENT_ID")
-		defer os.Unsetenv("IDP_CLIENT_SECRET")
-
-		db := setupSQLiteTestDB(t)
-		if db == nil {
-			return
-		}
-
-		handler, err := NewV1Handler(db)
-		assert.Error(t, err)
-		assert.Nil(t, handler)
-		assert.Contains(t, err.Error(), "PDP_SERVICE_URL")
-	})
-
-	t.Run("NewV1Handler_Success", func(t *testing.T) {
-		originalURL := os.Getenv("PDP_SERVICE_URL")
-		originalBaseURL := os.Getenv("IDP_BASE_URL")
-		originalClientID := os.Getenv("IDP_CLIENT_ID")
-		originalClientSecret := os.Getenv("IDP_CLIENT_SECRET")
-		originalScopes := os.Getenv("IDP_SCOPE")
-		defer func() {
-			if originalURL != "" {
-				os.Setenv("PDP_SERVICE_URL", originalURL)
-			} else {
-				os.Unsetenv("PDP_SERVICE_URL")
-			}
-			if originalBaseURL != "" {
-				os.Setenv("IDP_BASE_URL", originalBaseURL)
-			} else {
-				os.Unsetenv("IDP_BASE_URL")
-			}
-			if originalClientID != "" {
-				os.Setenv("IDP_CLIENT_ID", originalClientID)
-			} else {
-				os.Unsetenv("IDP_CLIENT_ID")
-			}
-			if originalClientSecret != "" {
-				os.Setenv("IDP_CLIENT_SECRET", originalClientSecret)
-			} else {
-				os.Unsetenv("IDP_CLIENT_SECRET")
-			}
-			if originalScopes != "" {
-				os.Setenv("IDP_SCOPE", originalScopes)
-			} else {
-				os.Unsetenv("IDP_SCOPE")
-			}
-		}()
-
-		os.Setenv("PDP_SERVICE_URL", "http://localhost:9999")
-		os.Setenv("IDP_BASE_URL", "https://api.asgardeo.io/t/testorg")
-		os.Setenv("IDP_CLIENT_ID", "test-client-id")
-		os.Setenv("IDP_CLIENT_SECRET", "test-client-secret")
-		os.Setenv("IDP_SCOPE", "scope1 scope2 scope3")
-
-		db := setupSQLiteTestDB(t)
-		if db == nil {
-			return
-		}
-
-		handler, err := NewV1Handler(db)
-		assert.NoError(t, err)
-		assert.NotNil(t, handler)
-		assert.NotNil(t, handler.members)
-		assert.NotNil(t, handler.Members)
-		assert.NotNil(t, handler.schemaService)
-		assert.NotNil(t, handler.applicationService)
-	})
-
-	t.Run("NewV1Handler_WithEmptyScopes", func(t *testing.T) {
-		originalURL := os.Getenv("PDP_SERVICE_URL")
-		originalBaseURL := os.Getenv("IDP_BASE_URL")
-		originalClientID := os.Getenv("IDP_CLIENT_ID")
-		originalClientSecret := os.Getenv("IDP_CLIENT_SECRET")
-		originalScopes := os.Getenv("IDP_SCOPE")
-		defer func() {
-			if originalURL != "" {
-				os.Setenv("PDP_SERVICE_URL", originalURL)
-			} else {
-				os.Unsetenv("PDP_SERVICE_URL")
-			}
-			if originalBaseURL != "" {
-				os.Setenv("IDP_BASE_URL", originalBaseURL)
-			} else {
-				os.Unsetenv("IDP_BASE_URL")
-			}
-			if originalClientID != "" {
-				os.Setenv("IDP_CLIENT_ID", originalClientID)
-			} else {
-				os.Unsetenv("IDP_CLIENT_ID")
-			}
-			if originalClientSecret != "" {
-				os.Setenv("IDP_CLIENT_SECRET", originalClientSecret)
-			} else {
-				os.Unsetenv("IDP_CLIENT_SECRET")
-			}
-			if originalScopes != "" {
-				os.Setenv("IDP_SCOPE", originalScopes)
-			} else {
-				os.Unsetenv("IDP_SCOPE")
-			}
-		}()
-
-		os.Setenv("PDP_SERVICE_URL", "http://localhost:9999")
-		os.Setenv("IDP_BASE_URL", "https://api.asgardeo.io/t/testorg")
-		os.Setenv("IDP_CLIENT_ID", "test-client-id")
-		os.Setenv("IDP_CLIENT_SECRET", "test-client-secret")
-		os.Unsetenv("IDP_SCOPE")
-
-		db := setupSQLiteTestDB(t)
-		if db == nil {
-			return
-		}
-
-		handler, err := NewV1Handler(db)
-		assert.NoError(t, err)
-		assert.NotNil(t, handler)
 	})
 }

@@ -127,7 +127,6 @@ func newPolicyMetadataTestEnv(t *testing.T) *policyMetadataTestEnv {
 		members:            memberService,
 		schemaService:      services.NewSchemaService(db, pdpService),
 		applicationService: services.NewApplicationService(db, pdpService, mockIDP),
-		Members:            member.NewHandler(memberService),
 	}
 
 	return &policyMetadataTestEnv{db: db, handler: handler, pdp: pdp, schemaID: schemaID}

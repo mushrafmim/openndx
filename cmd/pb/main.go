@@ -14,9 +14,11 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/database"
 	"github.com/openndx/openndx-core/internal/pb/handlers"
+	"github.com/openndx/openndx-core/internal/pb/idp/idpfactory"
 	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/utils"
 )
 
@@ -60,21 +62,33 @@ func main() {
 		slog.Info("Database connected (migration skipped)")
 	}
 
-	// Initialize V1 handlers
-	v1Handler, err := handlers.NewV1Handler(gormDB)
+	// Initialize external service clients
+	idpProvider, err := idpfactory.NewFromEnv()
 	if err != nil {
-		slog.Error("Failed to initialize V1 handler", "error", err)
+		slog.Error("Failed to initialize IDP provider", "error", err)
 		os.Exit(1)
 	}
+
+	pdpClient, err := policy.NewClientFromEnv()
+	if err != nil {
+		slog.Error("Failed to initialize PDP client", "error", err)
+		os.Exit(1)
+	}
+
+	// Initialize services and handlers
+	memberService := member.NewService(gormDB, idpProvider)
+	memberHandler := member.NewHandler(memberService)
+
+	v1Handler := handlers.NewV1Handler(gormDB, idpProvider, pdpClient, memberService)
 
 	// Create a mux for API routes
 	mux := http.NewServeMux()
 
 	// Member endpoints
-	mux.Handle("GET /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.Members.GetAllMembers)))
-	mux.Handle("POST /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.Members.CreateMember)))
-	mux.Handle("GET /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.Members.GetMember)))
-	mux.Handle("PUT /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.Members.UpdateMember)))
+	mux.Handle("GET /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(memberHandler.GetAllMembers)))
+	mux.Handle("POST /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(memberHandler.CreateMember)))
+	mux.Handle("GET /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(memberHandler.GetMember)))
+	mux.Handle("PUT /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(memberHandler.UpdateMember)))
 
 	// Schema endpoints
 	mux.Handle("GET /api/v1/schemas", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllSchemas)))
