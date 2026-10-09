@@ -21,6 +21,7 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
+	"github.com/openndx/openndx-core/internal/pb/schema"
 )
 
 // newHTTPClient builds an HTTP client for talking to the identity provider or
@@ -668,7 +669,7 @@ func runSchemasCreate(ctx context.Context, args []string) error {
 		records = append(records, record)
 	}
 
-	req := &models.CreateSchemaRequest{
+	req := &schema.CreateSchemaRequest{
 		SchemaName: *name,
 		Endpoint:   *endpoint,
 		MemberID:   *memberID,
@@ -692,15 +693,15 @@ func runSchemasCreate(ctx context.Context, args []string) error {
 
 	client := pbclient.NewClient(*pbURL, token.AccessToken)
 	client.HTTPClient = httpClient
-	schema, err := client.CreateSchema(ctx, req)
+	created, err := client.CreateSchema(ctx, req)
 	if err != nil {
 		return fmt.Errorf("failed to create schema: %w", err)
 	}
 
-	fmt.Printf("Created schema %s (%s)\n", schema.SchemaID, schema.SchemaName)
+	fmt.Printf("Created schema %s (%s)\n", created.SchemaID, created.SchemaName)
 	fmt.Println("Fields:")
 	for _, r := range records {
-		fmt.Printf("  - %s:%s (%s)\n", schema.SchemaID, r.FieldName, r.AccessControlType)
+		fmt.Printf("  - %s:%s (%s)\n", created.SchemaID, r.FieldName, r.AccessControlType)
 	}
 	return nil
 }

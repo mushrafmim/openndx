@@ -10,19 +10,20 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
+	"github.com/openndx/openndx-core/internal/pb/schema"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateSchema_Success(t *testing.T) {
 	var capturedMethod, capturedPath string
-	var capturedBody models.CreateSchemaRequest
+	var capturedBody schema.CreateSchemaRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedMethod = r.Method
 		capturedPath = r.URL.Path
 		assert.NoError(t, json.NewDecoder(r.Body).Decode(&capturedBody))
 
-		resp := models.SchemaResponse{
+		resp := schema.SchemaResponse{
 			SchemaID:   "sch_new",
 			SchemaName: capturedBody.SchemaName,
 			Endpoint:   capturedBody.Endpoint,
@@ -35,7 +36,7 @@ func TestCreateSchema_Success(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &models.CreateSchemaRequest{
+	req := &schema.CreateSchemaRequest{
 		SchemaName: "Citizen Info",
 		Endpoint:   "http://example.com/graphql",
 		MemberID:   "member-1",
@@ -65,7 +66,7 @@ func TestCreateSchema_ErrorResponse(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	resp, err := client.CreateSchema(context.Background(), &models.CreateSchemaRequest{
+	resp, err := client.CreateSchema(context.Background(), &schema.CreateSchemaRequest{
 		SchemaName: "Bad Schema",
 		Endpoint:   "http://example.com/graphql",
 		MemberID:   "member-1",

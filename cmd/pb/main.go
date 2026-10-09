@@ -19,6 +19,7 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/middleware"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
+	"github.com/openndx/openndx-core/internal/pb/schema"
 	"github.com/openndx/openndx-core/internal/utils"
 )
 
@@ -49,9 +50,9 @@ func main() {
 	if os.Getenv("RUN_MIGRATION") == "true" {
 		err = database.AutoMigrate(gormDB,
 			&member.Member{},
-			&models.Schema{},
+			&schema.Schema{},
 			&models.Application{},
-			&models.SchemaSubmission{},
+			&schema.SchemaSubmission{},
 			&models.ApplicationSubmission{},
 		)
 		if err != nil {
@@ -79,6 +80,9 @@ func main() {
 	memberService := member.NewService(gormDB, idpProvider)
 	memberHandler := member.NewHandler(memberService)
 
+	schemaService := schema.NewService(gormDB, pdpClient)
+	schemaHandler := schema.NewHandler(schemaService, memberService)
+
 	v1Handler := handlers.NewV1Handler(gormDB, idpProvider, pdpClient, memberService)
 
 	// Create a mux for API routes
@@ -91,22 +95,22 @@ func main() {
 	mux.Handle("PUT /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(memberHandler.UpdateMember)))
 
 	// Schema endpoints
-	mux.Handle("GET /api/v1/schemas", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllSchemas)))
-	mux.Handle("POST /api/v1/schemas", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.CreateSchema)))
-	mux.Handle("GET /api/v1/schemas/{schemaId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetSchema)))
-	mux.Handle("PUT /api/v1/schemas/{schemaId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateSchema)))
+	mux.Handle("GET /api/v1/schemas", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.GetAllSchemas)))
+	mux.Handle("POST /api/v1/schemas", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.CreateSchema)))
+	mux.Handle("GET /api/v1/schemas/{schemaId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.GetSchema)))
+	mux.Handle("PUT /api/v1/schemas/{schemaId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.UpdateSchema)))
 
 	// Schema policy metadata endpoints
-	mux.Handle("GET /api/v1/schemas/{schemaId}/policy-metadata", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.ListSchemaPolicyMetadata)))
-	mux.Handle("PATCH /api/v1/schemas/{schemaId}/policy-metadata/{id}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.PatchSchemaPolicyMetadata)))
-	mux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.DeleteSchemaPolicyMetadata)))
-	mux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}/allowlist/{applicationId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.RevokeSchemaPolicyAllowListEntry)))
+	mux.Handle("GET /api/v1/schemas/{schemaId}/policy-metadata", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.ListSchemaPolicyMetadata)))
+	mux.Handle("PATCH /api/v1/schemas/{schemaId}/policy-metadata/{id}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.PatchSchemaPolicyMetadata)))
+	mux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.DeleteSchemaPolicyMetadata)))
+	mux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}/allowlist/{applicationId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.RevokeSchemaPolicyAllowListEntry)))
 
 	// Schema submission endpoints
-	mux.Handle("GET /api/v1/schema-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllSchemaSubmissions)))
-	mux.Handle("POST /api/v1/schema-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.CreateSchemaSubmission)))
-	mux.Handle("GET /api/v1/schema-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetSchemaSubmission)))
-	mux.Handle("PUT /api/v1/schema-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateSchemaSubmission)))
+	mux.Handle("GET /api/v1/schema-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.GetAllSchemaSubmissions)))
+	mux.Handle("POST /api/v1/schema-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.CreateSchemaSubmission)))
+	mux.Handle("GET /api/v1/schema-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.GetSchemaSubmission)))
+	mux.Handle("PUT /api/v1/schema-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.UpdateSchemaSubmission)))
 
 	// Application endpoints
 	mux.Handle("GET /api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllApplications)))

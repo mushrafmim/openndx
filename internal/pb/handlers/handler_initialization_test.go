@@ -23,7 +23,6 @@ func TestNewV1Handler(t *testing.T) {
 
 	assert.NotNil(t, handler)
 	assert.Same(t, resolver, handler.members)
-	assert.NotNil(t, handler.schemaService)
 	assert.NotNil(t, handler.applicationService)
 }
 

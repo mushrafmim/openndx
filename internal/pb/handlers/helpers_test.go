@@ -7,6 +7,7 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
 	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/schema"
 	"gorm.io/gorm"
 )
 
@@ -17,8 +18,8 @@ func setupSQLiteTestDB(t *testing.T) *gorm.DB {
 		&member.Member{},
 		&models.Application{},
 		&models.ApplicationSubmission{},
-		&models.Schema{},
-		&models.SchemaSubmission{},
+		&schema.Schema{},
+		&schema.SchemaSubmission{},
 	)
 }
 

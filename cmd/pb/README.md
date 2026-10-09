@@ -155,6 +155,7 @@ internal/pb/
 ├── middleware/            # CORS & audit
 ├── models/                # Data models and DTOs
 ├── policy/                # Client for the Policy Decision Point (PDP)
+├── schema/                # Schema context: schemas, submissions, policy metadata
 └── services/              # Business logic layer
 
 internal/utils/            # HTTP/server helpers shared across services

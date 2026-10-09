@@ -86,16 +86,6 @@ func TestSelectedFieldRecords_GormDataType(t *testing.T) {
 	assert.Equal(t, "jsonb", sfr.GormDataType())
 }
 
-func TestTableName_Schema(t *testing.T) {
-	s := Schema{}
-	assert.Equal(t, "schemas", s.TableName())
-}
-
-func TestTableName_SchemaSubmission(t *testing.T) {
-	ss := SchemaSubmission{}
-	assert.Equal(t, "schema_submissions", ss.TableName())
-}
-
 func TestTableName_Application(t *testing.T) {
 	a := Application{}
 	assert.Equal(t, "applications", a.TableName())
