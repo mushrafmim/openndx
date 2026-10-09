@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
+	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"gorm.io/gorm"
 )
@@ -13,7 +14,7 @@ import (
 // Backend models migrated.
 func setupSQLiteTestDB(t *testing.T) *gorm.DB {
 	return dbtest.SetupSQLiteDB(t,
-		&models.Member{},
+		&member.Member{},
 		&models.Application{},
 		&models.ApplicationSubmission{},
 		&models.Schema{},

@@ -1,6 +1,9 @@
 package models
 
-import "github.com/openndx/openndx-core/internal/pb/kernel"
+import (
+	"github.com/openndx/openndx-core/internal/pb/kernel"
+	"github.com/openndx/openndx-core/internal/pb/member"
+)
 
 // Schema represents the provider_schemas table
 type Schema struct {
@@ -14,7 +17,7 @@ type Schema struct {
 	kernel.BaseModel
 
 	// Relationships
-	Member Member `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`
+	Member member.Member `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`
 }
 
 // TableName sets the table name for GORM
@@ -36,8 +39,8 @@ type SchemaSubmission struct {
 	kernel.BaseModel
 
 	// Relationships
-	Member         Member  `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`
-	PreviousSchema *Schema `gorm:"foreignKey:PreviousSchemaID;references:SchemaID" json:"previousSchema,omitempty"`
+	Member         member.Member `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`
+	PreviousSchema *Schema       `gorm:"foreignKey:PreviousSchemaID;references:SchemaID" json:"previousSchema,omitempty"`
 }
 
 // TableName sets the table name for GORM
@@ -58,7 +61,7 @@ type Application struct {
 	kernel.BaseModel
 
 	// Relationships
-	Member Member `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`
+	Member member.Member `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`
 }
 
 // TableName sets the table name for GORM
@@ -79,8 +82,8 @@ type ApplicationSubmission struct {
 	kernel.BaseModel
 
 	// Relationships
-	Member              Member       `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`
-	PreviousApplication *Application `gorm:"foreignKey:PreviousApplicationID;references:ApplicationID" json:"previousApplication,omitempty"`
+	Member              member.Member `gorm:"foreignKey:MemberID;references:MemberID" json:"member"`
+	PreviousApplication *Application  `gorm:"foreignKey:PreviousApplicationID;references:ApplicationID" json:"previousApplication,omitempty"`
 }
 
 // TableName sets the table name for GORM

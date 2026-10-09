@@ -18,6 +18,7 @@ import (
 	"github.com/openndx/openndx-core/internal/cli/auth"
 	"github.com/openndx/openndx-core/internal/cli/pbclient"
 	"github.com/openndx/openndx-core/internal/cli/profile"
+	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 )
@@ -542,7 +543,7 @@ func runMembersCreate(ctx context.Context, args []string) error {
 		return fmt.Errorf("--pb-url is required (or set NDX_PB_URL, or configure it in a profile)")
 	}
 
-	req := &models.CreateMemberRequest{
+	req := &member.CreateMemberRequest{
 		Name:        *name,
 		Email:       *email,
 		PhoneNumber: *phone,

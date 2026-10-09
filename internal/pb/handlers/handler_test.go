@@ -16,6 +16,7 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/idp"
 	"github.com/openndx/openndx-core/internal/pb/idp/idptest"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
+	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/pb/services"
@@ -50,7 +51,7 @@ func NewTestV1Handler(t *testing.T) *TestV1Handler {
 
 // NewTestV1HandlerWithMockPDP creates a handler with mock PDP and IDP services for testing
 func NewTestV1HandlerWithMockPDP(t *testing.T, db *gorm.DB, idpMock *idptest.Mock) *V1Handler {
-	memberService := services.NewMemberService(db, idpMock)
+	memberService := member.NewService(db, idpMock)
 
 	// For testing, we'll use a real policy.Client but skip actual HTTP calls
 	// In a real test, you'd use a test HTTP server
@@ -60,42 +61,25 @@ func NewTestV1HandlerWithMockPDP(t *testing.T, db *gorm.DB, idpMock *idptest.Moc
 	// For now, the tests will need to handle PDP failures gracefully or skip PDP-dependent operations
 
 	return &V1Handler{
-		memberService:      memberService,
+		members:            memberService,
 		schemaService:      services.NewSchemaService(db, mockPDP),
 		applicationService: services.NewApplicationService(db, mockPDP, idpMock),
-	}
-}
-
-// setupMockIDPForMemberCreation configures the mock IDP to successfully create a member
-func setupMockIDPForMemberCreation(idpMock *idptest.Mock, email string, userID string) {
-	groupId := "group-123"
-	createdUser := &idp.UserInfo{
-		Id:          userID,
-		Email:       email,
-		FirstName:   "Test",
-		LastName:    "User",
-		PhoneNumber: "1234567890",
-	}
-	idpMock.CreateUserFunc = func(ctx context.Context, user *idp.User) (*idp.UserInfo, error) {
-		return createdUser, nil
-	}
-	idpMock.AddMemberToGroupByGroupNameFunc = func(ctx context.Context, groupName string, member *idp.GroupMember) (*string, error) {
-		return &groupId, nil
+		Members:            member.NewHandler(memberService),
 	}
 }
 
 // createTestMember creates a member in the database for testing (bypasses IDP)
 func createTestMember(t *testing.T, db *gorm.DB, email string) string {
-	member := models.Member{
+	m := member.Member{
 		MemberID:    "mem_" + fmt.Sprintf("%d", time.Now().UnixNano()),
 		Name:        "Test Member",
 		Email:       email,
 		PhoneNumber: "1234567890",
 		IdpUserID:   "idp-user-" + fmt.Sprintf("%d", time.Now().UnixNano()),
 	}
-	err := db.Create(&member).Error
+	err := db.Create(&m).Error
 	assert.NoError(t, err)
-	return member.MemberID
+	return m.MemberID
 }
 
 // createTestSchema creates a schema in the database for testing (bypasses async creation)
@@ -179,114 +163,13 @@ func newTestV1HandlerWithWorkingPDP(t *testing.T, db *gorm.DB, pdpStatusCode int
 	pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 	mockIDP := &idptest.Mock{}
+	memberService := member.NewService(db, mockIDP)
 	return &V1Handler{
-		memberService:      services.NewMemberService(db, mockIDP),
+		members:            memberService,
 		schemaService:      services.NewSchemaService(db, pdpService),
 		applicationService: services.NewApplicationService(db, pdpService, mockIDP),
+		Members:            member.NewHandler(memberService),
 	}
-}
-
-// TestMemberEndpoints tests all member-related endpoints
-func TestMemberEndpoints(t *testing.T) {
-	testHandler := NewTestV1Handler(t)
-	if testHandler == nil {
-		t.Skip("Skipping test: database connection failed")
-		return
-	}
-	// Cleanup is handled by SetupSQLiteTestDB
-
-	t.Run("POST /api/v1/members - CreateMember", func(t *testing.T) {
-		req := models.CreateMemberRequest{
-			Name:        "Test Member",
-			Email:       fmt.Sprintf("test-%d@example.com", time.Now().UnixNano()),
-			PhoneNumber: "1234567890",
-		}
-
-		// Setup mock IDP for member creation
-		userID := "idp-user-" + fmt.Sprintf("%d", time.Now().UnixNano())
-		setupMockIDPForMemberCreation(testHandler.idp, req.Email, userID)
-
-		reqBody, _ := json.Marshal(req)
-		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBuffer(reqBody))
-		httpReq.Header.Set("Content-Type", "application/json")
-
-		w := httptest.NewRecorder()
-		testHandler.handler.CreateMember(w, httpReq)
-
-		assert.Equal(t, http.StatusCreated, w.Code)
-		var response models.MemberResponse
-		err := json.Unmarshal(w.Body.Bytes(), &response)
-		assert.NoError(t, err)
-		assert.Equal(t, req.Name, response.Name)
-		assert.Equal(t, req.Email, response.Email)
-		assert.Equal(t, req.PhoneNumber, response.PhoneNumber)
-		assert.NotEmpty(t, response.MemberID)
-	})
-
-	t.Run("POST /api/v1/members - Invalid JSON", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBufferString("invalid json"))
-		httpReq.Header.Set("Content-Type", "application/json")
-
-		w := httptest.NewRecorder()
-		testHandler.handler.CreateMember(w, httpReq)
-
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-	})
-
-	t.Run("PUT /api/v1/members/:id - UpdateMember_InvalidJSON", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodPut, "/api/v1/members/test-id", bytes.NewBufferString("invalid json"))
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.SetPathValue("memberId", "test-id")
-		w := httptest.NewRecorder()
-		testHandler.handler.UpdateMember(w, httpReq)
-		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
-
-	t.Run("PUT /api/v1/members/:id - UpdateMember_NotFound", func(t *testing.T) {
-		name := "Updated Name"
-		req := models.UpdateMemberRequest{
-			Name: &name,
-		}
-		reqBody, _ := json.Marshal(req)
-		httpReq := authtest.NewAdminRequest(http.MethodPut, "/api/v1/members/non-existent-id", bytes.NewBuffer(reqBody))
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.SetPathValue("memberId", "non-existent-id")
-		w := httptest.NewRecorder()
-		testHandler.handler.UpdateMember(w, httpReq)
-		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
-
-	t.Run("GET /api/v1/members - GetAllMembers", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/members", nil)
-		w := httptest.NewRecorder()
-		testHandler.handler.GetAllMembers(w, httpReq)
-
-		assert.Equal(t, http.StatusOK, w.Code)
-
-		var response models.CollectionResponse
-		err := json.Unmarshal(w.Body.Bytes(), &response)
-		assert.NoError(t, err)
-		assert.NotNil(t, response.Items)
-		assert.GreaterOrEqual(t, response.Count, 0)
-	})
-
-	t.Run("GET /api/v1/members - WithQueryParams", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/members?email=test@example.com", nil)
-		w := httptest.NewRecorder()
-		testHandler.handler.GetAllMembers(w, httpReq)
-
-		// May return 500 if query fails, but should handle gracefully
-		assert.Contains(t, []int{http.StatusOK, http.StatusInternalServerError}, w.Code)
-	})
-
-	t.Run("GET /api/v1/members/:memberId - NotFound", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/members/non-existent-id", nil)
-		httpReq.SetPathValue("memberId", "non-existent-id")
-		w := httptest.NewRecorder()
-		testHandler.handler.GetMember(w, httpReq)
-
-		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
 }
 
 // TestSchemaEndpoints tests all schema-related endpoints
@@ -344,7 +227,7 @@ func TestSchemaEndpoints(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response models.CollectionResponse
+		var response kernel.CollectionResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.NotNil(t, response.Items)
@@ -479,7 +362,7 @@ func TestSchemaSubmissionEndpoints(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response models.CollectionResponse
+		var response kernel.CollectionResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.GreaterOrEqual(t, response.Count, 0)
@@ -618,7 +501,7 @@ func TestApplicationEndpoints(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response models.CollectionResponse
+		var response kernel.CollectionResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.NotNil(t, response.Items)
@@ -912,7 +795,7 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response models.CollectionResponse
+		var response kernel.CollectionResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.GreaterOrEqual(t, response.Count, 0)
@@ -1211,7 +1094,8 @@ func TestNewV1Handler(t *testing.T) {
 		handler, err := NewV1Handler(db)
 		assert.NoError(t, err)
 		assert.NotNil(t, handler)
-		assert.NotNil(t, handler.memberService)
+		assert.NotNil(t, handler.members)
+		assert.NotNil(t, handler.Members)
 		assert.NotNil(t, handler.schemaService)
 		assert.NotNil(t, handler.applicationService)
 	})

@@ -1,54 +1,22 @@
-package services
+package member
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
 	"github.com/openndx/openndx-core/internal/pb/idp"
 	"github.com/openndx/openndx-core/internal/pb/idp/idptest"
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-// setupMemberMockDB creates a mock database for testing
-func setupMemberMockDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock, func()) {
-	var db *sql.DB
-	var mock sqlmock.Sqlmock
-	var err error
-
-	db, mock, err = sqlmock.New()
-	if err != nil {
-		t.Fatalf("failed to create sqlmock: %v", err)
-	}
-
-	dialector := postgres.New(postgres.Config{
-		Conn:       db,
-		DriverName: "postgres",
-	})
-
-	gormDB, err := gorm.Open(dialector, &gorm.Config{
-		SkipDefaultTransaction: true,
-	})
-	if err != nil {
-		t.Fatalf("failed to open gorm db: %v", err)
-	}
-
-	cleanup := func() {
-		db.Close()
-	}
-
-	return gormDB, mock, cleanup
-}
-
 func TestCreateMember_Success(t *testing.T) {
 	// Arrange
-	db, mock, cleanup := setupMemberMockDB(t)
+	db, mock, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
 	mockIDP := &idptest.Mock{
@@ -66,10 +34,10 @@ func TestCreateMember_Success(t *testing.T) {
 		},
 	}
 
-	service := NewMemberService(db, mockIDP)
+	service := NewService(db, mockIDP)
 	ctx := context.Background()
 
-	req := &models.CreateMemberRequest{
+	req := &CreateMemberRequest{
 		Name:        "John Doe",
 		Email:       "john@example.com",
 		PhoneNumber: "+1234567890",
@@ -96,7 +64,7 @@ func TestCreateMember_Success(t *testing.T) {
 }
 
 func TestCreateMember_ExternallyProvisioned_Success_SkipsIdpCreation(t *testing.T) {
-	db, mock, cleanup := setupMemberMockDB(t)
+	db, mock, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
 	mockIDP := &idptest.Mock{
@@ -111,11 +79,11 @@ func TestCreateMember_ExternallyProvisioned_Success_SkipsIdpCreation(t *testing.
 		},
 	}
 
-	service := NewMemberService(db, mockIDP)
+	service := NewService(db, mockIDP)
 	ctx := context.Background()
 
 	idpUserID := "thunder-user-ndx-admin"
-	req := &models.CreateMemberRequest{
+	req := &CreateMemberRequest{
 		Name:        "Thunder Onboarded User",
 		Email:       "thunder-user@example.com",
 		PhoneNumber: "+1234567890",
@@ -138,14 +106,14 @@ func TestCreateMember_ExternallyProvisioned_Success_SkipsIdpCreation(t *testing.
 }
 
 func TestCreateMember_ExternallyProvisioned_EmptyIdpUserID(t *testing.T) {
-	db, _, cleanup := setupMemberMockDB(t)
+	db, _, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
-	service := NewMemberService(db, &idptest.Mock{})
+	service := NewService(db, &idptest.Mock{})
 	ctx := context.Background()
 
 	empty := ""
-	req := &models.CreateMemberRequest{
+	req := &CreateMemberRequest{
 		Name:        "Thunder Onboarded User",
 		Email:       "thunder-user@example.com",
 		PhoneNumber: "+1234567890",
@@ -160,7 +128,7 @@ func TestCreateMember_ExternallyProvisioned_EmptyIdpUserID(t *testing.T) {
 }
 
 func TestCreateMember_ExternallyProvisioned_DatabaseError_NoIdpRollback(t *testing.T) {
-	db, mock, cleanup := setupMemberMockDB(t)
+	db, mock, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
 	mockIDP := &idptest.Mock{
@@ -174,11 +142,11 @@ func TestCreateMember_ExternallyProvisioned_DatabaseError_NoIdpRollback(t *testi
 		},
 	}
 
-	service := NewMemberService(db, mockIDP)
+	service := NewService(db, mockIDP)
 	ctx := context.Background()
 
 	idpUserID := "thunder-user-ndx-admin"
-	req := &models.CreateMemberRequest{
+	req := &CreateMemberRequest{
 		Name:        "Thunder Onboarded User",
 		Email:       "thunder-user@example.com",
 		PhoneNumber: "+1234567890",
@@ -198,7 +166,7 @@ func TestCreateMember_ExternallyProvisioned_DatabaseError_NoIdpRollback(t *testi
 
 func TestCreateMember_IDPCreateUserError(t *testing.T) {
 	// Arrange
-	db, _, cleanup := setupMemberMockDB(t)
+	db, _, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
 	mockIDP := &idptest.Mock{
@@ -207,10 +175,10 @@ func TestCreateMember_IDPCreateUserError(t *testing.T) {
 		},
 	}
 
-	service := NewMemberService(db, mockIDP)
+	service := NewService(db, mockIDP)
 	ctx := context.Background()
 
-	req := &models.CreateMemberRequest{
+	req := &CreateMemberRequest{
 		Name:        "John Doe",
 		Email:       "john@example.com",
 		PhoneNumber: "+1234567890",
@@ -227,7 +195,7 @@ func TestCreateMember_IDPCreateUserError(t *testing.T) {
 
 func TestCreateMember_EmailMismatch_WithRollback(t *testing.T) {
 	// Arrange
-	db, _, cleanup := setupMemberMockDB(t)
+	db, _, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
 	mockIDP := &idptest.Mock{
@@ -245,10 +213,10 @@ func TestCreateMember_EmailMismatch_WithRollback(t *testing.T) {
 		},
 	}
 
-	service := NewMemberService(db, mockIDP)
+	service := NewService(db, mockIDP)
 	ctx := context.Background()
 
-	req := &models.CreateMemberRequest{
+	req := &CreateMemberRequest{
 		Name:        "John Doe",
 		Email:       "john@example.com",
 		PhoneNumber: "+1234567890",
@@ -265,7 +233,7 @@ func TestCreateMember_EmailMismatch_WithRollback(t *testing.T) {
 
 func TestCreateMember_GroupAssignmentError_WithRollback(t *testing.T) {
 	// Arrange
-	db, _, cleanup := setupMemberMockDB(t)
+	db, _, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
 	mockIDP := &idptest.Mock{
@@ -285,10 +253,10 @@ func TestCreateMember_GroupAssignmentError_WithRollback(t *testing.T) {
 		},
 	}
 
-	service := NewMemberService(db, mockIDP)
+	service := NewService(db, mockIDP)
 	ctx := context.Background()
 
-	req := &models.CreateMemberRequest{
+	req := &CreateMemberRequest{
 		Name:        "John Doe",
 		Email:       "john@example.com",
 		PhoneNumber: "+1234567890",
@@ -305,7 +273,7 @@ func TestCreateMember_GroupAssignmentError_WithRollback(t *testing.T) {
 
 func TestCreateMember_DatabaseError_WithRollback(t *testing.T) {
 	// Arrange
-	db, mock, cleanup := setupMemberMockDB(t)
+	db, mock, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
 	mockIDP := &idptest.Mock{
@@ -329,10 +297,10 @@ func TestCreateMember_DatabaseError_WithRollback(t *testing.T) {
 		},
 	}
 
-	service := NewMemberService(db, mockIDP)
+	service := NewService(db, mockIDP)
 	ctx := context.Background()
 
-	req := &models.CreateMemberRequest{
+	req := &CreateMemberRequest{
 		Name:        "John Doe",
 		Email:       "john@example.com",
 		PhoneNumber: "+1234567890",
@@ -354,7 +322,7 @@ func TestCreateMember_DatabaseError_WithRollback(t *testing.T) {
 
 func TestUpdateMember_Success(t *testing.T) {
 	// Arrange
-	db, mock, cleanup := setupMemberMockDB(t)
+	db, mock, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
 	mockIDP := &idptest.Mock{
@@ -369,12 +337,12 @@ func TestUpdateMember_Success(t *testing.T) {
 		},
 	}
 
-	service := NewMemberService(db, mockIDP)
+	service := NewService(db, mockIDP)
 	ctx := context.Background()
 
 	memberID := "mem_123"
 	newName := "Jane Doe"
-	req := &models.UpdateMemberRequest{
+	req := &UpdateMemberRequest{
 		Name: &newName,
 	}
 
@@ -410,15 +378,15 @@ func TestUpdateMember_Success(t *testing.T) {
 
 func TestUpdateMember_NotFound(t *testing.T) {
 	// Arrange
-	db, mock, cleanup := setupMemberMockDB(t)
+	db, mock, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
-	service := NewMemberService(db, &idptest.Mock{})
+	service := NewService(db, &idptest.Mock{})
 	ctx := context.Background()
 
 	memberID := "mem_nonexistent"
 	newName := "Jane Doe"
-	req := &models.UpdateMemberRequest{
+	req := &UpdateMemberRequest{
 		Name: &newName,
 	}
 
@@ -439,7 +407,7 @@ func TestUpdateMember_NotFound(t *testing.T) {
 
 func TestUpdateMember_IDPUpdateError_NoRollback(t *testing.T) {
 	// Arrange
-	db, mock, cleanup := setupMemberMockDB(t)
+	db, mock, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
 	mockIDP := &idptest.Mock{
@@ -448,12 +416,12 @@ func TestUpdateMember_IDPUpdateError_NoRollback(t *testing.T) {
 		},
 	}
 
-	service := NewMemberService(db, mockIDP)
+	service := NewService(db, mockIDP)
 	ctx := context.Background()
 
 	memberID := "mem_123"
 	newName := "Jane Doe"
-	req := &models.UpdateMemberRequest{
+	req := &UpdateMemberRequest{
 		Name: &newName,
 	}
 
@@ -478,10 +446,10 @@ func TestUpdateMember_IDPUpdateError_NoRollback(t *testing.T) {
 
 func TestGetMember_Success(t *testing.T) {
 	// Arrange
-	db, mock, cleanup := setupMemberMockDB(t)
+	db, mock, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
-	service := NewMemberService(db, &idptest.Mock{})
+	service := NewService(db, &idptest.Mock{})
 	ctx := context.Background()
 
 	memberID := "mem_123"
@@ -513,10 +481,10 @@ func TestGetMember_Success(t *testing.T) {
 
 func TestGetAllMembers_NoFilter(t *testing.T) {
 	// Arrange
-	db, mock, cleanup := setupMemberMockDB(t)
+	db, mock, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
-	service := NewMemberService(db, &idptest.Mock{})
+	service := NewService(db, &idptest.Mock{})
 	ctx := context.Background()
 
 	now := time.Now()
@@ -542,10 +510,10 @@ func TestGetAllMembers_NoFilter(t *testing.T) {
 
 func TestGetAllMembers_WithEmailFilter(t *testing.T) {
 	// Arrange
-	db, mock, cleanup := setupMemberMockDB(t)
+	db, mock, cleanup := dbtest.SetupMockDB(t)
 	defer cleanup()
 
-	service := NewMemberService(db, &idptest.Mock{})
+	service := NewService(db, &idptest.Mock{})
 	ctx := context.Background()
 
 	email := "john@example.com"

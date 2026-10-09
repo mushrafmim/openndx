@@ -151,6 +151,7 @@ internal/pb/
 ├── handlers/              # HTTP request handlers
 ├── idp/                   # Identity provider integrations
 ├── kernel/                # Types shared across domains (BaseModel, Status, Version)
+├── member/                # Member context: model, DTOs, service, handlers
 ├── middleware/            # CORS & audit
 ├── models/                # Data models and DTOs
 ├── policy/                # Client for the Policy Decision Point (PDP)

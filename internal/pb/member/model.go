@@ -1,6 +1,16 @@
-package models
+// Package member is the Portal Backend's member bounded context: member
+// records, their IdP accounts, and the member API.
+package member
 
 import "github.com/openndx/openndx-core/internal/pb/kernel"
+
+// UserGroup represents different user groups in the system
+type UserGroup string
+
+const (
+	UserGroupAdmin  UserGroup = "OpenNDX_Admin"
+	UserGroupMember UserGroup = "OpenNDX_Members"
+)
 
 // Member represents the normalized entity table
 type Member struct {
