@@ -1,4 +1,4 @@
-package handlers
+package schema
 
 import (
 	"bytes"
@@ -15,9 +15,7 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/auth/authtest"
 	"github.com/openndx/openndx-core/internal/pb/idp/idptest"
 	"github.com/openndx/openndx-core/internal/pb/member"
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
-	"github.com/openndx/openndx-core/internal/pb/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -91,7 +89,7 @@ func (f *fakePDP) writeCalls() []pdpCall {
 
 type policyMetadataTestEnv struct {
 	db       *gorm.DB
-	handler  *V1Handler
+	handler  *Handler
 	pdp      *fakePDP
 	schemaID string
 }
@@ -121,13 +119,7 @@ func newPolicyMetadataTestEnv(t *testing.T) *policyMetadataTestEnv {
 	t.Cleanup(server.Close)
 
 	pdpService := policy.NewClient(server.URL)
-	mockIDP := &idptest.Mock{}
-	memberService := member.NewService(db, mockIDP)
-	handler := &V1Handler{
-		members:            memberService,
-		schemaService:      services.NewSchemaService(db, pdpService),
-		applicationService: services.NewApplicationService(db, pdpService, mockIDP),
-	}
+	handler := NewHandler(NewService(db, pdpService), member.NewService(db, &idptest.Mock{}))
 
 	return &policyMetadataTestEnv{db: db, handler: handler, pdp: pdp, schemaID: schemaID}
 }
@@ -145,13 +137,13 @@ func (e *policyMetadataTestEnv) makeMemberOwner(t *testing.T) authtest.TestUser 
 		IdpUserID:   owner.IdpUserID,
 	}
 	require.NoError(t, e.db.Create(&m).Error)
-	require.NoError(t, e.db.Model(&models.Schema{}).Where("schema_id = ?", e.schemaID).Update("member_id", m.MemberID).Error)
+	require.NoError(t, e.db.Model(&Schema{}).Where("schema_id = ?", e.schemaID).Update("member_id", m.MemberID).Error)
 
 	return owner
 }
 
 // newPolicyMetadataMux registers the policy metadata routes the same way cmd/pb/main.go does.
-func newPolicyMetadataMux(h *V1Handler) *http.ServeMux {
+func newPolicyMetadataMux(h *Handler) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/schemas/{schemaId}/policy-metadata", h.ListSchemaPolicyMetadata)
 	mux.HandleFunc("PATCH /api/v1/schemas/{schemaId}/policy-metadata/{id}", h.PatchSchemaPolicyMetadata)
@@ -409,7 +401,7 @@ func TestSchemaPolicyMetadataEndpoints_PDPUnreachable(t *testing.T) {
 	db := setupSQLiteTestDB(t)
 	memberID := createTestMember(t, db, fmt.Sprintf("policy-unreachable-%d@example.com", time.Now().UnixNano()))
 	schemaID := createTestSchema(t, db, memberID)
-	handler := NewTestV1HandlerWithMockPDP(t, db, &idptest.Mock{})
+	handler := newTestHandler(db)
 
 	w := httptest.NewRecorder()
 	newPolicyMetadataMux(handler).ServeHTTP(w, authtest.NewAdminRequest(http.MethodGet, fmt.Sprintf("/api/v1/schemas/%s/policy-metadata", schemaID), nil))

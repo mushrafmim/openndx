@@ -14,6 +14,7 @@ import (
 
 	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/models"
+	"github.com/openndx/openndx-core/internal/pb/schema"
 )
 
 // Client calls the Portal Backend management API using a bearer token.
@@ -84,16 +85,16 @@ func (c *Client) CreateApplication(ctx context.Context, req *models.CreateApplic
 }
 
 // CreateSchema calls POST /api/v1/schemas.
-func (c *Client) CreateSchema(ctx context.Context, req *models.CreateSchemaRequest) (*models.SchemaResponse, error) {
+func (c *Client) CreateSchema(ctx context.Context, req *schema.CreateSchemaRequest) (*schema.SchemaResponse, error) {
 	body, err := c.doJSON(ctx, http.MethodPost, "/api/v1/schemas", req)
 	if err != nil {
 		return nil, err
 	}
-	var schema models.SchemaResponse
-	if err := json.Unmarshal(body, &schema); err != nil {
+	var resp schema.SchemaResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
-	return &schema, nil
+	return &resp, nil
 }
 
 // CreateMember calls POST /api/v1/members.

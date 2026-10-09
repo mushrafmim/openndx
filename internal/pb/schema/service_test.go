@@ -1,4 +1,4 @@
-package services
+package schema
 
 import (
 	"bytes"
@@ -10,7 +10,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/stretchr/testify/assert"
 
@@ -36,12 +35,12 @@ func TestSchemaService_CreateSchema_WithFields(t *testing.T) {
 		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		mock.ExpectQuery(`INSERT INTO "schemas"`).
 			WillReturnRows(sqlmock.NewRows([]string{"schema_id"}).AddRow("sch_123"))
 
-		req := &models.CreateSchemaRequest{
+		req := &CreateSchemaRequest{
 			SchemaName: "Direct Fields Schema",
 			Endpoint:   "http://example.com/graphql",
 			MemberID:   "member-123",
@@ -78,14 +77,14 @@ func TestSchemaService_CreateSchema_WithFields(t *testing.T) {
 		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		mock.ExpectQuery(`INSERT INTO "schemas"`).
 			WillReturnRows(sqlmock.NewRows([]string{"schema_id"}).AddRow("sch_123"))
 		mock.ExpectExec(`DELETE FROM "schemas"`).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
-		req := &models.CreateSchemaRequest{
+		req := &CreateSchemaRequest{
 			SchemaName: "Direct Fields Schema",
 			Endpoint:   "http://example.com/graphql",
 			MemberID:   "member-123",
@@ -108,7 +107,7 @@ func TestSchemaService_UpdateSchema(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		schemaID := "sch_123"
 		originalDesc := "Original Description"
@@ -125,7 +124,7 @@ func TestSchemaService_UpdateSchema(t *testing.T) {
 		mock.ExpectExec(`UPDATE "schemas"`).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
-		req := &models.UpdateSchemaRequest{
+		req := &UpdateSchemaRequest{
 			SchemaName: &newName,
 			SDL:        &newSDL,
 		}
@@ -147,7 +146,7 @@ func TestSchemaService_UpdateSchema(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		// Mock: Find schema - not found
 		mock.ExpectQuery(`SELECT .* FROM "schemas"`).
@@ -155,7 +154,7 @@ func TestSchemaService_UpdateSchema(t *testing.T) {
 			WillReturnError(gorm.ErrRecordNotFound)
 
 		newName := "Updated Name"
-		req := &models.UpdateSchemaRequest{
+		req := &UpdateSchemaRequest{
 			SchemaName: &newName,
 		}
 
@@ -175,7 +174,7 @@ func TestSchemaService_GetSchema(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		schemaID := "sch_123"
 		desc := "Test Description"
@@ -203,7 +202,7 @@ func TestSchemaService_GetSchema(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		// Mock: Find schema - not found
 		mock.ExpectQuery(`SELECT .* FROM "schemas"`).
@@ -226,7 +225,7 @@ func TestSchemaService_GetSchemas(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		// Mock: Find all schemas
 		mock.ExpectQuery(`SELECT .* FROM "schemas" ORDER BY created_at DESC`).
@@ -247,7 +246,7 @@ func TestSchemaService_GetSchemas(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		memberID := "member-123"
 
@@ -275,7 +274,7 @@ func TestSchemaService_CreateSchemaSubmission(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		memberID := "member-123"
 		desc := "Test Description"
@@ -290,7 +289,7 @@ func TestSchemaService_CreateSchemaSubmission(t *testing.T) {
 		mock.ExpectQuery(`INSERT INTO "schema_submissions"`).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id"}).AddRow("sub_123"))
 
-		req := &models.CreateSchemaSubmissionRequest{
+		req := &CreateSchemaSubmissionRequest{
 			SchemaName:        "Test Submission",
 			SchemaDescription: &desc,
 			SDL:               "type Query { test: String }",
@@ -316,7 +315,7 @@ func TestSchemaService_CreateSchemaSubmission(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		// Mock: Check if member exists - not found
 		mock.ExpectQuery(`SELECT .* FROM "members"`).
@@ -324,7 +323,7 @@ func TestSchemaService_CreateSchemaSubmission(t *testing.T) {
 			WillReturnError(gorm.ErrRecordNotFound)
 
 		desc := "Test Description"
-		req := &models.CreateSchemaSubmissionRequest{
+		req := &CreateSchemaSubmissionRequest{
 			SchemaName:        "Test Submission",
 			SchemaDescription: &desc,
 			SDL:               "type Query { test: String }",
@@ -348,7 +347,7 @@ func TestSchemaService_UpdateSchemaSubmission(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		submissionID := "sub_123"
 		newName := "Updated"
@@ -364,7 +363,7 @@ func TestSchemaService_UpdateSchemaSubmission(t *testing.T) {
 		mock.ExpectExec(`UPDATE "schema_submissions"`).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
-		req := &models.UpdateSchemaSubmissionRequest{
+		req := &UpdateSchemaSubmissionRequest{
 			SchemaName: &newName,
 			SDL:        &newSDL,
 		}
@@ -386,7 +385,7 @@ func TestSchemaService_UpdateSchemaSubmission(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		// Mock: Find submission - not found
 		mock.ExpectQuery(`SELECT .* FROM "schema_submissions"`).
@@ -394,7 +393,7 @@ func TestSchemaService_UpdateSchemaSubmission(t *testing.T) {
 			WillReturnError(gorm.ErrRecordNotFound)
 
 		updatedName := "Updated"
-		req := &models.UpdateSchemaSubmissionRequest{SchemaName: &updatedName}
+		req := &UpdateSchemaSubmissionRequest{SchemaName: &updatedName}
 		result, err := service.UpdateSchemaSubmission("non-existent", req)
 
 		assert.Error(t, err)
@@ -409,7 +408,7 @@ func TestSchemaService_UpdateSchemaSubmission(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		submissionID := "sub_123"
 
@@ -420,7 +419,7 @@ func TestSchemaService_UpdateSchemaSubmission(t *testing.T) {
 				AddRow(submissionID, "Test", "type Query { test: String }", "http://example.com", "member-123", string(kernel.StatusPending), time.Now(), time.Now()))
 
 		emptySDL := ""
-		req := &models.UpdateSchemaSubmissionRequest{SDL: &emptySDL}
+		req := &UpdateSchemaSubmissionRequest{SDL: &emptySDL}
 		result, err := service.UpdateSchemaSubmission(submissionID, req)
 
 		assert.Error(t, err)
@@ -437,7 +436,7 @@ func TestSchemaService_GetSchemaSubmission(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		submissionID := "sub_123"
 
@@ -464,7 +463,7 @@ func TestSchemaService_GetSchemaSubmission(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		// Mock: Find submission - not found
 		mock.ExpectQuery(`SELECT .* FROM "schema_submissions"`).
@@ -487,7 +486,7 @@ func TestSchemaService_GetSchemaSubmissions(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		// Mock: Find all submissions (with Preload)
 		mock.ExpectQuery(`SELECT .* FROM "schema_submissions"`).
@@ -512,7 +511,7 @@ func TestSchemaService_GetSchemaSubmissions(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		memberID := "member-123"
 
@@ -540,7 +539,7 @@ func TestSchemaService_GetSchemaSubmissions(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		statusFilter := []string{string(kernel.StatusApproved)}
 
@@ -572,9 +571,9 @@ func TestSchemaService_CreateSchema_EdgeCases(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://mock-pdp")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
-		req := &models.CreateSchemaRequest{
+		req := &CreateSchemaRequest{
 			SchemaName: "Test Schema",
 			SDL:        "",
 		}
@@ -593,9 +592,9 @@ func TestSchemaService_CreateSchema_EdgeCases(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://mock-pdp")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
-		req := &models.CreateSchemaRequest{
+		req := &CreateSchemaRequest{
 			SchemaName: "Test Schema",
 			SDL:        "type Query { test: String }",
 			Fields: []policy.PolicyMetadataCreateRequestRecord{
@@ -628,7 +627,7 @@ func TestSchemaService_CreateSchema_EdgeCases(t *testing.T) {
 		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		// Mock: Create schema
 		mock.ExpectQuery(`INSERT INTO "schemas"`).
@@ -638,7 +637,7 @@ func TestSchemaService_CreateSchema_EdgeCases(t *testing.T) {
 		mock.ExpectExec(`DELETE FROM "schemas"`).
 			WillReturnError(gorm.ErrRecordNotFound)
 
-		req := &models.CreateSchemaRequest{
+		req := &CreateSchemaRequest{
 			SchemaName: "Test Schema",
 			SDL:        "type Query { test: String }",
 			Endpoint:   "http://example.com/graphql",
@@ -660,7 +659,7 @@ func TestSchemaService_UpdateSchema_EdgeCases(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		schemaID := "sch_123"
 		originalDesc := "Original Description"
@@ -677,7 +676,7 @@ func TestSchemaService_UpdateSchema_EdgeCases(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		// Only update name, leave other fields unchanged
-		req := &models.UpdateSchemaRequest{
+		req := &UpdateSchemaRequest{
 			SchemaName: &newName,
 		}
 
@@ -701,7 +700,7 @@ func TestSchemaService_UpdateSchema_EdgeCases(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		schemaID := "sch_123"
 		newName := "Updated"
@@ -719,7 +718,7 @@ func TestSchemaService_UpdateSchema_EdgeCases(t *testing.T) {
 		mock.ExpectExec(`UPDATE "schemas"`).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
-		req := &models.UpdateSchemaRequest{
+		req := &UpdateSchemaRequest{
 			SchemaName: &newName,
 			SDL:        &newSDL,
 			Endpoint:   &newEndpoint,
@@ -747,7 +746,7 @@ func TestSchemaService_CreateSchemaSubmission_EdgeCases(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		memberID := "member-123"
 		previousSchemaID := "sch_prev"
@@ -768,7 +767,7 @@ func TestSchemaService_CreateSchemaSubmission_EdgeCases(t *testing.T) {
 		mock.ExpectQuery(`INSERT INTO "schema_submissions"`).
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id"}).AddRow("sub_123"))
 
-		req := &models.CreateSchemaSubmissionRequest{
+		req := &CreateSchemaSubmissionRequest{
 			SchemaName:       "New Submission",
 			SDL:              "type Query { new: String }",
 			SchemaEndpoint:   "http://new.com",
@@ -792,7 +791,7 @@ func TestSchemaService_CreateSchemaSubmission_EdgeCases(t *testing.T) {
 		defer cleanup()
 
 		pdpService := policy.NewClient("http://localhost:9999")
-		service := NewSchemaService(db, pdpService)
+		service := NewService(db, pdpService)
 
 		memberID := "member-123"
 		invalidSchemaID := "non-existent-schema"
@@ -808,7 +807,7 @@ func TestSchemaService_CreateSchemaSubmission_EdgeCases(t *testing.T) {
 			WithArgs(invalidSchemaID, 1).
 			WillReturnError(gorm.ErrRecordNotFound)
 
-		req := &models.CreateSchemaSubmissionRequest{
+		req := &CreateSchemaSubmissionRequest{
 			SchemaName:       "New Submission",
 			SDL:              "type Query { new: String }",
 			SchemaEndpoint:   "http://new.com",

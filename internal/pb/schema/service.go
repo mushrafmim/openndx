@@ -1,4 +1,4 @@
-package services
+package schema
 
 import (
 	"errors"
@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/member"
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"gorm.io/gorm"
 )
@@ -18,28 +17,28 @@ import (
 // exist in the requested schema.
 var ErrPolicyMetadataNotFound = errors.New("policy metadata not found")
 
-// SchemaService handles schema-related operations
-type SchemaService struct {
+// Service handles schema-related operations
+type Service struct {
 	db            *gorm.DB
 	policyService *policy.Client
 }
 
-// NewSchemaService creates a new schema service
-func NewSchemaService(db *gorm.DB, policyService *policy.Client) *SchemaService {
-	return &SchemaService{db: db, policyService: policyService}
+// NewService creates a new schema service
+func NewService(db *gorm.DB, policyService *policy.Client) *Service {
+	return &Service{db: db, policyService: policyService}
 }
 
 // CreateSchema creates a new schema. Exactly one of req.SDL / req.Fields must
 // be set: SDL is parsed into policy metadata records via GraphQL directives,
 // while Fields are used directly, skipping that parsing entirely.
-func (s *SchemaService) CreateSchema(req *models.CreateSchemaRequest) (*models.SchemaResponse, error) {
+func (s *Service) CreateSchema(req *CreateSchemaRequest) (*SchemaResponse, error) {
 	hasSDL := req.SDL != ""
 	hasFields := len(req.Fields) > 0
 	if hasSDL == hasFields {
 		return nil, fmt.Errorf("exactly one of sdl or fields must be provided")
 	}
 
-	schema := models.Schema{
+	schema := Schema{
 		SchemaID:   "sch_" + uuid.New().String(),
 		SchemaName: req.SchemaName,
 		SDL:        req.SDL,
@@ -78,7 +77,7 @@ func (s *SchemaService) CreateSchema(req *models.CreateSchemaRequest) (*models.S
 		return nil, fmt.Errorf("failed to create policy metadata in PDP: %w", err)
 	}
 
-	response := &models.SchemaResponse{
+	response := &SchemaResponse{
 		SchemaID:   schema.SchemaID,
 		SchemaName: schema.SchemaName,
 		SDL:        schema.SDL,
@@ -96,8 +95,8 @@ func (s *SchemaService) CreateSchema(req *models.CreateSchemaRequest) (*models.S
 }
 
 // UpdateSchema updates an existing schema
-func (s *SchemaService) UpdateSchema(schemaID string, req *models.UpdateSchemaRequest) (*models.SchemaResponse, error) {
-	var schema models.Schema
+func (s *Service) UpdateSchema(schemaID string, req *UpdateSchemaRequest) (*SchemaResponse, error) {
+	var schema Schema
 	err := s.db.First(&schema, "schema_id = ?", schemaID).Error
 	if err != nil {
 		return nil, fmt.Errorf("schema not found: %w", err)
@@ -124,7 +123,7 @@ func (s *SchemaService) UpdateSchema(schemaID string, req *models.UpdateSchemaRe
 		return nil, fmt.Errorf("failed to update schema: %w", err)
 	}
 
-	response := &models.SchemaResponse{
+	response := &SchemaResponse{
 		SchemaID:   schema.SchemaID,
 		SchemaName: schema.SchemaName,
 		SDL:        schema.SDL,
@@ -142,14 +141,14 @@ func (s *SchemaService) UpdateSchema(schemaID string, req *models.UpdateSchemaRe
 }
 
 // GetSchema retrieves a schema by ID
-func (s *SchemaService) GetSchema(schemaID string) (*models.SchemaResponse, error) {
-	var schema models.Schema
+func (s *Service) GetSchema(schemaID string) (*SchemaResponse, error) {
+	var schema Schema
 	err := s.db.First(&schema, "schema_id = ?", schemaID).Error
 	if err != nil {
 		return nil, fmt.Errorf("schema not found: %w", err)
 	}
 
-	response := &models.SchemaResponse{
+	response := &SchemaResponse{
 		SchemaID:   schema.SchemaID,
 		SchemaName: schema.SchemaName,
 		SDL:        schema.SDL,
@@ -167,8 +166,8 @@ func (s *SchemaService) GetSchema(schemaID string) (*models.SchemaResponse, erro
 }
 
 // GetSchemas Get all schemas and filter by member ID if given
-func (s *SchemaService) GetSchemas(memberID *string) ([]*models.SchemaResponse, error) {
-	var schemas []models.Schema
+func (s *Service) GetSchemas(memberID *string) ([]*SchemaResponse, error) {
+	var schemas []Schema
 	query := s.db
 	if memberID != nil && *memberID != "" {
 		query = query.Where("member_id = ?", *memberID)
@@ -183,9 +182,9 @@ func (s *SchemaService) GetSchemas(memberID *string) ([]*models.SchemaResponse, 
 	}
 
 	// Pre-allocate slice with known capacity for better performance
-	responses := make([]*models.SchemaResponse, 0, len(schemas))
+	responses := make([]*SchemaResponse, 0, len(schemas))
 	for _, schema := range schemas {
-		resp := &models.SchemaResponse{
+		resp := &SchemaResponse{
 			SchemaID:   schema.SchemaID,
 			SchemaName: schema.SchemaName,
 			SDL:        schema.SDL,
@@ -205,12 +204,12 @@ func (s *SchemaService) GetSchemas(memberID *string) ([]*models.SchemaResponse, 
 }
 
 // ListPolicyMetadata lists the PDP policy metadata records of a schema
-func (s *SchemaService) ListPolicyMetadata(schemaID string) (*policy.PolicyMetadataListResponse, error) {
+func (s *Service) ListPolicyMetadata(schemaID string) (*policy.PolicyMetadataListResponse, error) {
 	return s.policyService.ListPolicyMetadata(schemaID)
 }
 
 // PatchPolicyMetadata updates selected properties of one of a schema's policy metadata records
-func (s *SchemaService) PatchPolicyMetadata(schemaID, id string, req *policy.PolicyMetadataPatchRequest) (*policy.PolicyMetadataResponse, error) {
+func (s *Service) PatchPolicyMetadata(schemaID, id string, req *policy.PolicyMetadataPatchRequest) (*policy.PolicyMetadataResponse, error) {
 	if err := s.ensurePolicyMetadataInSchema(schemaID, id); err != nil {
 		return nil, err
 	}
@@ -218,7 +217,7 @@ func (s *SchemaService) PatchPolicyMetadata(schemaID, id string, req *policy.Pol
 }
 
 // DeletePolicyMetadata deletes one of a schema's policy metadata records
-func (s *SchemaService) DeletePolicyMetadata(schemaID, id string) error {
+func (s *Service) DeletePolicyMetadata(schemaID, id string) error {
 	if err := s.ensurePolicyMetadataInSchema(schemaID, id); err != nil {
 		return err
 	}
@@ -226,7 +225,7 @@ func (s *SchemaService) DeletePolicyMetadata(schemaID, id string) error {
 }
 
 // RevokeAllowListEntry removes one application from the allow-list of one of a schema's fields
-func (s *SchemaService) RevokeAllowListEntry(schemaID, id, applicationID string) error {
+func (s *Service) RevokeAllowListEntry(schemaID, id, applicationID string) error {
 	if err := s.ensurePolicyMetadataInSchema(schemaID, id); err != nil {
 		return err
 	}
@@ -236,7 +235,7 @@ func (s *SchemaService) RevokeAllowListEntry(schemaID, id, applicationID string)
 // ensurePolicyMetadataInSchema checks that the policy metadata record belongs to
 // the schema, so that ownership of one schema cannot be used to change the
 // policy metadata of another.
-func (s *SchemaService) ensurePolicyMetadataInSchema(schemaID, id string) error {
+func (s *Service) ensurePolicyMetadataInSchema(schemaID, id string) error {
 	list, err := s.policyService.ListPolicyMetadata(schemaID)
 	if err != nil {
 		return err
@@ -252,7 +251,7 @@ func (s *SchemaService) ensurePolicyMetadataInSchema(schemaID, id string) error 
 }
 
 // CreateSchemaSubmission creates a new schema
-func (s *SchemaService) CreateSchemaSubmission(req *models.CreateSchemaSubmissionRequest) (*models.SchemaSubmissionResponse, error) {
+func (s *Service) CreateSchemaSubmission(req *CreateSchemaSubmissionRequest) (*SchemaSubmissionResponse, error) {
 	// Check if member exists
 	var owner member.Member
 	if err := s.db.First(&owner, "member_id = ?", req.MemberID).Error; err != nil {
@@ -261,14 +260,14 @@ func (s *SchemaService) CreateSchemaSubmission(req *models.CreateSchemaSubmissio
 
 	// If PreviousSchemaID is provided, check if it exists
 	if req.PreviousSchemaID != nil {
-		var previousSchema models.Schema
+		var previousSchema Schema
 		if err := s.db.First(&previousSchema, "schema_id = ?", *req.PreviousSchemaID).Error; err != nil {
 			return nil, fmt.Errorf("previous schema not found: %w", err)
 		}
 	}
 
 	// Create submission
-	submission := models.SchemaSubmission{
+	submission := SchemaSubmission{
 		SubmissionID:      "sub_" + uuid.New().String(),
 		PreviousSchemaID:  req.PreviousSchemaID,
 		SchemaName:        req.SchemaName,
@@ -282,7 +281,7 @@ func (s *SchemaService) CreateSchemaSubmission(req *models.CreateSchemaSubmissio
 		return nil, fmt.Errorf("failed to create schema submission: %w", err)
 	}
 
-	response := &models.SchemaSubmissionResponse{
+	response := &SchemaSubmissionResponse{
 		SubmissionID:      submission.SubmissionID,
 		PreviousSchemaID:  submission.PreviousSchemaID,
 		SchemaName:        submission.SchemaName,
@@ -299,8 +298,8 @@ func (s *SchemaService) CreateSchemaSubmission(req *models.CreateSchemaSubmissio
 }
 
 // UpdateSchemaSubmission updates an existing schema submission
-func (s *SchemaService) UpdateSchemaSubmission(submissionID string, req *models.UpdateSchemaSubmissionRequest) (*models.SchemaSubmissionResponse, error) {
-	var submission models.SchemaSubmission
+func (s *Service) UpdateSchemaSubmission(submissionID string, req *UpdateSchemaSubmissionRequest) (*SchemaSubmissionResponse, error) {
+	var submission SchemaSubmission
 
 	// Find the submission
 	if err := s.db.First(&submission, "submission_id = ?", submissionID).Error; err != nil {
@@ -310,7 +309,7 @@ func (s *SchemaService) UpdateSchemaSubmission(submissionID string, req *models.
 	// Validate PreviousSchemaID first before making any updates
 	if req.PreviousSchemaID != nil {
 		// Check if the new PreviousSchemaID exists
-		var previousSchema models.Schema
+		var previousSchema Schema
 		if err := s.db.First(&previousSchema, "schema_id = ?", *req.PreviousSchemaID).Error; err != nil {
 			return nil, fmt.Errorf("previous schema not found: %w", err)
 		}
@@ -357,7 +356,7 @@ func (s *SchemaService) UpdateSchemaSubmission(submissionID string, req *models.
 
 	// Create schema outside of transaction if approval was successful
 	if shouldCreateSchema {
-		var createSchemaRequest models.CreateSchemaRequest
+		var createSchemaRequest CreateSchemaRequest
 		createSchemaRequest.SchemaName = submission.SchemaName
 		createSchemaRequest.SchemaDescription = submission.SchemaDescription
 		createSchemaRequest.SDL = submission.SDL
@@ -380,7 +379,7 @@ func (s *SchemaService) UpdateSchemaSubmission(submissionID string, req *models.
 		}
 	}
 
-	response := &models.SchemaSubmissionResponse{
+	response := &SchemaSubmissionResponse{
 		SubmissionID:      submission.SubmissionID,
 		PreviousSchemaID:  submission.PreviousSchemaID,
 		SchemaName:        submission.SchemaName,
@@ -398,14 +397,14 @@ func (s *SchemaService) UpdateSchemaSubmission(submissionID string, req *models.
 }
 
 // GetSchemaSubmission retrieves a schema submission by ID
-func (s *SchemaService) GetSchemaSubmission(submissionID string) (*models.SchemaSubmissionResponse, error) {
-	var submission models.SchemaSubmission
+func (s *Service) GetSchemaSubmission(submissionID string) (*SchemaSubmissionResponse, error) {
+	var submission SchemaSubmission
 	err := s.db.First(&submission, "submission_id = ?", submissionID).Error
 	if err != nil {
 		return nil, fmt.Errorf("schema submission not found: %w", err)
 	}
 
-	response := &models.SchemaSubmissionResponse{
+	response := &SchemaSubmissionResponse{
 		SubmissionID:      submission.SubmissionID,
 		PreviousSchemaID:  submission.PreviousSchemaID,
 		SchemaName:        submission.SchemaName,
@@ -423,8 +422,8 @@ func (s *SchemaService) GetSchemaSubmission(submissionID string) (*models.Schema
 }
 
 // GetSchemaSubmissions Get all schema submissions and filter by member ID OR Status Array if given
-func (s *SchemaService) GetSchemaSubmissions(memberID *string, statusFilter *[]string) ([]*models.SchemaSubmissionResponse, error) {
-	var submissions []models.SchemaSubmission
+func (s *Service) GetSchemaSubmissions(memberID *string, statusFilter *[]string) ([]*SchemaSubmissionResponse, error) {
+	var submissions []SchemaSubmission
 	query := s.db.Preload("PreviousSchema").Preload("Member")
 	if memberID != nil && *memberID != "" {
 		query = query.Where("member_id = ?", *memberID)
@@ -442,9 +441,9 @@ func (s *SchemaService) GetSchemaSubmissions(memberID *string, statusFilter *[]s
 		return nil, fmt.Errorf("failed to retrieve schema submissions: %w", err)
 	}
 
-	var responses []*models.SchemaSubmissionResponse
+	var responses []*SchemaSubmissionResponse
 	for _, submission := range submissions {
-		responses = append(responses, &models.SchemaSubmissionResponse{
+		responses = append(responses, &SchemaSubmissionResponse{
 			SubmissionID:      submission.SubmissionID,
 			PreviousSchemaID:  submission.PreviousSchemaID,
 			SchemaName:        submission.SchemaName,
