@@ -1,4 +1,4 @@
-package services
+package application
 
 import (
 	"bytes"
@@ -15,7 +15,6 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/idp"
 	"github.com/openndx/openndx-core/internal/pb/idp/idptest"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
@@ -45,10 +44,10 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		desc := "Test Description"
-		req := &models.CreateApplicationRequest{
+		req := &CreateApplicationRequest{
 			ApplicationName:        "Test Application",
 			ApplicationDescription: &desc,
 			SelectedFields: []policy.SelectedFieldRecord{
@@ -66,7 +65,7 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 		// However, CreateApplication returns nil, error if successful? No, it returns response, nil.
 		// Wait, the original test expected error because PDP failed. Now we mock PDP success.
 		// Let's check CreateApplication implementation.
-		// It returns *models.ApplicationResponse, error.
+		// It returns *ApplicationResponse, error.
 
 		resp, err := service.CreateApplication(context.Background(), req)
 
@@ -103,10 +102,10 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		desc := "Test Description"
-		req := &models.CreateApplicationRequest{
+		req := &CreateApplicationRequest{
 			ApplicationName:        "Test Application",
 			ApplicationDescription: &desc,
 			SelectedFields: []policy.SelectedFieldRecord{
@@ -169,11 +168,11 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 				return nil, nil
 			},
 		}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		idpAppID := "thunder-app-01900000-0000-7000-8000-0000000000c0"
 		idpClientID := "THUNDER_PROVISIONED_CLIENT"
-		req := &models.CreateApplicationRequest{
+		req := &CreateApplicationRequest{
 			ApplicationName: "Manually Onboarded App",
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
@@ -207,10 +206,10 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		idpAppID := "thunder-app-01900000-0000-7000-8000-0000000000c0"
-		req := &models.CreateApplicationRequest{
+		req := &CreateApplicationRequest{
 			ApplicationName: "Bad Request App",
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
@@ -233,11 +232,11 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		empty := ""
 		idpClientID := "some-client-id"
-		req := &models.CreateApplicationRequest{
+		req := &CreateApplicationRequest{
 			ApplicationName: "Bad Request App",
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
@@ -276,11 +275,11 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 				return nil
 			},
 		}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		idpAppID := "thunder-app-01900000-0000-7000-8000-0000000000c0"
 		idpClientID := "THUNDER_PROVISIONED_CLIENT"
-		req := &models.CreateApplicationRequest{
+		req := &CreateApplicationRequest{
 			ApplicationName: "Manually Onboarded App",
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "field1", SchemaID: "schema-123"},
@@ -313,7 +312,7 @@ func TestApplicationService_UpdateApplication(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		// 1. First find the application
@@ -327,7 +326,7 @@ func TestApplicationService_UpdateApplication(t *testing.T) {
 
 		newName := "Updated Name"
 		newDesc := "Updated Description"
-		req := &models.UpdateApplicationRequest{
+		req := &UpdateApplicationRequest{
 			ApplicationName:        &newName,
 			ApplicationDescription: &newDesc,
 		}
@@ -352,14 +351,14 @@ func TestApplicationService_UpdateApplication(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations - return no rows
 		mock.ExpectQuery(`SELECT .*`).
 			WillReturnError(gorm.ErrRecordNotFound)
 
 		newName := "Updated Name"
-		req := &models.UpdateApplicationRequest{
+		req := &UpdateApplicationRequest{
 			ApplicationName: &newName,
 		}
 
@@ -396,7 +395,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		clientID := "idp-client-123"
 		mock.ExpectQuery(`SELECT .*`).
@@ -406,7 +405,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 		mock.ExpectExec(`UPDATE "applications"`).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
-		req := &models.UpdateApplicationPolicyRequest{
+		req := &UpdateApplicationPolicyRequest{
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-123"},
 			},
@@ -450,7 +449,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		clientID := "idp-client-123"
 		mock.ExpectQuery(`SELECT .*`).
@@ -461,7 +460,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		grantDuration := policy.GrantDurationTypeOneYear
-		req := &models.UpdateApplicationPolicyRequest{
+		req := &UpdateApplicationPolicyRequest{
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-123"},
 			},
@@ -483,12 +482,12 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		mock.ExpectQuery(`SELECT .*`).
 			WillReturnError(gorm.ErrRecordNotFound)
 
-		req := &models.UpdateApplicationPolicyRequest{
+		req := &UpdateApplicationPolicyRequest{
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-123"},
 			},
@@ -509,14 +508,14 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// idp_client_id column omitted -> IdpClientID stays nil
 		mock.ExpectQuery(`SELECT .*`).
 			WillReturnRows(sqlmock.NewRows([]string{"application_id", "application_name", "member_id", "version"}).
 				AddRow("app_123", "Test Application", "member-123", "v1"))
 
-		req := &models.UpdateApplicationPolicyRequest{
+		req := &UpdateApplicationPolicyRequest{
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-123"},
 			},
@@ -548,7 +547,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		clientID := "idp-client-123"
 		mock.ExpectQuery(`SELECT .*`).
@@ -556,7 +555,7 @@ func TestApplicationService_UpdateApplicationPolicy(t *testing.T) {
 				AddRow("app_123", "Test Application", "member-123", "v1", clientID))
 		// No ExpectExec for UPDATE: a failed PDP call must not touch the DB.
 
-		req := &models.UpdateApplicationPolicyRequest{
+		req := &UpdateApplicationPolicyRequest{
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-123"},
 			},
@@ -579,7 +578,7 @@ func TestApplicationService_GetApplication(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT .*`).
@@ -610,7 +609,7 @@ func TestApplicationService_GetApplication(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT .*`).
@@ -633,7 +632,7 @@ func TestApplicationService_GetApplications(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT .* FROM "applications" ORDER BY created_at DESC`).
@@ -664,7 +663,7 @@ func TestApplicationService_GetApplications(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		memberID := "member-123"
 
@@ -697,7 +696,7 @@ func TestApplicationService_CreateApplicationSubmission(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		// 1. Validate member
@@ -709,7 +708,7 @@ func TestApplicationService_CreateApplicationSubmission(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"submission_id"}).AddRow("sub_123"))
 
 		desc := "Test Description"
-		req := &models.CreateApplicationSubmissionRequest{
+		req := &CreateApplicationSubmissionRequest{
 			ApplicationName:        "Test Submission",
 			ApplicationDescription: &desc,
 			SelectedFields: []policy.SelectedFieldRecord{
@@ -736,14 +735,14 @@ func TestApplicationService_CreateApplicationSubmission(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT .*`).
 			WillReturnError(gorm.ErrRecordNotFound)
 
 		desc := "Test Description"
-		req := &models.CreateApplicationSubmissionRequest{
+		req := &CreateApplicationSubmissionRequest{
 			ApplicationName:        "Test Submission",
 			ApplicationDescription: &desc,
 			SelectedFields: []policy.SelectedFieldRecord{
@@ -769,7 +768,7 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		// 1. Find submission
@@ -782,7 +781,7 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		newName := "Updated"
-		req := &models.UpdateApplicationSubmissionRequest{
+		req := &UpdateApplicationSubmissionRequest{
 			ApplicationName: &newName,
 		}
 
@@ -803,14 +802,14 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT .*`).
 			WillReturnError(gorm.ErrRecordNotFound)
 
 		updatedName := "Updated"
-		req := &models.UpdateApplicationSubmissionRequest{ApplicationName: &updatedName}
+		req := &UpdateApplicationSubmissionRequest{ApplicationName: &updatedName}
 		result, err := service.UpdateApplicationSubmission(context.Background(), "non-existent", req)
 
 		assert.Error(t, err)
@@ -838,7 +837,7 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		// 1. Find submission
@@ -863,7 +862,7 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		status := string(kernel.StatusApproved)
-		req := &models.UpdateApplicationSubmissionRequest{
+		req := &UpdateApplicationSubmissionRequest{
 			Status: &status,
 		}
 
@@ -884,7 +883,7 @@ func TestApplicationService_GetApplicationSubmission(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT .*`).
@@ -919,7 +918,7 @@ func TestApplicationService_GetApplicationSubmission(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT .*`).
@@ -942,7 +941,7 @@ func TestApplicationService_GetApplicationSubmissions(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT .*`).
@@ -970,7 +969,7 @@ func TestApplicationService_GetApplicationSubmissions(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		memberID := "member-123"
 
@@ -1000,7 +999,7 @@ func TestApplicationService_GetApplicationSubmissions(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		statusFilter := []string{string(kernel.StatusApproved)}
 
@@ -1033,9 +1032,9 @@ func TestApplicationService_CreateApplication_EdgeCases(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
-		req := &models.CreateApplicationRequest{
+		req := &CreateApplicationRequest{
 			ApplicationName: "Test Application",
 			SelectedFields:  []policy.SelectedFieldRecord{},
 			MemberID:        "member-123",
@@ -1083,7 +1082,7 @@ func TestApplicationService_UpdateApplication_EdgeCases(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		// 1. Find application
@@ -1096,7 +1095,7 @@ func TestApplicationService_UpdateApplication_EdgeCases(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		newName := "Updated Name Only"
-		req := &models.UpdateApplicationRequest{
+		req := &UpdateApplicationRequest{
 			ApplicationName: &newName,
 		}
 
@@ -1124,7 +1123,7 @@ func TestApplicationService_CreateApplicationSubmission_EdgeCases(t *testing.T) 
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		// 1. Validate previous application
@@ -1141,7 +1140,7 @@ func TestApplicationService_CreateApplicationSubmission_EdgeCases(t *testing.T) 
 
 		prevAppID := "app_prev"
 		desc := "Test Description"
-		req := &models.CreateApplicationSubmissionRequest{
+		req := &CreateApplicationSubmissionRequest{
 			ApplicationName:        "Test Submission",
 			ApplicationDescription: &desc,
 			SelectedFields: []policy.SelectedFieldRecord{
@@ -1168,7 +1167,7 @@ func TestApplicationService_CreateApplicationSubmission_EdgeCases(t *testing.T) 
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		// 1. Validate previous application
@@ -1176,7 +1175,7 @@ func TestApplicationService_CreateApplicationSubmission_EdgeCases(t *testing.T) 
 			WillReturnError(gorm.ErrRecordNotFound)
 
 		invalidAppID := "non-existent-app"
-		req := &models.CreateApplicationSubmissionRequest{
+		req := &CreateApplicationSubmissionRequest{
 			ApplicationName:       "New Submission",
 			SelectedFields:        []policy.SelectedFieldRecord{{FieldName: "field1", SchemaID: "schema-123"}},
 			MemberID:              "member-123",
@@ -1200,7 +1199,7 @@ func TestApplicationService_GetApplicationIdByIdpClientId(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		expectedAppID := "app-123"
 		clientID := "client-456"
@@ -1235,7 +1234,7 @@ func TestApplicationService_GetApplicationIdByIdpClientId(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		clientID := "non-existent-client"
 
@@ -1261,7 +1260,7 @@ func TestApplicationService_GetApplicationIdByIdpClientId(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		clientID := "client-789"
 		dbError := fmt.Errorf("database connection error")
@@ -1287,7 +1286,7 @@ func TestApplicationService_GetApplicationIdByIdpClientId(t *testing.T) {
 
 		pdpService := policy.NewClient("http://mock-pdp")
 		mockIDP := &idptest.Mock{}
-		service := NewApplicationService(db, pdpService, mockIDP)
+		service := NewService(db, pdpService, mockIDP)
 
 		// Mock DB expectations
 		mock.ExpectQuery(`SELECT \* FROM "applications" WHERE idp_client_id`).

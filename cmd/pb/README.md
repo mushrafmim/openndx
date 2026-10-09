@@ -143,20 +143,18 @@ make test-local
 
 ```
 cmd/pb/
-└── main.go                 # Application entry point
+└── main.go                 # Entry point: wires dependencies and registers every route
 
 internal/pb/
+├── application/           # Application context: applications, submissions, allow-lists
 ├── auth/                  # JWT validation, roles/permissions & authorization middleware
 ├── database/              # GORM connection and migrations
-├── handlers/              # HTTP request handlers
 ├── idp/                   # Identity provider integrations
 ├── kernel/                # Types shared across domains (BaseModel, Status, Version)
 ├── member/                # Member context: model, DTOs, service, handlers
 ├── middleware/            # CORS & audit
-├── models/                # Data models and DTOs
 ├── policy/                # Client for the Policy Decision Point (PDP)
-├── schema/                # Schema context: schemas, submissions, policy metadata
-└── services/              # Business logic layer
+└── schema/                # Schema context: schemas, submissions, policy metadata
 
 internal/utils/            # HTTP/server helpers shared across services
 ```

@@ -1,4 +1,4 @@
-package handlers
+package application
 
 import (
 	"bytes"
@@ -16,32 +16,30 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/idp/idptest"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/member"
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/pb/schema"
-	"github.com/openndx/openndx-core/internal/pb/services"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
 )
 
-// TestV1Handler tests the V1 API handler
-type TestV1Handler struct {
+// TestHandler tests the V1 API handler
+type TestHandler struct {
 	*testing.T
 	db      *gorm.DB
-	handler *V1Handler
+	handler *Handler
 	idp     *idptest.Mock
 }
 
-// NewTestV1Handler creates a new test handler with SQLite test database
-func NewTestV1Handler(t *testing.T) *TestV1Handler {
+// NewTestHandler creates a new test handler with SQLite test database
+func NewTestHandler(t *testing.T) *TestHandler {
 	// Use shared SQLite test utility
 	db := setupSQLiteTestDB(t)
 
 	// Create handler with mock PDP service and a fresh mock IDP for this test
 	idpMock := &idptest.Mock{}
-	handler := NewTestV1HandlerWithMockPDP(t, db, idpMock)
+	handler := NewTestHandlerWithMockPDP(t, db, idpMock)
 
-	return &TestV1Handler{
+	return &TestHandler{
 		T:       t,
 		db:      db,
 		handler: handler,
@@ -49,8 +47,8 @@ func NewTestV1Handler(t *testing.T) *TestV1Handler {
 	}
 }
 
-// NewTestV1HandlerWithMockPDP creates a handler with mock PDP and IDP services for testing
-func NewTestV1HandlerWithMockPDP(t *testing.T, db *gorm.DB, idpMock *idptest.Mock) *V1Handler {
+// NewTestHandlerWithMockPDP creates a handler with mock PDP and IDP services for testing
+func NewTestHandlerWithMockPDP(t *testing.T, db *gorm.DB, idpMock *idptest.Mock) *Handler {
 	memberService := member.NewService(db, idpMock)
 
 	// For testing, we'll use a real policy.Client but skip actual HTTP calls
@@ -60,10 +58,7 @@ func NewTestV1HandlerWithMockPDP(t *testing.T, db *gorm.DB, idpMock *idptest.Moc
 	// Note: In a real scenario, you'd set up a test HTTP server to handle PDP requests
 	// For now, the tests will need to handle PDP failures gracefully or skip PDP-dependent operations
 
-	return &V1Handler{
-		members:            memberService,
-		applicationService: services.NewApplicationService(db, mockPDP, idpMock),
-	}
+	return NewHandler(NewService(db, mockPDP, idpMock), memberService)
 }
 
 // createTestMember creates a member in the database for testing (bypasses IDP)
@@ -96,10 +91,10 @@ func createTestSchema(t *testing.T, db *gorm.DB, memberID string) string {
 
 // createTestApplication creates an application in the database for testing (bypasses async creation)
 func createTestApplication(t *testing.T, db *gorm.DB, memberID string) string {
-	selectedFields := models.SelectedFieldRecords{
+	selectedFields := SelectedFieldRecords{
 		{FieldName: "field1", SchemaID: "schema-123"},
 	}
-	application := models.Application{
+	application := Application{
 		ApplicationID:   "app_" + fmt.Sprintf("%d", time.Now().UnixNano()),
 		ApplicationName: "Test Application",
 		SelectedFields:  selectedFields,
@@ -114,7 +109,7 @@ func createTestApplication(t *testing.T, db *gorm.DB, memberID string) string {
 	}
 
 	// Ensure the record is properly committed and readable
-	var verifyApp models.Application
+	var verifyApp Application
 	err = db.First(&verifyApp, "application_id = ?", application.ApplicationID).Error
 	if err != nil {
 		t.Fatalf("Failed to verify application was created properly: %v. ApplicationID: %s", err, application.ApplicationID)
@@ -126,10 +121,10 @@ func createTestApplication(t *testing.T, db *gorm.DB, memberID string) string {
 // createTestApplicationWithClientID creates an application with a given IdP client ID,
 // needed for policy-update tests since the PDP allow-list is keyed on it.
 func createTestApplicationWithClientID(t *testing.T, db *gorm.DB, memberID, idpClientID string) string {
-	selectedFields := models.SelectedFieldRecords{
+	selectedFields := SelectedFieldRecords{
 		{FieldName: "field1", SchemaID: "schema-123"},
 	}
-	application := models.Application{
+	application := Application{
 		ApplicationID:   "app_" + fmt.Sprintf("%d", time.Now().UnixNano()),
 		ApplicationName: "Test Application",
 		SelectedFields:  selectedFields,
@@ -146,31 +141,29 @@ func createTestApplicationWithClientID(t *testing.T, db *gorm.DB, memberID, idpC
 	return application.ApplicationID
 }
 
-// newTestV1HandlerWithWorkingPDP builds a V1Handler whose PDP service is backed by an
-// in-process mock transport (unlike NewTestV1HandlerWithMockPDP, which points at an
+// newTestHandlerWithWorkingPDP builds a Handler whose PDP service is backed by an
+// in-process mock transport (unlike NewTestHandlerWithMockPDP, which points at an
 // unreachable localhost address), so tests can exercise the full allow-list update path.
-func newTestV1HandlerWithWorkingPDP(t *testing.T, db *gorm.DB, pdpStatusCode int, pdpBody string) *V1Handler {
-	mockTransport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: pdpStatusCode,
-			Body:       io.NopCloser(bytes.NewBufferString(pdpBody)),
-			Header:     make(http.Header),
-		}, nil
-	})
+func newTestHandlerWithWorkingPDP(t *testing.T, db *gorm.DB, pdpStatusCode int, pdpBody string) *Handler {
+	mockTransport := &MockRoundTripper{
+		RoundTripFunc: func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: pdpStatusCode,
+				Body:       io.NopCloser(bytes.NewBufferString(pdpBody)),
+				Header:     make(http.Header),
+			}, nil
+		},
+	}
 	pdpService := policy.NewClient("http://mock-pdp")
 	pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 	mockIDP := &idptest.Mock{}
-	memberService := member.NewService(db, mockIDP)
-	return &V1Handler{
-		members:            memberService,
-		applicationService: services.NewApplicationService(db, pdpService, mockIDP),
-	}
+	return NewHandler(NewService(db, pdpService, mockIDP), member.NewService(db, mockIDP))
 }
 
 // TestApplicationEndpoints tests all application-related endpoints
 func TestApplicationEndpoints(t *testing.T) {
-	testHandler := NewTestV1Handler(t)
+	testHandler := NewTestHandler(t)
 	if testHandler == nil {
 		t.Skip("Skipping test: database connection failed")
 		return
@@ -182,7 +175,7 @@ func TestApplicationEndpoints(t *testing.T) {
 
 	t.Run("POST /api/v1/applications - CreateApplication_IDPFailure", func(t *testing.T) {
 		desc := "Test Description"
-		req := models.CreateApplicationRequest{
+		req := CreateApplicationRequest{
 			ApplicationName:        "Test Application",
 			ApplicationDescription: &desc,
 			SelectedFields: []policy.SelectedFieldRecord{
@@ -251,7 +244,7 @@ func TestApplicationEndpoints(t *testing.T) {
 		testHandler.handler.GetApplication(w, httpReq)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		var response models.ApplicationResponse
+		var response ApplicationResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Equal(t, applicationID, response.ApplicationID)
@@ -272,7 +265,7 @@ func TestApplicationEndpoints(t *testing.T) {
 		applicationID := createTestApplication(t, testHandler.db, memberID)
 
 		// Verify the application exists before attempting to update
-		var existingApp models.Application
+		var existingApp Application
 		err := testHandler.db.First(&existingApp, "application_id = ?", applicationID).Error
 		if err != nil {
 			t.Fatalf("Application was not found in database after creation: %v", err)
@@ -280,7 +273,7 @@ func TestApplicationEndpoints(t *testing.T) {
 
 		appName := "Updated Application Name"
 		appDesc := "Updated Description"
-		req := models.UpdateApplicationRequest{
+		req := UpdateApplicationRequest{
 			ApplicationName:        &appName,
 			ApplicationDescription: &appDesc,
 		}
@@ -299,7 +292,7 @@ func TestApplicationEndpoints(t *testing.T) {
 		}
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		var response models.ApplicationResponse
+		var response ApplicationResponse
 		err = json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Equal(t, appName, response.ApplicationName)
@@ -314,12 +307,12 @@ func TestApplicationPolicyEndpoint(t *testing.T) {
 			t.Skip("Skipping test: database connection failed")
 			return
 		}
-		handler := newTestV1HandlerWithWorkingPDP(t, db, http.StatusOK, `{"records": [{"id": "policy_1"}]}`)
+		handler := newTestHandlerWithWorkingPDP(t, db, http.StatusOK, `{"records": [{"id": "policy_1"}]}`)
 
 		memberID := createTestMember(t, db, fmt.Sprintf("policy-success-%d@example.com", time.Now().UnixNano()))
 		applicationID := createTestApplicationWithClientID(t, db, memberID, "idp-client-abc")
 
-		req := models.UpdateApplicationPolicyRequest{
+		req := UpdateApplicationPolicyRequest{
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-456"},
 			},
@@ -336,7 +329,7 @@ func TestApplicationPolicyEndpoint(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d. Response body: %s", w.Code, w.Body.String())
 		}
 
-		var response models.ApplicationResponse
+		var response ApplicationResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Equal(t, applicationID, response.ApplicationID)
@@ -349,12 +342,12 @@ func TestApplicationPolicyEndpoint(t *testing.T) {
 			t.Skip("Skipping test: database connection failed")
 			return
 		}
-		handler := newTestV1HandlerWithWorkingPDP(t, db, http.StatusInternalServerError, `{"error": "pdp error"}`)
+		handler := newTestHandlerWithWorkingPDP(t, db, http.StatusInternalServerError, `{"error": "pdp error"}`)
 
 		memberID := createTestMember(t, db, fmt.Sprintf("policy-failure-%d@example.com", time.Now().UnixNano()))
 		applicationID := createTestApplicationWithClientID(t, db, memberID, "idp-client-abc")
 
-		req := models.UpdateApplicationPolicyRequest{
+		req := UpdateApplicationPolicyRequest{
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-456"},
 			},
@@ -370,14 +363,14 @@ func TestApplicationPolicyEndpoint(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
-	testHandler := NewTestV1Handler(t)
+	testHandler := NewTestHandler(t)
 	if testHandler == nil {
 		t.Skip("Skipping test: database connection failed")
 		return
 	}
 
 	t.Run("PUT /api/v1/applications/:id/policy - NotFound", func(t *testing.T) {
-		req := models.UpdateApplicationPolicyRequest{
+		req := UpdateApplicationPolicyRequest{
 			SelectedFields: []policy.SelectedFieldRecord{
 				{FieldName: "email", SchemaID: "schema-456"},
 			},
@@ -410,7 +403,7 @@ func TestApplicationPolicyEndpoint(t *testing.T) {
 
 // TestApplicationSubmissionEndpoints tests all application submission-related endpoints
 func TestApplicationSubmissionEndpoints(t *testing.T) {
-	testHandler := NewTestV1Handler(t)
+	testHandler := NewTestHandler(t)
 	if testHandler == nil {
 		t.Skip("Skipping test: database connection failed")
 		return
@@ -422,7 +415,7 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 
 	t.Run("POST /api/v1/application-submissions - CreateApplicationSubmission", func(t *testing.T) {
 		desc := "Test Description"
-		req := models.CreateApplicationSubmissionRequest{
+		req := CreateApplicationSubmissionRequest{
 			ApplicationName:        "Test Application Submission",
 			ApplicationDescription: &desc,
 			SelectedFields: []policy.SelectedFieldRecord{
@@ -439,7 +432,7 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 		testHandler.handler.CreateApplicationSubmission(w, httpReq)
 
 		if w.Code == http.StatusCreated {
-			var response models.ApplicationSubmissionResponse
+			var response ApplicationSubmissionResponse
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			assert.NoError(t, err)
 			assert.Equal(t, req.ApplicationName, response.ApplicationName)
@@ -453,10 +446,10 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 		schemaID := createTestSchema(t, testHandler.db, memberID)
 
 		// Create a submission directly in DB
-		selectedFields := models.SelectedFieldRecords{
+		selectedFields := SelectedFieldRecords{
 			{FieldName: "field1", SchemaID: schemaID},
 		}
-		submission := models.ApplicationSubmission{
+		submission := ApplicationSubmission{
 			SubmissionID:    "sub_" + fmt.Sprintf("%d", time.Now().UnixNano()),
 			ApplicationName: "Test Submission",
 			SelectedFields:  selectedFields,
@@ -469,7 +462,7 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 		// Use "rejected" status to avoid triggering application creation (which calls PDP and times out)
 		status := "rejected"
 		review := "Needs improvement"
-		updateReq := models.UpdateApplicationSubmissionRequest{
+		updateReq := UpdateApplicationSubmissionRequest{
 			Status: &status,
 			Review: &review,
 		}
@@ -481,7 +474,7 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 		testHandler.handler.UpdateApplicationSubmission(updateW, updateHttpReq)
 
 		assert.Equal(t, http.StatusOK, updateW.Code)
-		var response models.ApplicationSubmissionResponse
+		var response ApplicationSubmissionResponse
 		err = json.Unmarshal(updateW.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Equal(t, status, string(response.Status))
@@ -499,7 +492,7 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 
 	t.Run("PUT /api/v1/application-submissions/:id - UpdateApplicationSubmission_NotFound", func(t *testing.T) {
 		status := "approved"
-		req := models.UpdateApplicationSubmissionRequest{
+		req := UpdateApplicationSubmissionRequest{
 			Status: &status,
 		}
 		reqBody, _ := json.Marshal(req)
@@ -540,10 +533,10 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 		_ = createTestApplication(t, testHandler.db, memberID)
 
 		// Create a submission directly in DB
-		selectedFields := models.SelectedFieldRecords{
+		selectedFields := SelectedFieldRecords{
 			{FieldName: "field1", SchemaID: schemaID},
 		}
-		submission := models.ApplicationSubmission{
+		submission := ApplicationSubmission{
 			SubmissionID:    "sub_" + fmt.Sprintf("%d", time.Now().UnixNano()),
 			ApplicationName: "Test Submission",
 			SelectedFields:  selectedFields,
@@ -559,7 +552,7 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 		testHandler.handler.GetApplicationSubmission(w, httpReq)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		var response models.ApplicationSubmissionResponse
+		var response ApplicationSubmissionResponse
 		err = json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Equal(t, submission.SubmissionID, response.SubmissionID)
@@ -581,7 +574,7 @@ func TestApplicationSubmissionEndpoints(t *testing.T) {
 
 // TestApplicationEndpoints_EdgeCases tests edge cases for application endpoints
 func TestApplicationEndpoints_EdgeCases(t *testing.T) {
-	testHandler := NewTestV1Handler(t)
+	testHandler := NewTestHandler(t)
 	if testHandler == nil {
 		t.Skip("Skipping test: database connection failed")
 		return
@@ -619,7 +612,7 @@ func TestApplicationEndpoints_EdgeCases(t *testing.T) {
 
 	t.Run("PUT /api/v1/applications/:id - NotFound", func(t *testing.T) {
 		appName := "Updated Name"
-		req := models.UpdateApplicationRequest{
+		req := UpdateApplicationRequest{
 			ApplicationName: &appName,
 		}
 		reqBody, _ := json.Marshal(req)

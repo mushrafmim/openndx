@@ -1,8 +1,16 @@
-package models
+// Package application is the Portal Backend's consumer application bounded
+// context: applications, application submissions, their IdP clients and PDP
+// allow-lists, and the application API.
+package application
 
 import (
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/member"
+)
+
+// IDP Application Constants
+const (
+	TemplateIDM2M = "m2m-application"
 )
 
 // Application represents the consumer_applications table

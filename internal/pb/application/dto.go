@@ -1,4 +1,4 @@
-package models
+package application
 
 import "github.com/openndx/openndx-core/internal/pb/policy"
 

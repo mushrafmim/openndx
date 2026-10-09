@@ -1,4 +1,4 @@
-package handlers
+package application
 
 import (
 	"context"
@@ -6,14 +6,9 @@ import (
 	"net/http"
 
 	"github.com/openndx/openndx-core/internal/pb/auth"
-	"github.com/openndx/openndx-core/internal/pb/idp"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
-	"github.com/openndx/openndx-core/internal/pb/models"
-	"github.com/openndx/openndx-core/internal/pb/policy"
-	"github.com/openndx/openndx-core/internal/pb/services"
 	"github.com/openndx/openndx-core/internal/utils"
-	"gorm.io/gorm"
 )
 
 // memberResolver resolves the member ID of an authenticated user
@@ -21,31 +16,28 @@ type memberResolver interface {
 	ResolveMemberID(ctx context.Context, user *auth.AuthenticatedUser) (string, error)
 }
 
-// V1Handler handles all V1 API routes
-type V1Handler struct {
-	members            memberResolver
-	applicationService *services.ApplicationService
+// Handler handles the application and application submission HTTP API
+type Handler struct {
+	members memberResolver
+	service *Service
 }
 
 // getUserMemberID gets the member ID for the authenticated user with caching
 // This avoids repeated database calls for the same user within the same request context
-func (h *V1Handler) getUserMemberID(r *http.Request, user *auth.AuthenticatedUser) (string, error) {
+func (h *Handler) getUserMemberID(r *http.Request, user *auth.AuthenticatedUser) (string, error) {
 	return h.members.ResolveMemberID(r.Context(), user)
 }
 
-// NewV1Handler creates a new V1 handler from its dependencies. members
-// resolves the member ID of the authenticated user (see member.Service).
-func NewV1Handler(db *gorm.DB, idpProvider idp.IdentityProviderAPI, pdpClient *policy.Client, members memberResolver) *V1Handler {
-	return &V1Handler{
-		members:            members,
-		applicationService: services.NewApplicationService(db, pdpClient, idpProvider),
-	}
+// NewHandler creates a new application Handler. members resolves the member ID
+// of the authenticated user (see member.Service).
+func NewHandler(service *Service, members memberResolver) *Handler {
+	return &Handler{service: service, members: members}
 }
 
 // Application submission handlers
 
 // GetAllApplicationSubmissions handles GET /api/v1/application-submissions
-func (h *V1Handler) GetAllApplicationSubmissions(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetAllApplicationSubmissions(w http.ResponseWriter, r *http.Request) {
 	memberId := r.URL.Query().Get("memberId")
 	statusFilter := r.URL.Query()["status"]
 
@@ -77,7 +69,7 @@ func (h *V1Handler) GetAllApplicationSubmissions(w http.ResponseWriter, r *http.
 		finalMemberId = &userMemberID
 	}
 
-	submissions, err := h.applicationService.GetApplicationSubmissions(r.Context(), finalMemberId, &statusFilter)
+	submissions, err := h.service.GetApplicationSubmissions(r.Context(), finalMemberId, &statusFilter)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -91,7 +83,7 @@ func (h *V1Handler) GetAllApplicationSubmissions(w http.ResponseWriter, r *http.
 }
 
 // GetApplicationSubmission handles GET /api/v1/application-submissions/{submissionId}
-func (h *V1Handler) GetApplicationSubmission(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetApplicationSubmission(w http.ResponseWriter, r *http.Request) {
 	submissionId := r.PathValue("submissionId")
 
 	// Get authenticated user
@@ -107,7 +99,7 @@ func (h *V1Handler) GetApplicationSubmission(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	submission, err := h.applicationService.GetApplicationSubmission(r.Context(), submissionId)
+	submission, err := h.service.GetApplicationSubmission(r.Context(), submissionId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
@@ -133,7 +125,7 @@ func (h *V1Handler) GetApplicationSubmission(w http.ResponseWriter, r *http.Requ
 }
 
 // CreateApplicationSubmission handles POST /api/v1/application-submissions
-func (h *V1Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
 	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
@@ -147,7 +139,7 @@ func (h *V1Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	var req models.CreateApplicationSubmissionRequest
+	var req CreateApplicationSubmissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
@@ -175,7 +167,7 @@ func (h *V1Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	submission, err := h.applicationService.CreateApplicationSubmission(r.Context(), &req)
+	submission, err := h.service.CreateApplicationSubmission(r.Context(), &req)
 	if err != nil {
 		// Log audit event for failure
 		middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplicationSubmissions), nil, string(middleware.AuditStatusFailure))
@@ -191,7 +183,7 @@ func (h *V1Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.R
 }
 
 // UpdateApplicationSubmission handles PUT /api/v1/application-submissions/{submissionId}
-func (h *V1Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.Request) {
 	submissionId := r.PathValue("submissionId")
 
 	// Get authenticated user
@@ -208,7 +200,7 @@ func (h *V1Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.R
 	}
 
 	// Get existing submission to check ownership
-	existingSubmission, err := h.applicationService.GetApplicationSubmission(r.Context(), submissionId)
+	existingSubmission, err := h.service.GetApplicationSubmission(r.Context(), submissionId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, "Application submission not found")
 		return
@@ -230,13 +222,13 @@ func (h *V1Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	var req models.UpdateApplicationSubmissionRequest
+	var req UpdateApplicationSubmissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	submission, err := h.applicationService.UpdateApplicationSubmission(r.Context(), submissionId, &req)
+	submission, err := h.service.UpdateApplicationSubmission(r.Context(), submissionId, &req)
 	if err != nil {
 		// Log audit event for failure
 		middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplicationSubmissions), &existingSubmission.SubmissionID, string(middleware.AuditStatusFailure))
@@ -254,7 +246,7 @@ func (h *V1Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.R
 // Application handlers
 
 // GetAllApplications handles GET /api/v1/applications
-func (h *V1Handler) GetAllApplications(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetAllApplications(w http.ResponseWriter, r *http.Request) {
 	memberId := r.URL.Query().Get("memberId")
 
 	// Get authenticated user
@@ -283,7 +275,7 @@ func (h *V1Handler) GetAllApplications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	applications, err := h.applicationService.GetApplications(r.Context(), filteredMemberId)
+	applications, err := h.service.GetApplications(r.Context(), filteredMemberId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -297,7 +289,7 @@ func (h *V1Handler) GetAllApplications(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetApplication handles GET /api/v1/applications/{applicationId}
-func (h *V1Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 	applicationId := r.PathValue("applicationId")
 
 	// Get authenticated user
@@ -313,7 +305,7 @@ func (h *V1Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	application, err := h.applicationService.GetApplication(r.Context(), applicationId)
+	application, err := h.service.GetApplication(r.Context(), applicationId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
@@ -339,14 +331,14 @@ func (h *V1Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetApplicationIdByClientId handles GET /internal/api/v1/applications
-func (h *V1Handler) GetApplicationIdByClientId(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetApplicationIdByClientId(w http.ResponseWriter, r *http.Request) {
 	idpClientId := r.URL.Query().Get("idpClientId")
 	if idpClientId == "" {
 		utils.RespondWithError(w, http.StatusBadRequest, "idpClientId query parameter is required")
 		return
 	}
 
-	applicationId, err := h.applicationService.GetApplicationIdByIdpClientId(r.Context(), idpClientId)
+	applicationId, err := h.service.GetApplicationIdByIdpClientId(r.Context(), idpClientId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
@@ -355,7 +347,7 @@ func (h *V1Handler) GetApplicationIdByClientId(w http.ResponseWriter, r *http.Re
 }
 
 // CreateApplication handles POST /api/v1/applications
-func (h *V1Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
 	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
@@ -369,7 +361,7 @@ func (h *V1Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.CreateApplicationRequest
+	var req CreateApplicationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
@@ -388,7 +380,7 @@ func (h *V1Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		req.MemberID = userMemberID
 	}
 
-	application, err := h.applicationService.CreateApplication(r.Context(), &req)
+	application, err := h.service.CreateApplication(r.Context(), &req)
 	if err != nil {
 		// Log audit event for failure
 		middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplications), nil, string(middleware.AuditStatusFailure))
@@ -404,7 +396,7 @@ func (h *V1Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateApplication handles PUT /api/v1/applications/{applicationId}
-func (h *V1Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	applicationId := r.PathValue("applicationId")
 
 	// Get authenticated user
@@ -421,7 +413,7 @@ func (h *V1Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get existing application to check ownership
-	existingApplication, err := h.applicationService.GetApplication(r.Context(), applicationId)
+	existingApplication, err := h.service.GetApplication(r.Context(), applicationId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
@@ -443,13 +435,13 @@ func (h *V1Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var req models.UpdateApplicationRequest
+	var req UpdateApplicationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	application, err := h.applicationService.UpdateApplication(r.Context(), applicationId, &req)
+	application, err := h.service.UpdateApplication(r.Context(), applicationId, &req)
 	if err != nil {
 		// Log audit event for failure
 		middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplications), &existingApplication.ApplicationID, string(middleware.AuditStatusFailure))
@@ -465,7 +457,7 @@ func (h *V1Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateApplicationPolicy handles PUT /api/v1/applications/{applicationId}/policy
-func (h *V1Handler) UpdateApplicationPolicy(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 	applicationId := r.PathValue("applicationId")
 
 	// Get authenticated user
@@ -482,7 +474,7 @@ func (h *V1Handler) UpdateApplicationPolicy(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Get existing application to check ownership
-	existingApplication, err := h.applicationService.GetApplication(r.Context(), applicationId)
+	existingApplication, err := h.service.GetApplication(r.Context(), applicationId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
@@ -504,13 +496,13 @@ func (h *V1Handler) UpdateApplicationPolicy(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	var req models.UpdateApplicationPolicyRequest
+	var req UpdateApplicationPolicyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	application, err := h.applicationService.UpdateApplicationPolicy(r.Context(), applicationId, &req)
+	application, err := h.service.UpdateApplicationPolicy(r.Context(), applicationId, &req)
 	if err != nil {
 		// Log audit event for failure
 		middleware.LogAuditEvent(r, string(middleware.ResourceTypeApplications), &existingApplication.ApplicationID, string(middleware.AuditStatusFailure))

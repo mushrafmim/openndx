@@ -11,13 +11,12 @@ import (
 	"time"
 
 	"github.com/LSFLK/argus/pkg/audit"
+	"github.com/openndx/openndx-core/internal/pb/application"
 	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/database"
-	"github.com/openndx/openndx-core/internal/pb/handlers"
 	"github.com/openndx/openndx-core/internal/pb/idp/idpfactory"
 	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/pb/schema"
 	"github.com/openndx/openndx-core/internal/utils"
@@ -51,9 +50,9 @@ func main() {
 		err = database.AutoMigrate(gormDB,
 			&member.Member{},
 			&schema.Schema{},
-			&models.Application{},
+			&application.Application{},
 			&schema.SchemaSubmission{},
-			&models.ApplicationSubmission{},
+			&application.ApplicationSubmission{},
 		)
 		if err != nil {
 			slog.Error("Failed to run database migrations", "error", err)
@@ -83,7 +82,8 @@ func main() {
 	schemaService := schema.NewService(gormDB, pdpClient)
 	schemaHandler := schema.NewHandler(schemaService, memberService)
 
-	v1Handler := handlers.NewV1Handler(gormDB, idpProvider, pdpClient, memberService)
+	applicationService := application.NewService(gormDB, pdpClient, idpProvider)
+	applicationHandler := application.NewHandler(applicationService, memberService)
 
 	// Create a mux for API routes
 	mux := http.NewServeMux()
@@ -113,17 +113,17 @@ func main() {
 	mux.Handle("PUT /api/v1/schema-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.UpdateSchemaSubmission)))
 
 	// Application endpoints
-	mux.Handle("GET /api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllApplications)))
-	mux.Handle("POST /api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.CreateApplication)))
-	mux.Handle("GET /api/v1/applications/{applicationId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetApplication)))
-	mux.Handle("PUT /api/v1/applications/{applicationId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateApplication)))
-	mux.Handle("PUT /api/v1/applications/{applicationId}/policy", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateApplicationPolicy)))
+	mux.Handle("GET /api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.GetAllApplications)))
+	mux.Handle("POST /api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.CreateApplication)))
+	mux.Handle("GET /api/v1/applications/{applicationId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.GetApplication)))
+	mux.Handle("PUT /api/v1/applications/{applicationId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.UpdateApplication)))
+	mux.Handle("PUT /api/v1/applications/{applicationId}/policy", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.UpdateApplicationPolicy)))
 
 	// Application submission endpoints
-	mux.Handle("GET /api/v1/application-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetAllApplicationSubmissions)))
-	mux.Handle("POST /api/v1/application-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.CreateApplicationSubmission)))
-	mux.Handle("GET /api/v1/application-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetApplicationSubmission)))
-	mux.Handle("PUT /api/v1/application-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.UpdateApplicationSubmission)))
+	mux.Handle("GET /api/v1/application-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.GetAllApplicationSubmissions)))
+	mux.Handle("POST /api/v1/application-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.CreateApplicationSubmission)))
+	mux.Handle("GET /api/v1/application-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.GetApplicationSubmission)))
+	mux.Handle("PUT /api/v1/application-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.UpdateApplicationSubmission)))
 
 	// Setup middleware chain
 	corsMiddleware := middleware.NewCORSMiddleware()
@@ -351,7 +351,7 @@ func main() {
 	// MUST be protected at network level (VPC, firewall, service mesh, etc.)
 	// See README.md "Deployment Security" section for required security measures.
 	// DO NOT expose this service directly to public internet without proper network isolation.
-	topLevelMux.Handle("GET /internal/api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(v1Handler.GetApplicationIdByClientId)))
+	topLevelMux.Handle("GET /internal/api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.GetApplicationIdByClientId)))
 
 	// Start server
 	port := os.Getenv("PORT")

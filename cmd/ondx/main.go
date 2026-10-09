@@ -18,8 +18,8 @@ import (
 	"github.com/openndx/openndx-core/internal/cli/auth"
 	"github.com/openndx/openndx-core/internal/cli/pbclient"
 	"github.com/openndx/openndx-core/internal/cli/profile"
+	"github.com/openndx/openndx-core/internal/pb/application"
 	"github.com/openndx/openndx-core/internal/pb/member"
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/pb/schema"
 )
@@ -459,7 +459,7 @@ func runPolicyUpdate(ctx context.Context, args []string) error {
 		})
 	}
 
-	req := &models.UpdateApplicationPolicyRequest{SelectedFields: selectedFields}
+	req := &application.UpdateApplicationPolicyRequest{SelectedFields: selectedFields}
 	if *grantDuration != "" {
 		gd := policy.GrantDurationType(*grantDuration)
 		req.GrantDuration = &gd
@@ -781,7 +781,7 @@ func runApplicationsCreate(ctx context.Context, args []string) error {
 		})
 	}
 
-	req := &models.CreateApplicationRequest{
+	req := &application.CreateApplicationRequest{
 		ApplicationName: *name,
 		SelectedFields:  selectedFields,
 		MemberID:        *memberID,
