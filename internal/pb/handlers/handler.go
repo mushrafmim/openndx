@@ -4,17 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-	"strings"
 
 	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/idp"
-	"github.com/openndx/openndx-core/internal/pb/idp/idpfactory"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
-	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
 	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
@@ -33,10 +28,6 @@ type V1Handler struct {
 	members            memberResolver
 	applicationService *services.ApplicationService
 	schemaService      *services.SchemaService
-
-	// Members serves the member API. It is exposed so main can register its
-	// routes until dependency wiring moves out of NewV1Handler.
-	Members *member.Handler
 }
 
 // getUserMemberID gets the member ID for the authenticated user with caching
@@ -45,67 +36,14 @@ func (h *V1Handler) getUserMemberID(r *http.Request, user *auth.AuthenticatedUse
 	return h.members.ResolveMemberID(r.Context(), user)
 }
 
-// NewV1Handler creates a new V1 handler
-func NewV1Handler(db *gorm.DB) (*V1Handler, error) {
-	// Get scopes from environment variable, fallback to default if not set
-	scopesEnv := os.Getenv("IDP_SCOPE")
-	var scopes []string
-	if scopesEnv != "" {
-		// Split by space to handle multiple scopes
-		scopes = strings.Fields(scopesEnv)
-	}
-	// Create the NewIdpProvider
-	baseURL := os.Getenv("IDP_BASE_URL")
-	jwksURL := os.Getenv("IDP_JWKS_URL")
-	issuerURL := os.Getenv("IDP_ISSUER")
-	tokenURL := os.Getenv("IDP_TOKEN_URL")
-
-	if baseURL == "" {
-		if jwksURL != "" && (issuerURL != "" || tokenURL != "") {
-			if issuerURL != "" {
-				baseURL = issuerURL
-			} else {
-				baseURL = tokenURL
-			}
-		}
-	}
-
-	clientID := os.Getenv("IDP_CLIENT_ID")
-	clientSecret := os.Getenv("IDP_CLIENT_SECRET")
-
-	if baseURL == "" || clientID == "" || clientSecret == "" {
-		return nil, fmt.Errorf("failed to create IDP provider: missing required environment variables (IDP_BASE_URL, or IDP_JWKS_URL and IDP_ISSUER/IDP_TOKEN_URL, along with IDP_CLIENT_ID and IDP_CLIENT_SECRET)")
-	}
-
-	idpProvider, err := idpfactory.NewIdpAPIProvider(idpfactory.FactoryConfig{
-		ProviderType: idp.ProviderAsgardeo,
-		BaseURL:      baseURL,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		Scopes:       scopes,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create IDP provider: %w", err)
-	}
-	memberService := member.NewService(db, idpProvider)
-
-	pdpServiceURL := os.Getenv("PDP_SERVICE_URL")
-	if pdpServiceURL == "" {
-		return nil, fmt.Errorf("PDP_SERVICE_URL environment variable not set")
-	}
-	if !strings.HasPrefix(pdpServiceURL, "http://") && !strings.HasPrefix(pdpServiceURL, "https://") {
-		return nil, fmt.Errorf("PDP_SERVICE_URL must start with http:// or https://")
-	}
-
-	pdpService := policy.NewClient(pdpServiceURL)
-	slog.Info("PDP Service URL", "url", pdpServiceURL)
-
+// NewV1Handler creates a new V1 handler from its dependencies. members
+// resolves the member ID of the authenticated user (see member.Service).
+func NewV1Handler(db *gorm.DB, idpProvider idp.IdentityProviderAPI, pdpClient *policy.Client, members memberResolver) *V1Handler {
 	return &V1Handler{
-		members:            memberService,
-		schemaService:      services.NewSchemaService(db, pdpService),
-		applicationService: services.NewApplicationService(db, pdpService, idpProvider),
-		Members:            member.NewHandler(memberService),
-	}, nil
+		members:            members,
+		schemaService:      services.NewSchemaService(db, pdpClient),
+		applicationService: services.NewApplicationService(db, pdpClient, idpProvider),
+	}
 }
 
 // Schema submission handlers
