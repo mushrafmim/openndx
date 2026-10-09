@@ -232,6 +232,6 @@ cmd/ondx/
 
 internal/cli/
 ├── auth/                    # PKCE, browser-based login flow, token cache/refresh
-├── pbclient/                # Portal Backend API client (reuses internal/pb/models types)
+├── pbclient/                # Portal Backend API client (reuses internal/pb member/schema/application types)
 └── profile/                 # Named profiles (issuer/client-id/scopes/pb-url/...) cached at ~/.openndx/config.json
 ```

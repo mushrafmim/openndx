@@ -1,4 +1,4 @@
-package handlers
+package application
 
 import (
 	"net/http"
@@ -6,7 +6,6 @@ import (
 
 	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
 	"github.com/openndx/openndx-core/internal/pb/member"
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/schema"
 	"gorm.io/gorm"
 )
@@ -16,17 +15,19 @@ import (
 func setupSQLiteTestDB(t *testing.T) *gorm.DB {
 	return dbtest.SetupSQLiteDB(t,
 		&member.Member{},
-		&models.Application{},
-		&models.ApplicationSubmission{},
+		&Application{},
+		&ApplicationSubmission{},
 		&schema.Schema{},
 		&schema.SchemaSubmission{},
 	)
 }
 
-// roundTripFunc adapts a function to http.RoundTripper.
-type roundTripFunc func(req *http.Request) (*http.Response, error)
+// MockRoundTripper is a mock implementation of http.RoundTripper
+type MockRoundTripper struct {
+	RoundTripFunc func(req *http.Request) (*http.Response, error)
+}
 
-// RoundTrip calls f(req).
-func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+// RoundTrip executes the mock RoundTripFunc
+func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return m.RoundTripFunc(req)
 }

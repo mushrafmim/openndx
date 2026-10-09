@@ -1,4 +1,4 @@
-package services
+package application
 
 import (
 	"context"
@@ -11,21 +11,20 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/idp"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/member"
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"gorm.io/gorm"
 )
 
-// ApplicationService handles application-related operations
-type ApplicationService struct {
+// Service handles application-related operations
+type Service struct {
 	db            *gorm.DB
 	policyService *policy.Client
 	idp           idp.IdentityProviderAPI
 }
 
-// NewApplicationService creates a new application service
-func NewApplicationService(db *gorm.DB, pdpService *policy.Client, idp idp.IdentityProviderAPI) *ApplicationService {
-	return &ApplicationService{db: db, policyService: pdpService, idp: idp}
+// NewService creates a new application service
+func NewService(db *gorm.DB, pdpService *policy.Client, idp idp.IdentityProviderAPI) *Service {
+	return &Service{db: db, policyService: pdpService, idp: idp}
 }
 
 // CreateApplication creates a new application. If req.IdpApplicationID and
@@ -33,7 +32,7 @@ func NewApplicationService(db *gorm.DB, pdpService *policy.Client, idp idp.Ident
 // client directly in the IDP (e.g. manually via ThunderID's console, since
 // idpfactory only supports Asgardeo's admin API today) - IDP creation is
 // skipped and those values are used as-is.
-func (s *ApplicationService) CreateApplication(ctx context.Context, req *models.CreateApplicationRequest) (*models.ApplicationResponse, error) {
+func (s *Service) CreateApplication(ctx context.Context, req *CreateApplicationRequest) (*ApplicationResponse, error) {
 	externallyProvisioned := req.IdpApplicationID != nil || req.IdpClientID != nil
 	if externallyProvisioned && (req.IdpApplicationID == nil || req.IdpClientID == nil) {
 		return nil, fmt.Errorf("idpApplicationId and idpClientId must both be provided together, or both omitted")
@@ -58,7 +57,7 @@ func (s *ApplicationService) CreateApplication(ctx context.Context, req *models.
 		applicationInstance := &idp.Application{
 			Name:        req.ApplicationName,
 			Description: description,
-			TemplateId:  models.TemplateIDM2M,
+			TemplateId:  TemplateIDM2M,
 		}
 		var err error
 		idpApplicationID, err = s.idp.CreateApplication(ctx, applicationInstance)
@@ -73,11 +72,11 @@ func (s *ApplicationService) CreateApplication(ctx context.Context, req *models.
 	}
 
 	// Step 2: Create application in database
-	application := models.Application{
+	application := Application{
 		ApplicationID:          uuid.New().String(),
 		ApplicationName:        req.ApplicationName,
 		ApplicationDescription: req.ApplicationDescription,
-		SelectedFields:         models.SelectedFieldRecords(req.SelectedFields),
+		SelectedFields:         SelectedFieldRecords(req.SelectedFields),
 		IdpApplicationID:       idpApplicationID,
 		IdpClientID:            idpClientID,
 		MemberID:               req.MemberID,
@@ -159,7 +158,7 @@ func (s *ApplicationService) CreateApplication(ctx context.Context, req *models.
 		return nil, fmt.Errorf("failed to update allow list: %w", err)
 	}
 
-	response := &models.ApplicationResponse{
+	response := &ApplicationResponse{
 		ApplicationID:          application.ApplicationID,
 		ApplicationName:        application.ApplicationName,
 		ApplicationDescription: application.ApplicationDescription,
@@ -176,8 +175,8 @@ func (s *ApplicationService) CreateApplication(ctx context.Context, req *models.
 }
 
 // UpdateApplication updates an existing application
-func (s *ApplicationService) UpdateApplication(ctx context.Context, applicationID string, req *models.UpdateApplicationRequest) (*models.ApplicationResponse, error) {
-	var application models.Application
+func (s *Service) UpdateApplication(ctx context.Context, applicationID string, req *UpdateApplicationRequest) (*ApplicationResponse, error) {
+	var application Application
 	err := s.db.WithContext(ctx).First(&application, "application_id = ?", applicationID).Error
 	if err != nil {
 		return nil, err
@@ -200,7 +199,7 @@ func (s *ApplicationService) UpdateApplication(ctx context.Context, applicationI
 		return nil, err
 	}
 
-	response := &models.ApplicationResponse{
+	response := &ApplicationResponse{
 		ApplicationID:          application.ApplicationID,
 		ApplicationName:        application.ApplicationName,
 		ApplicationDescription: application.ApplicationDescription,
@@ -221,8 +220,8 @@ func (s *ApplicationService) UpdateApplication(ctx context.Context, applicationI
 
 // UpdateApplicationPolicy replaces an existing application's allow-list in the PDP and
 // persists the resulting selected fields on the application record.
-func (s *ApplicationService) UpdateApplicationPolicy(ctx context.Context, applicationID string, req *models.UpdateApplicationPolicyRequest) (*models.ApplicationResponse, error) {
-	var application models.Application
+func (s *Service) UpdateApplicationPolicy(ctx context.Context, applicationID string, req *UpdateApplicationPolicyRequest) (*ApplicationResponse, error) {
+	var application Application
 	if err := s.db.WithContext(ctx).First(&application, "application_id = ?", applicationID).Error; err != nil {
 		return nil, err
 	}
@@ -246,12 +245,12 @@ func (s *ApplicationService) UpdateApplicationPolicy(ctx context.Context, applic
 		return nil, fmt.Errorf("failed to update allow list: %w", err)
 	}
 
-	application.SelectedFields = models.SelectedFieldRecords(req.SelectedFields)
+	application.SelectedFields = SelectedFieldRecords(req.SelectedFields)
 	if err := s.db.WithContext(ctx).Save(&application).Error; err != nil {
 		return nil, fmt.Errorf("failed to persist updated selected fields: %w", err)
 	}
 
-	response := &models.ApplicationResponse{
+	response := &ApplicationResponse{
 		ApplicationID:          application.ApplicationID,
 		ApplicationName:        application.ApplicationName,
 		ApplicationDescription: application.ApplicationDescription,
@@ -268,14 +267,14 @@ func (s *ApplicationService) UpdateApplicationPolicy(ctx context.Context, applic
 }
 
 // GetApplication retrieves an application by ID
-func (s *ApplicationService) GetApplication(ctx context.Context, applicationID string) (*models.ApplicationResponse, error) {
-	var application models.Application
+func (s *Service) GetApplication(ctx context.Context, applicationID string) (*ApplicationResponse, error) {
+	var application Application
 	err := s.db.WithContext(ctx).Preload("Member").First(&application, "application_id = ?", applicationID).Error
 	if err != nil {
 		return nil, err
 	}
 
-	response := &models.ApplicationResponse{
+	response := &ApplicationResponse{
 		ApplicationID:          application.ApplicationID,
 		ApplicationName:        application.ApplicationName,
 		ApplicationDescription: application.ApplicationDescription,
@@ -295,8 +294,8 @@ func (s *ApplicationService) GetApplication(ctx context.Context, applicationID s
 }
 
 // GetApplicationIdByIdpClientId retrieves applicationId by idpClientId
-func (s *ApplicationService) GetApplicationIdByIdpClientId(ctx context.Context, idpClientId string) (*models.ApplicationIDResponse, error) {
-	var application models.Application
+func (s *Service) GetApplicationIdByIdpClientId(ctx context.Context, idpClientId string) (*ApplicationIDResponse, error) {
+	var application Application
 	err := s.db.WithContext(ctx).First(&application, "idp_client_id = ?", idpClientId).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -304,14 +303,14 @@ func (s *ApplicationService) GetApplicationIdByIdpClientId(ctx context.Context, 
 		}
 		return nil, fmt.Errorf("failed to retrieve application: %w", err)
 	}
-	return &models.ApplicationIDResponse{
+	return &ApplicationIDResponse{
 		ApplicationID: application.ApplicationID,
 	}, nil
 }
 
 // GetApplications retrieves all applications and filters by member ID if provided
-func (s *ApplicationService) GetApplications(ctx context.Context, MemberID *string) ([]models.ApplicationResponse, error) {
-	var applications []models.Application
+func (s *Service) GetApplications(ctx context.Context, MemberID *string) ([]ApplicationResponse, error) {
+	var applications []Application
 	query := s.db.WithContext(ctx).Preload("Member")
 	if MemberID != nil && *MemberID != "" {
 		query = query.Where("member_id = ?", *MemberID)
@@ -326,9 +325,9 @@ func (s *ApplicationService) GetApplications(ctx context.Context, MemberID *stri
 	}
 
 	// Pre-allocate slice with known capacity for better performance
-	responses := make([]models.ApplicationResponse, 0, len(applications))
+	responses := make([]ApplicationResponse, 0, len(applications))
 	for _, application := range applications {
-		resp := models.ApplicationResponse{
+		resp := ApplicationResponse{
 			ApplicationID:    application.ApplicationID,
 			ApplicationName:  application.ApplicationName,
 			SelectedFields:   application.SelectedFields,
@@ -349,10 +348,10 @@ func (s *ApplicationService) GetApplications(ctx context.Context, MemberID *stri
 }
 
 // CreateApplicationSubmission creates a new application submission
-func (s *ApplicationService) CreateApplicationSubmission(ctx context.Context, req *models.CreateApplicationSubmissionRequest) (*models.ApplicationSubmissionResponse, error) {
+func (s *Service) CreateApplicationSubmission(ctx context.Context, req *CreateApplicationSubmissionRequest) (*ApplicationSubmissionResponse, error) {
 	// Validate previous application ID if provided
 	if req.PreviousApplicationID != nil {
-		var prevApp models.Application
+		var prevApp Application
 		err := s.db.WithContext(ctx).First(&prevApp, "application_id = ?", *req.PreviousApplicationID).Error
 		if err != nil {
 			return nil, err
@@ -367,12 +366,12 @@ func (s *ApplicationService) CreateApplicationSubmission(ctx context.Context, re
 	}
 
 	// Create application submission
-	submission := models.ApplicationSubmission{
+	submission := ApplicationSubmission{
 		SubmissionID:           "sub_" + uuid.New().String(),
 		PreviousApplicationID:  req.PreviousApplicationID,
 		ApplicationName:        req.ApplicationName,
 		ApplicationDescription: req.ApplicationDescription,
-		SelectedFields:         models.SelectedFieldRecords(req.SelectedFields),
+		SelectedFields:         SelectedFieldRecords(req.SelectedFields),
 		Status:                 string(kernel.StatusPending),
 		MemberID:               req.MemberID,
 	}
@@ -380,7 +379,7 @@ func (s *ApplicationService) CreateApplicationSubmission(ctx context.Context, re
 		return nil, err
 	}
 
-	response := &models.ApplicationSubmissionResponse{
+	response := &ApplicationSubmissionResponse{
 		SubmissionID:           submission.SubmissionID,
 		PreviousApplicationID:  submission.PreviousApplicationID,
 		ApplicationName:        submission.ApplicationName,
@@ -396,8 +395,8 @@ func (s *ApplicationService) CreateApplicationSubmission(ctx context.Context, re
 }
 
 // UpdateApplicationSubmission updates an existing application submission
-func (s *ApplicationService) UpdateApplicationSubmission(ctx context.Context, submissionID string, req *models.UpdateApplicationSubmissionRequest) (*models.ApplicationSubmissionResponse, error) {
-	var submission models.ApplicationSubmission
+func (s *Service) UpdateApplicationSubmission(ctx context.Context, submissionID string, req *UpdateApplicationSubmissionRequest) (*ApplicationSubmissionResponse, error) {
+	var submission ApplicationSubmission
 
 	// Find the submission
 	if err := s.db.WithContext(ctx).First(&submission, "submission_id = ?", submissionID).Error; err != nil {
@@ -407,7 +406,7 @@ func (s *ApplicationService) UpdateApplicationSubmission(ctx context.Context, su
 	// Validate PreviousApplicationID first before making any updates
 	if req.PreviousApplicationID != nil {
 		// Validate previous application ID
-		var prevApp models.Application
+		var prevApp Application
 		if err := s.db.WithContext(ctx).First(&prevApp, "application_id = ?", *req.PreviousApplicationID).Error; err != nil {
 			return nil, fmt.Errorf("previous application not found: %w", err)
 		}
@@ -449,10 +448,10 @@ func (s *ApplicationService) UpdateApplicationSubmission(ctx context.Context, su
 
 	// Create application outside of transaction if approval was successful
 	if shouldCreateApplication {
-		var createApplicationRequest models.CreateApplicationRequest
+		var createApplicationRequest CreateApplicationRequest
 		createApplicationRequest.ApplicationName = submission.ApplicationName
 		createApplicationRequest.ApplicationDescription = submission.ApplicationDescription
-		createApplicationRequest.SelectedFields = models.SelectedFieldRecords(submission.SelectedFields)
+		createApplicationRequest.SelectedFields = SelectedFieldRecords(submission.SelectedFields)
 		createApplicationRequest.MemberID = submission.MemberID
 
 		_, err := s.CreateApplication(ctx, &createApplicationRequest)
@@ -471,7 +470,7 @@ func (s *ApplicationService) UpdateApplicationSubmission(ctx context.Context, su
 		}
 	}
 
-	response := &models.ApplicationSubmissionResponse{
+	response := &ApplicationSubmissionResponse{
 		SubmissionID:           submission.SubmissionID,
 		PreviousApplicationID:  submission.PreviousApplicationID,
 		ApplicationName:        submission.ApplicationName,
@@ -488,14 +487,14 @@ func (s *ApplicationService) UpdateApplicationSubmission(ctx context.Context, su
 }
 
 // GetApplicationSubmission retrieves an application submission by ID
-func (s *ApplicationService) GetApplicationSubmission(ctx context.Context, submissionID string) (*models.ApplicationSubmissionResponse, error) {
-	var submission models.ApplicationSubmission
+func (s *Service) GetApplicationSubmission(ctx context.Context, submissionID string) (*ApplicationSubmissionResponse, error) {
+	var submission ApplicationSubmission
 	err := s.db.WithContext(ctx).Preload("Member").Preload("PreviousApplication").First(&submission, "submission_id = ?", submissionID).Error
 	if err != nil {
 		return nil, err
 	}
 
-	response := &models.ApplicationSubmissionResponse{
+	response := &ApplicationSubmissionResponse{
 		SubmissionID:           submission.SubmissionID,
 		PreviousApplicationID:  submission.PreviousApplicationID,
 		ApplicationName:        submission.ApplicationName,
@@ -512,8 +511,8 @@ func (s *ApplicationService) GetApplicationSubmission(ctx context.Context, submi
 }
 
 // GetApplicationSubmissions retrieves all application submissions and filters by member ID if provided
-func (s *ApplicationService) GetApplicationSubmissions(ctx context.Context, MemberID *string, statusFilter *[]string) ([]models.ApplicationSubmissionResponse, error) {
-	var submissions []models.ApplicationSubmission
+func (s *Service) GetApplicationSubmissions(ctx context.Context, MemberID *string, statusFilter *[]string) ([]ApplicationSubmissionResponse, error) {
+	var submissions []ApplicationSubmission
 	query := s.db.WithContext(ctx).Preload("Member").Preload("PreviousApplication")
 	if MemberID != nil && *MemberID != "" {
 		query = query.Where("member_id = ?", *MemberID)
@@ -530,9 +529,9 @@ func (s *ApplicationService) GetApplicationSubmissions(ctx context.Context, Memb
 		return nil, err
 	}
 
-	var responses []models.ApplicationSubmissionResponse
+	var responses []ApplicationSubmissionResponse
 	for _, submission := range submissions {
-		responses = append(responses, models.ApplicationSubmissionResponse{
+		responses = append(responses, ApplicationSubmissionResponse{
 			SubmissionID:           submission.SubmissionID,
 			PreviousApplicationID:  submission.PreviousApplicationID,
 			ApplicationName:        submission.ApplicationName,

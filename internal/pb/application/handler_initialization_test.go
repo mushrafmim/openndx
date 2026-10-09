@@ -1,4 +1,4 @@
-package handlers
+package application
 
 import (
 	"context"
@@ -12,18 +12,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestNewV1Handler checks that NewV1Handler wires the given dependencies.
+// TestNewHandler checks that NewHandler wires the given dependencies.
 // Environment parsing is covered by idpfactory.TestNewFromEnv and
 // policy.TestNewClientFromEnv.
-func TestNewV1Handler(t *testing.T) {
+func TestNewHandler(t *testing.T) {
 	db := setupSQLiteTestDB(t)
 	resolver := &stubMemberResolver{}
+	service := NewService(db, policy.NewClient("http://localhost:9999"), &idptest.Mock{})
 
-	handler := NewV1Handler(db, &idptest.Mock{}, policy.NewClient("http://localhost:9999"), resolver)
+	handler := NewHandler(service, resolver)
 
 	assert.NotNil(t, handler)
 	assert.Same(t, resolver, handler.members)
-	assert.NotNil(t, handler.applicationService)
+	assert.Same(t, service, handler.service)
 }
 
 // stubMemberResolver records the arguments it was called with
@@ -48,7 +49,7 @@ func TestGetUserMemberID_DelegatesToResolver(t *testing.T) {
 
 	t.Run("returns resolved ID", func(t *testing.T) {
 		resolver := &stubMemberResolver{id: "mem_123"}
-		h := &V1Handler{members: resolver}
+		h := &Handler{members: resolver}
 
 		id, err := h.getUserMemberID(req, user)
 		assert.NoError(t, err)
@@ -59,7 +60,7 @@ func TestGetUserMemberID_DelegatesToResolver(t *testing.T) {
 
 	t.Run("returns resolver error", func(t *testing.T) {
 		resolver := &stubMemberResolver{err: errors.New("user member record not found")}
-		h := &V1Handler{members: resolver}
+		h := &Handler{members: resolver}
 
 		id, err := h.getUserMemberID(req, user)
 		assert.EqualError(t, err, "user member record not found")

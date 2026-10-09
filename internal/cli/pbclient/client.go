@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openndx/openndx-core/internal/pb/application"
 	"github.com/openndx/openndx-core/internal/pb/member"
-	"github.com/openndx/openndx-core/internal/pb/models"
 	"github.com/openndx/openndx-core/internal/pb/schema"
 )
 
@@ -72,12 +72,12 @@ func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any) (
 }
 
 // CreateApplication calls POST /api/v1/applications.
-func (c *Client) CreateApplication(ctx context.Context, req *models.CreateApplicationRequest) (*models.ApplicationResponse, error) {
+func (c *Client) CreateApplication(ctx context.Context, req *application.CreateApplicationRequest) (*application.ApplicationResponse, error) {
 	body, err := c.doJSON(ctx, http.MethodPost, "/api/v1/applications", req)
 	if err != nil {
 		return nil, err
 	}
-	var app models.ApplicationResponse
+	var app application.ApplicationResponse
 	if err := json.Unmarshal(body, &app); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
@@ -111,12 +111,12 @@ func (c *Client) CreateMember(ctx context.Context, req *member.CreateMemberReque
 }
 
 // GetApplication calls GET /api/v1/applications/{applicationId}.
-func (c *Client) GetApplication(ctx context.Context, applicationID string) (*models.ApplicationResponse, error) {
+func (c *Client) GetApplication(ctx context.Context, applicationID string) (*application.ApplicationResponse, error) {
 	body, err := c.doJSON(ctx, http.MethodGet, "/api/v1/applications/"+url.PathEscape(applicationID), nil)
 	if err != nil {
 		return nil, err
 	}
-	var app models.ApplicationResponse
+	var app application.ApplicationResponse
 	if err := json.Unmarshal(body, &app); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
@@ -125,8 +125,8 @@ func (c *Client) GetApplication(ctx context.Context, applicationID string) (*mod
 
 // ApplicationCollection is the GET /api/v1/applications response envelope.
 type ApplicationCollection struct {
-	Items []models.ApplicationResponse `json:"items"`
-	Count int                          `json:"count"`
+	Items []application.ApplicationResponse `json:"items"`
+	Count int                               `json:"count"`
 }
 
 // ListApplications calls GET /api/v1/applications, optionally filtered to one
@@ -150,12 +150,12 @@ func (c *Client) ListApplications(ctx context.Context, memberID *string) (*Appli
 
 // UpdateApplicationPolicy calls PUT /api/v1/applications/{applicationId}/policy
 // to replace an existing application's allow-list.
-func (c *Client) UpdateApplicationPolicy(ctx context.Context, applicationID string, req *models.UpdateApplicationPolicyRequest) (*models.ApplicationResponse, error) {
+func (c *Client) UpdateApplicationPolicy(ctx context.Context, applicationID string, req *application.UpdateApplicationPolicyRequest) (*application.ApplicationResponse, error) {
 	body, err := c.doJSON(ctx, http.MethodPut, "/api/v1/applications/"+url.PathEscape(applicationID)+"/policy", req)
 	if err != nil {
 		return nil, err
 	}
-	var app models.ApplicationResponse
+	var app application.ApplicationResponse
 	if err := json.Unmarshal(body, &app); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
