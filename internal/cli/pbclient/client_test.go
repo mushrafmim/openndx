@@ -90,9 +90,7 @@ func TestCreateMember_Success(t *testing.T) {
 			MemberID: "mem_new",
 			Name:     capturedBody.Name,
 			Email:    capturedBody.Email,
-		}
-		if capturedBody.IdpUserID != nil {
-			resp.IdpUserID = *capturedBody.IdpUserID
+			OuID:     capturedBody.OuID,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated) // PB returns 201 for creation
@@ -101,12 +99,12 @@ func TestCreateMember_Success(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	idpUserID := "thunder-user-1"
+	ouID := "thunder-ou-1"
 	req := &member.CreateMemberRequest{
 		Name:        "New Member",
 		Email:       "new@example.com",
 		PhoneNumber: "+1234567890",
-		IdpUserID:   &idpUserID,
+		OuID:        ouID,
 	}
 
 	resp, err := client.CreateMember(context.Background(), req)
@@ -114,11 +112,11 @@ func TestCreateMember_Success(t *testing.T) {
 	assert.NoError(t, err)
 	if assert.NotNil(t, resp) {
 		assert.Equal(t, "mem_new", resp.MemberID)
-		assert.Equal(t, idpUserID, resp.IdpUserID)
+		assert.Equal(t, ouID, resp.OuID)
 	}
 	assert.Equal(t, http.MethodPost, capturedMethod)
 	assert.Equal(t, "/api/v1/members", capturedPath)
-	assert.Equal(t, idpUserID, *capturedBody.IdpUserID)
+	assert.Equal(t, ouID, capturedBody.OuID)
 }
 
 func TestCreateMember_ErrorResponse(t *testing.T) {

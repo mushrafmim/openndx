@@ -49,7 +49,7 @@ func NewTestHandler(t *testing.T) *TestHandler {
 
 // NewTestHandlerWithMockPDP creates a handler with mock PDP and IDP services for testing
 func NewTestHandlerWithMockPDP(t *testing.T, db *gorm.DB, idpMock *idptest.Mock) *Handler {
-	memberService := member.NewService(db, idpMock)
+	memberService := member.NewService(db)
 
 	// For testing, we'll use a real policy.Client but skip actual HTTP calls
 	// In a real test, you'd use a test HTTP server
@@ -68,7 +68,7 @@ func createTestMember(t *testing.T, db *gorm.DB, email string) string {
 		Name:        "Test Member",
 		Email:       email,
 		PhoneNumber: "1234567890",
-		IdpUserID:   "idp-user-" + fmt.Sprintf("%d", time.Now().UnixNano()),
+		OuID:        "ou-" + fmt.Sprintf("%d", time.Now().UnixNano()),
 	}
 	err := db.Create(&m).Error
 	assert.NoError(t, err)
@@ -158,7 +158,7 @@ func newTestHandlerWithWorkingPDP(t *testing.T, db *gorm.DB, pdpStatusCode int, 
 	pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
 	mockIDP := &idptest.Mock{}
-	return NewHandler(NewService(db, pdpService, mockIDP), member.NewService(db, mockIDP))
+	return NewHandler(NewService(db, pdpService, mockIDP), member.NewService(db))
 }
 
 // TestApplicationEndpoints tests all application-related endpoints

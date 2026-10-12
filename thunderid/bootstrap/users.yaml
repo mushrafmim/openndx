@@ -157,3 +157,73 @@ ouHandle: default
 members:
   - id: 01900000-0000-7000-8000-0000000000b1
     type: user
+---
+# LOCAL-DEV ONLY: sample member organizations. A Portal Backend member is an
+# organization linked 1:1 to a ThunderID organization unit (members.ou_id), and
+# its staff are the users inside that OU. These two match the walkthrough in
+# docs/TUTORIAL-ondx-cli.md: DRP owns and provides a schema, DIE registers an
+# application against it. Register them in PB with
+# `ondx members create --ou-id <id below>`.
+resource_type: organization_unit
+id: 01900000-0000-7000-8000-0000000000c0
+handle: drp
+name: Department of Registrar of Persons
+description: Sample member organization that provides the DRP schema
+# The default OU's ID (ThunderID's built-in bootstrap); `parent` takes an ID, not a handle.
+parent: 01900000-0000-7000-8000-000000000001
+---
+resource_type: organization_unit
+id: 01900000-0000-7000-8000-0000000000c1
+handle: die
+name: Department of Immigration and Emigration
+description: Sample member organization that consumes the DRP schema
+parent: 01900000-0000-7000-8000-000000000001
+---
+# LOCAL-DEV ONLY: a staff account for each sample member organization, for
+# logging in via the ndx CLI (client NDX_CLI) as a member rather than an admin.
+# These are deliberately not the citizen accounts above (suresh etc.): citizens
+# are data owners who log into the Consent Portal, while these users act for an
+# organization. Portal Backend resolves their member from the `ouId` token claim.
+resource_type: user
+id: 01900000-0000-7000-8000-0000000000c2
+type: Person
+# By ID: `ouHandle` only resolves top-level OUs, not children of default.
+ouId: 01900000-0000-7000-8000-0000000000c0
+attributes:
+  username: drp-admin
+  sub: drp-admin
+  email: drp-admin@drp.openndx.local
+  name: DRP Admin
+  given_name: DRP
+  family_name: Admin
+credentials:
+  password: "1234"
+---
+resource_type: user
+id: 01900000-0000-7000-8000-0000000000c3
+type: Person
+ouId: 01900000-0000-7000-8000-0000000000c1
+attributes:
+  username: die-admin
+  sub: die-admin
+  email: die-admin@die.openndx.local
+  name: DIE Admin
+  given_name: DIE
+  family_name: Admin
+credentials:
+  password: "1234"
+---
+# Membership group the OpenNDX_Member role (thunderid/bootstrap/resource.yaml)
+# is assigned to, mirroring OpenNDX Admins above. Every member organization's
+# staff belong here; which organization they act for comes from their OU, not
+# from this group.
+resource_type: group
+id: 01900000-0000-7000-8000-0000000000c4
+name: OpenNDX Members
+description: Members of this group get the OpenNDX_Member role via ThunderID's group-based role assignment
+ouHandle: default
+members:
+  - id: 01900000-0000-7000-8000-0000000000c2
+    type: user
+  - id: 01900000-0000-7000-8000-0000000000c3
+    type: user

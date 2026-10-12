@@ -41,9 +41,6 @@ func (h *Handler) CreateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only admin users should reach this point due to permission check above
-	// Admin users can create members for any user if IdpUserID is provided in the request
-
 	member, err := h.service.CreateMember(r.Context(), &req)
 	if err != nil {
 		// Log audit event for failure
@@ -78,8 +75,8 @@ func (h *Handler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user can update this member resource
-	// Admin can update any member, regular members can only update their own
-	if !user.IsAdmin() && existingMember.IdpUserID != user.IdpUserID {
+	// Admin can update any member, regular members can only update their own organization unit's
+	if !user.IsAdmin() && existingMember.OuID != user.OuID {
 		utils.RespondWithError(w, http.StatusForbidden, "Access denied to update this resource")
 		return
 	}
@@ -126,8 +123,8 @@ func (h *Handler) GetMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user can access this member resource
-	// Admin can access any member, regular members can only access their own
-	if !user.IsAdmin() && member.IdpUserID != user.IdpUserID {
+	// Admin can access any member, regular members can only access their own organization unit's
+	if !user.IsAdmin() && member.OuID != user.OuID {
 		utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
 		return
 	}
@@ -137,7 +134,7 @@ func (h *Handler) GetMember(w http.ResponseWriter, r *http.Request) {
 
 // GetAllMembers handles GET /api/v1/members
 func (h *Handler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
-	idpUserId := r.URL.Query().Get("idpUserId")
+	ouID := r.URL.Query().Get("ouId")
 
 	// Get authenticated user
 	user, err := auth.GetUserFromRequest(r)
@@ -147,25 +144,25 @@ func (h *Handler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check permission - admin can read all members, regular users need specific permission
-	var filteredIdpUserId *string
+	var filteredOuID *string
 
 	if user.HasPermission(auth.PermissionReadAllMembers) {
-		// Admin can use provided filters or see all
-		filteredIdpUserId = &idpUserId
-		// Note: The email query parameter is accepted but not used,
-		// since IdpUserID filtering is sufficient for uniqueness
+		// Admin can filter by organization unit or see all
+		filteredOuID = &ouID
 	} else if user.HasPermission(auth.PermissionReadMember) {
-		// Regular users can only see their own member record
-		// IdpUserID is unique, so no need to also filter by email
-		filteredIdpUserId = &user.IdpUserID
+		// Regular users can only see their own organization unit's member
+		if user.OuID == "" {
+			utils.RespondWithError(w, http.StatusForbidden, "User has no organization unit")
+			return
+		}
+		filteredOuID = &user.OuID
 	} else {
 		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return
 	}
 
 	// Pass request context to service for proper context propagation
-	// Since IdpUserID is unique, we don't need to pass email parameter
-	members, err := h.service.GetAllMembers(r.Context(), filteredIdpUserId, nil)
+	members, err := h.service.GetAllMembers(r.Context(), filteredOuID)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return

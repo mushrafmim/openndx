@@ -66,6 +66,9 @@ resources:
   - name: Admin
     handle: manage
     description: OpenNDX administrative access
+  - name: Member
+    handle: member
+    description: OpenNDX member organization access
 
 ---
 # Grants members of the OpenNDX Admins group (thunderid/bootstrap/users.yaml,
@@ -92,4 +95,22 @@ permissions:
       - manage
 assignments:
   - id: 01900000-0000-7000-8000-0000000000b2
+    type: group
+---
+# Grants members of the OpenNDX Members group (thunderid/bootstrap/users.yaml,
+# id ...c4) a `roles` claim value of "OpenNDX_Member". As with OpenNDX_Admin
+# above, the NAME is load-bearing: it must match auth.RoleMember in
+# internal/pb/auth/permissions.go exactly, or Portal Backend rejects the token
+# for having no valid role.
+resource_type: role
+id: 01900000-0000-7000-8000-0000000000c5
+name: OpenNDX_Member
+description: Grants OpenNDX Portal Backend member organization access
+ouHandle: default
+permissions:
+  - resourceServerId: 01900000-0000-7000-8000-0000000000b3
+    permissions:
+      - member
+assignments:
+  - id: 01900000-0000-7000-8000-0000000000c4
     type: group

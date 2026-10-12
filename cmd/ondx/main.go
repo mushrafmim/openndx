@@ -512,20 +512,18 @@ func runMembersCreate(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("members create", flag.ExitOnError)
 	fs.String("profile", profileName, "Named profile to use for defaults (env NDX_PROFILE; see 'ondx profile list')")
 	name := fs.String("name", "", "Member name (required)")
-	email := fs.String("email", "", "Member email (required)")
-	phone := fs.String("phone", "", "Member phone number (required)")
-	idpUserID := fs.String("idp-user-id", "", "Pre-provisioned IDP user ID (see note below)")
+	email := fs.String("email", "", "Organization contact email, e.g. a shared mailbox (optional)")
+	phone := fs.String("phone", "", "Organization contact phone number (optional)")
+	ouID := fs.String("ou-id", "", "ThunderID organization unit ID for this member (required)")
 	pbURL := fs.String("pb-url", firstNonEmpty(os.Getenv("NDX_PB_URL"), active.PBURL), "Portal Backend base URL (env NDX_PB_URL)")
 	credentialsPath := fs.String("credentials-path", "", "Path to the cached token (default ~/.openndx/credentials.json, or credentials-<profile>.json for a non-default profile)")
 	insecure := fs.Bool("insecure", active.Insecure, "Skip TLS certificate verification (local dev only, e.g. against ThunderID's self-signed cert)")
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "Usage of members create:")
 		fs.PrintDefaults()
-		fmt.Fprint(fs.Output(), "\nIf -idp-user-id is omitted, Portal Backend provisions the user in the IDP\n"+
-			"itself (create account + assign to the member group) - this only works\n"+
-			"against an Asgardeo (WSO2) IDP today, not ThunderID. Against ThunderID,\n"+
-			"create the user manually via its console first (and assign whatever\n"+
-			"group/role that person needs), then pass their user id here.\n")
+		fmt.Fprint(fs.Output(), "\nA member is an organization linked to a ThunderID organization unit.\n"+
+			"Create the organization unit and its users in ThunderID first, then pass\n"+
+			"the organization unit's id as -ou-id. Nothing is created in the IDP here.\n")
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -534,11 +532,8 @@ func runMembersCreate(ctx context.Context, args []string) error {
 	if *name == "" {
 		return fmt.Errorf("--name is required")
 	}
-	if *email == "" {
-		return fmt.Errorf("--email is required")
-	}
-	if *phone == "" {
-		return fmt.Errorf("--phone is required")
+	if *ouID == "" {
+		return fmt.Errorf("--ou-id is required")
 	}
 	if *pbURL == "" {
 		return fmt.Errorf("--pb-url is required (or set NDX_PB_URL, or configure it in a profile)")
@@ -548,9 +543,7 @@ func runMembersCreate(ctx context.Context, args []string) error {
 		Name:        *name,
 		Email:       *email,
 		PhoneNumber: *phone,
-	}
-	if *idpUserID != "" {
-		req.IdpUserID = idpUserID
+		OuID:        *ouID,
 	}
 
 	path := *credentialsPath
@@ -573,8 +566,13 @@ func runMembersCreate(ctx context.Context, args []string) error {
 	}
 
 	fmt.Printf("Created member %s (%s)\n", member.MemberID, member.Name)
-	fmt.Printf("Email:       %s\n", member.Email)
-	fmt.Printf("IdP User:    %s\n", member.IdpUserID)
+	fmt.Printf("OU:          %s\n", member.OuID)
+	if member.Email != "" {
+		fmt.Printf("Email:       %s\n", member.Email)
+	}
+	if member.PhoneNumber != "" {
+		fmt.Printf("Phone:       %s\n", member.PhoneNumber)
+	}
 	return nil
 }
 
