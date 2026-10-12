@@ -136,15 +136,17 @@ application and requests access to DRP's schema fields.
 
 ```bash
 ondx members create --name "Department of Registrar of Persons" --email drp@drp.gov.lk \
-  --phone "+1234567890" --ou-id <drpOuId> \
+  --phone "+1234567890" --ou-id 01900000-0000-7000-8000-0000000000c0 \
   --pb-url http://localhost:8083
 ```
 
 This prints a `memberId` — keep it, you'll need it as `<drpMemberId>` below.
 
 A member is an organization: `--ou-id` points at the ThunderID organization unit DRP's users
-belong to. Portal Backend doesn't create organization units or users, so create the organization
-unit (and its users) in ThunderID's console first and pass its ID here.
+belong to. Portal Backend doesn't create organization units or users. The local stack seeds a
+`drp` and a `die` organization unit (`thunderid/bootstrap/users.yaml`), each with a staff user
+(`drp-admin` / `die-admin`, password `1234`). For any other organization, create the organization
+unit and its users in ThunderID's console first and pass its ID here.
 
 ### 3.2 Register DRP's schema
 
@@ -165,7 +167,7 @@ the next steps. A field must be registered here before any application can be gr
 
 ```bash
 ondx members create --name "Department of Immigration and Emigration" --email die@die.gov.lk \
-  --phone "+1234567890" --ou-id <dieOuId> \
+  --phone "+1234567890" --ou-id 01900000-0000-7000-8000-0000000000c1 \
   --pb-url http://localhost:8083
 ```
 

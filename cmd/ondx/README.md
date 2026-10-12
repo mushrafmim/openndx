@@ -55,7 +55,7 @@ This walkthrough uses two members: **DRP** (Department of Registrar of Persons),
 
 ```bash
 ./ondx members create --name "Department of Registrar of Persons" --email drp@drp.gov.lk --phone "+1234567890" \
-  --ou-id <drpOuId> --pb-url http://localhost:8083
+  --ou-id 01900000-0000-7000-8000-0000000000c0 --pb-url http://localhost:8083
 # → prints memberId (drpMemberId)
 ```
 
@@ -78,7 +78,7 @@ A field must exist as a schema field before it can be granted to an application 
 
 ```bash
 ./ondx members create --name "Department of Immigration and Emigration" --email die@die.gov.lk --phone "+1234567890" \
-  --ou-id <dieOuId> --pb-url http://localhost:8083
+  --ou-id 01900000-0000-7000-8000-0000000000c1 --pb-url http://localhost:8083
 # → prints memberId (dieMemberId)
 ```
 
@@ -210,7 +210,7 @@ ThunderID can bind an access token's `aud` claim to a resource server requested 
 ### Limitations
 
 - **Application creation against ThunderID always needs the manual-onboarding flags.** Portal Backend's own outbound calls to the IDP (creating an OAuth2 client) only implement Asgardeo's (WSO2) admin API (`internal/pb/idp/idpfactory`) — not ThunderID's. Onboard the client manually via ThunderID's console first, then pass its IDs with `--idp-application-id --idp-client-id` to register it in Portal Backend without Portal Backend trying (and failing) to provision it itself.
-- **Members need their organization unit created in ThunderID first.** Portal Backend only stores the link (`--ou-id`); it does not create organization units or users.
+- **Members need their organization unit created in ThunderID first.** Portal Backend only stores the link (`--ou-id`); it does not create organization units or users. The local stack seeds `drp` (`01900000-0000-7000-8000-0000000000c0`) and `die` (`01900000-0000-7000-8000-0000000000c1`), with staff users `drp-admin` / `die-admin` (password `1234`) who get the `OpenNDX_Member` role and an `ouId` claim.
 - **No delete or update commands yet, and no `schemas list`/`get`.** Only `members create`, `schemas create`, `applications create`/`list`/`get`, and `policy update` are implemented.
 - **`ondx applications get`/`list` output for `--field` values always reflects the full current policy** — there's no "show me the diff" helper; compare manually before running `policy update`.
 

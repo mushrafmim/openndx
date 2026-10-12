@@ -166,9 +166,13 @@ inboundAuthConfig:
               - family_name
               - email
               - roles
+              # The user's organization unit. Portal Backend resolves a
+              # member user's organization from this claim (members.ou_id).
+              - ouId
         idToken:
           validityPeriod: 3600
       scopeClaims:
         roles:
           - roles
           - email
+          - ouId
