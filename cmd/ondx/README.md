@@ -8,8 +8,8 @@ A Go CLI for OpenNDX management operations — members, schemas, applications, a
 
 It works against any OIDC-compatible identity provider PB is configured to trust. Today that's usually one of two setups:
 
-- **ThunderID** (local dev) — the IDP this repo's `docker compose` stack runs locally. Since ThunderID's admin API isn't wired into Portal Backend's own outbound IDP calls yet (see [Limitations](#limitations)), member/application creation against ThunderID means onboarding the user/OAuth2 client manually via its console first, then registering it with `--idp-user-id` / `--idp-application-id --idp-client-id`.
-- **Asgardeo (WSO2)** — the identity provider Portal Backend's own outbound calls (creating IDP users/OAuth2 clients on your behalf) are actually implemented against. Against Asgardeo, member/application creation can provision the IDP side automatically — omit the `--idp-*` flags.
+- **ThunderID** (local dev) — the IDP this repo's `docker compose` stack runs locally. A member is an organization linked to a ThunderID organization unit: create the organization unit (and its users) in ThunderID first, then register the member with `--ou-id`. Since ThunderID's admin API isn't wired into Portal Backend's own outbound IDP calls yet (see [Limitations](#limitations)), application creation against ThunderID means onboarding the OAuth2 client manually via its console first, then registering it with `--idp-application-id --idp-client-id`.
+- **Asgardeo (WSO2)** — the identity provider Portal Backend's own outbound application calls (creating OAuth2 clients on your behalf) are actually implemented against. Against Asgardeo, application creation can provision the IDP side automatically — omit the `--idp-*` flags.
 
 ## Quick Start
 
@@ -55,7 +55,7 @@ This walkthrough uses two members: **DRP** (Department of Registrar of Persons),
 
 ```bash
 ./ondx members create --name "Department of Registrar of Persons" --email drp@drp.gov.lk --phone "+1234567890" \
-  --idp-user-id "01900000-0000-7000-8000-000000000031" --pb-url http://localhost:8083
+  --ou-id <drpOuId> --pb-url http://localhost:8083
 # → prints memberId (drpMemberId)
 ```
 
@@ -78,7 +78,7 @@ A field must exist as a schema field before it can be granted to an application 
 
 ```bash
 ./ondx members create --name "Department of Immigration and Emigration" --email die@die.gov.lk --phone "+1234567890" \
-  --idp-user-id "01900000-0000-7000-8000-000000000032" --pb-url http://localhost:8083
+  --ou-id <dieOuId> --pb-url http://localhost:8083
 # → prints memberId (dieMemberId)
 ```
 
@@ -124,12 +124,12 @@ Browser-based OAuth2 Authorization Code + PKCE login (RFC 8252). Caches the resu
 
 ### `ondx members create`
 
-Registers a member. `--name`, `--email`, `--phone` are always required.
+Registers a member organization. `--name`, `--email`, `--phone` and `--ou-id` are always required. Nothing is created in the IDP.
 
-| Flag                          | Description                                                                                                                                            |
-|-------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--idp-user-id`               | A user ID already provisioned in the IDP. If omitted, Portal Backend provisions the user itself — **Asgardeo only** (see [Limitations](#limitations)). |
-| `--pb-url` (env `NDX_PB_URL`) | Portal Backend base URL                                                                                                                                |
+| Flag                          | Description                                                                                                                       |
+|-------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| `--ou-id`                     | ID of the ThunderID organization unit this member maps to. Create it (and its users) in ThunderID first. Unique and not updatable. |
+| `--pb-url` (env `NDX_PB_URL`) | Portal Backend base URL                                                                                                           |
 
 ### `ondx schemas create`
 
@@ -207,7 +207,8 @@ ThunderID can bind an access token's `aud` claim to a resource server requested 
 
 ### Limitations
 
-- **Member/application creation against ThunderID always needs the manual-onboarding flags.** Portal Backend's own outbound calls to the IDP (creating a user, an OAuth2 client, and group/role assignments) only implement Asgardeo's (WSO2) admin API (`internal/pb/idp/idpfactory`) — not ThunderID's. Onboard the user/client manually via ThunderID's console first, then pass its ID(s) with `--idp-user-id` / `--idp-application-id --idp-client-id` to register it in Portal Backend without Portal Backend trying (and failing) to provision it itself.
+- **Application creation against ThunderID always needs the manual-onboarding flags.** Portal Backend's own outbound calls to the IDP (creating an OAuth2 client) only implement Asgardeo's (WSO2) admin API (`internal/pb/idp/idpfactory`) — not ThunderID's. Onboard the client manually via ThunderID's console first, then pass its IDs with `--idp-application-id --idp-client-id` to register it in Portal Backend without Portal Backend trying (and failing) to provision it itself.
+- **Members need their organization unit created in ThunderID first.** Portal Backend only stores the link (`--ou-id`); it does not create organization units or users.
 - **No delete or update commands yet, and no `schemas list`/`get`.** Only `members create`, `schemas create`, `applications create`/`list`/`get`, and `policy update` are implemented.
 - **`ondx applications get`/`list` output for `--field` values always reflects the full current policy** — there's no "show me the diff" helper; compare manually before running `policy update`.
 

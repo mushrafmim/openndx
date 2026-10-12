@@ -4,14 +4,9 @@ type CreateMemberRequest struct {
 	Name        string `json:"name" validate:"required"`
 	Email       string `json:"email" validate:"required,email"`
 	PhoneNumber string `json:"phoneNumber" validate:"required"`
-	// IdpUserID lets a caller register a member whose IDP account was already
-	// provisioned directly (e.g. manually via ThunderID's console, since
-	// idpfactory only implements Asgardeo's admin API today - see
-	// internal/pb/idp/idpfactory). When set, creation skips creating the user
-	// and assigning them to the member group in the IDP entirely, and uses
-	// this value as-is - the caller is responsible for that group/role
-	// assignment having already happened.
-	IdpUserID *string `json:"idpUserId,omitempty"`
+	// OuID is the ThunderID organization unit this member maps to. The OU and
+	// its users are managed in ThunderID; PB only stores the link.
+	OuID string `json:"ouId" validate:"required"`
 }
 
 type UpdateMemberRequest struct {
@@ -24,7 +19,7 @@ type MemberResponse struct {
 	Name        string `json:"name"`
 	Email       string `json:"email"`
 	PhoneNumber string `json:"phoneNumber"`
+	OuID        string `json:"ouId"`
 	CreatedAt   string `json:"createdAt"`
 	UpdatedAt   string `json:"updatedAt"`
-	IdpUserID   string `json:"idpUserId"`
 }

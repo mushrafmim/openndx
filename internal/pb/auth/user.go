@@ -13,6 +13,7 @@ import (
 // AuthenticatedUser represents the authenticated user context
 type AuthenticatedUser struct {
 	IdpUserID   string    `json:"idpUserId"`
+	OuID        string    `json:"ouId"`
 	Email       string    `json:"email"`
 	FirstName   string    `json:"firstName"`
 	LastName    string    `json:"lastName"`
@@ -208,6 +209,7 @@ func NewAuthenticatedUser(claims *UserClaims) (*AuthenticatedUser, error) {
 
 	return &AuthenticatedUser{
 		IdpUserID:   claims.IdpUserID,
+		OuID:        claims.OuID,
 		Email:       claims.Email,
 		FirstName:   claims.FirstName,
 		LastName:    claims.LastName,

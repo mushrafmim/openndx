@@ -290,16 +290,16 @@ services:
       - IDP_ISSUER=${IDP_PUBLIC_URL:-http://localhost:8090}
       - IDP_JWKS_URL=${IDP_JWKS_URL:-http://thunderid:8090/oauth2/jwks}
       - IDP_ADMIN_PORTAL_CLIENT_ID=${NDX_CLI_CLIENT_ID:-NDX_CLI}
-      # PB's own outbound calls to the IDP (creating application/user records —
-      # POST /applications, POST /members) go through idpfactory, which only
-      # implements the Asgardeo (WSO2) admin API today — see
+      # PB's own outbound calls to the IDP (creating application records —
+      # POST /applications) go through idpfactory, which only implements the
+      # Asgardeo (WSO2) admin API today — see
       # docs/DESIGN-esignet-citizen-authentication.md §3.1 and
       # internal/pb/idp/idpfactory/factory.go. These vars only need to be
-      # non-empty for PB to boot; against ThunderID those specific endpoints
-      # (create application/member) will still fail, since ThunderID's admin
-      # API isn't Asgardeo-shaped. Everything else (list/get applications,
-      # the policy-update endpoint the ondx CLI uses) doesn't call the IDP at
-      # all and works fine.
+      # non-empty for PB to boot; against ThunderID creating an application
+      # will still fail, since ThunderID's admin API isn't Asgardeo-shaped.
+      # Everything else (members, which only link to a ThunderID organization
+      # unit; list/get applications; the policy-update endpoint the ondx CLI
+      # uses) doesn't call the IDP at all and works fine.
       - IDP_BASE_URL=http://thunderid:8090
       - IDP_CLIENT_ID=${NDX_CLI_CLIENT_ID:-NDX_CLI}
       - IDP_CLIENT_SECRET=${IDP_CLIENT_SECRET:-1234}

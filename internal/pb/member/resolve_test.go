@@ -8,28 +8,26 @@ import (
 
 	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
-	"github.com/openndx/openndx-core/internal/pb/idp/idptest"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestResolveMemberID_Caching(t *testing.T) {
 	db := dbtest.SetupSQLiteDB(t, &Member{})
-	service := NewService(db, &idptest.Mock{})
+	service := NewService(db)
 	ctx := context.Background()
 
 	// Create a user
 	user := &auth.AuthenticatedUser{
 		IdpUserID: "test-user-id",
+		OuID:      "test-ou-id",
 		Email:     "test@example.com",
 	}
 
 	// Case 1: Member not found in DB
-	// Note: GetAllMembers uses DB, not IDP, so we don't need to mock IDP for this call
-
 	id, err := service.ResolveMemberID(ctx, user)
 	assert.Error(t, err)
 	assert.Empty(t, id)
-	// Service.getFilteredMembers returns error when record not found
+	// Service.getMembersByOuID returns error when record not found
 	assert.Contains(t, err.Error(), "failed to fetch member")
 
 	// Verify error is cached
@@ -47,16 +45,17 @@ func TestResolveMemberID_Caching(t *testing.T) {
 	// Clear cache
 	user = &auth.AuthenticatedUser{
 		IdpUserID: "test-user-id-2",
+		OuID:      "test-ou-id-2",
 		Email:     "test2@example.com",
 	}
 
-	// Create member in DB with the user's IdpUserID
+	// Create member in DB linked to the user's organization unit
 	m := Member{
 		MemberID:    "mem_" + fmt.Sprintf("%d", time.Now().UnixNano()),
 		Name:        "Test Member",
-		Email:       "test2@example.com",
+		Email:       "org@example.com",
 		PhoneNumber: "1234567890",
-		IdpUserID:   "test-user-id-2",
+		OuID:        "test-ou-id-2",
 	}
 	assert.NoError(t, db.Create(&m).Error)
 
@@ -73,4 +72,26 @@ func TestResolveMemberID_Caching(t *testing.T) {
 	id, err = service.ResolveMemberID(ctx, user)
 	assert.NoError(t, err)
 	assert.Equal(t, m.MemberID, id)
+}
+
+func TestResolveMemberID_NoOuClaim(t *testing.T) {
+	db := dbtest.SetupSQLiteDB(t, &Member{})
+	service := NewService(db)
+
+	// A member exists, but a user without an OU claim must not resolve to it
+	assert.NoError(t, db.Create(&Member{
+		MemberID:    "mem_1",
+		Name:        "Test Member",
+		Email:       "org@example.com",
+		PhoneNumber: "1234567890",
+		OuID:        "test-ou-id",
+	}).Error)
+
+	user := &auth.AuthenticatedUser{IdpUserID: "test-user-id"}
+
+	id, err := service.ResolveMemberID(context.Background(), user)
+	assert.Error(t, err)
+	assert.Empty(t, id)
+	assert.Contains(t, err.Error(), "no organization unit")
+	assert.Equal(t, err, user.GetCachedMemberIDError())
 }

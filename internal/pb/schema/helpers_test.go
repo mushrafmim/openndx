@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
-	"github.com/openndx/openndx-core/internal/pb/idp/idptest"
 	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/stretchr/testify/assert"
@@ -34,7 +33,7 @@ func setupSQLiteTestDB(t *testing.T) *gorm.DB {
 // unreachable address, so PDP-dependent operations fail.
 func newTestHandler(db *gorm.DB) *Handler {
 	pdpClient := policy.NewClient("http://localhost:8082")
-	return NewHandler(NewService(db, pdpClient), member.NewService(db, &idptest.Mock{}))
+	return NewHandler(NewService(db, pdpClient), member.NewService(db))
 }
 
 // testHandlerEnv bundles a schema Handler with its test database
@@ -57,7 +56,7 @@ func createTestMember(t *testing.T, db *gorm.DB, email string) string {
 		Name:        "Test Member",
 		Email:       email,
 		PhoneNumber: "1234567890",
-		IdpUserID:   "idp-user-" + fmt.Sprintf("%d", time.Now().UnixNano()),
+		OuID:        "ou-" + fmt.Sprintf("%d", time.Now().UnixNano()),
 	}
 	err := db.Create(&m).Error
 	assert.NoError(t, err)

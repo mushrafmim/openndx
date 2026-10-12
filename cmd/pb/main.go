@@ -47,6 +47,10 @@ func main() {
 	}
 
 	if os.Getenv("RUN_MIGRATION") == "true" {
+		if err := member.DropLegacyColumns(gormDB); err != nil {
+			slog.Error("Failed to run database migrations", "error", err)
+			os.Exit(1)
+		}
 		err = database.AutoMigrate(gormDB,
 			&member.Member{},
 			&schema.Schema{},
@@ -76,7 +80,7 @@ func main() {
 	}
 
 	// Initialize services and handlers
-	memberService := member.NewService(gormDB, idpProvider)
+	memberService := member.NewService(gormDB)
 	memberHandler := member.NewHandler(memberService)
 
 	schemaService := schema.NewService(gormDB, pdpClient)

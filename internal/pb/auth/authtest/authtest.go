@@ -16,6 +16,7 @@ import (
 // For testing authentication failures (no user in context), use NewUnauthenticatedRequest instead.
 type TestUser struct {
 	IdpUserID string
+	OuID      string
 	Email     string
 	Roles     []auth.Role
 	User      *auth.AuthenticatedUser
@@ -26,6 +27,7 @@ var (
 	// AdminUser has full admin privileges
 	AdminUser = TestUser{
 		IdpUserID: "admin-test-user-123",
+		OuID:      "admin-test-ou-123",
 		Email:     "admin@test.com",
 		Roles:     []auth.Role{auth.RoleAdmin},
 	}
@@ -33,6 +35,7 @@ var (
 	// MemberUser has standard member privileges
 	MemberUser = TestUser{
 		IdpUserID: "member-test-user-456",
+		OuID:      "member-test-ou-456",
 		Email:     "member@test.com",
 		Roles:     []auth.Role{auth.RoleMember},
 	}
@@ -40,6 +43,7 @@ var (
 	// SystemUser has system-level read access
 	SystemUser = TestUser{
 		IdpUserID: "system-test-user-789",
+		OuID:      "system-test-ou-789",
 		Email:     "system@test.com",
 		Roles:     []auth.Role{auth.RoleSystem},
 	}
@@ -47,13 +51,13 @@ var (
 
 // init initializes the test users with their AuthenticatedUser instances
 func init() {
-	AdminUser.User = createTestUser(AdminUser.IdpUserID, AdminUser.Email, AdminUser.Roles)
-	MemberUser.User = createTestUser(MemberUser.IdpUserID, MemberUser.Email, MemberUser.Roles)
-	SystemUser.User = createTestUser(SystemUser.IdpUserID, SystemUser.Email, SystemUser.Roles)
+	AdminUser.User = createTestUser(AdminUser.IdpUserID, AdminUser.Email, AdminUser.OuID, AdminUser.Roles)
+	MemberUser.User = createTestUser(MemberUser.IdpUserID, MemberUser.Email, MemberUser.OuID, MemberUser.Roles)
+	SystemUser.User = createTestUser(SystemUser.IdpUserID, SystemUser.Email, SystemUser.OuID, SystemUser.Roles)
 }
 
 // createTestUser creates an AuthenticatedUser from test data
-func createTestUser(idpUserID, email string, roles []auth.Role) *auth.AuthenticatedUser {
+func createTestUser(idpUserID, email, ouID string, roles []auth.Role) *auth.AuthenticatedUser {
 	// Convert roles to string slice for UserClaims
 	roleStrings := make([]string, len(roles))
 	for i, role := range roles {
@@ -62,6 +66,7 @@ func createTestUser(idpUserID, email string, roles []auth.Role) *auth.Authentica
 
 	claims := &auth.UserClaims{
 		IdpUserID: idpUserID,
+		OuID:      ouID,
 		Email:     email,
 		FirstName: "Test",
 		LastName:  "User",
@@ -126,11 +131,13 @@ func NewUnauthenticatedRequest(method, url string, body io.Reader) *http.Request
 	return req
 }
 
-// CreateCustomTestUser creates a test user with custom roles and permissions
-func CreateCustomTestUser(idpUserID, email string, roles []auth.Role) TestUser {
-	user := createTestUser(idpUserID, email, roles)
+// CreateCustomTestUser creates a test user in the given organization unit with
+// custom roles and permissions
+func CreateCustomTestUser(idpUserID, email, ouID string, roles []auth.Role) TestUser {
+	user := createTestUser(idpUserID, email, ouID, roles)
 	return TestUser{
 		IdpUserID: idpUserID,
+		OuID:      ouID,
 		Email:     email,
 		Roles:     roles,
 		User:      user,

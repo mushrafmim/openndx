@@ -70,3 +70,15 @@ func TestFlexibleStringSlice_ToStringSlice(t *testing.T) {
 	f := FlexibleStringSlice{"a", "b"}
 	assert.Equal(t, []string{"a", "b"}, f.ToStringSlice())
 }
+
+func TestUserClaims_OuID(t *testing.T) {
+	payload := `{"sub":"user-1","ouId":"ou-123","roles":["OpenNDX_Member"]}`
+
+	var claims UserClaims
+	assert.NoError(t, json.Unmarshal([]byte(payload), &claims))
+	assert.Equal(t, "ou-123", claims.OuID)
+
+	user, err := NewAuthenticatedUser(&claims)
+	assert.NoError(t, err)
+	assert.Equal(t, "ou-123", user.OuID)
+}

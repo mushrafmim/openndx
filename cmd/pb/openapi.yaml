@@ -45,24 +45,19 @@ paths:
   /api/v1/members:
     get:
       summary: List members
-      description: Retrieve members with optional filters
+      description: |
+        Retrieve members. Admins see all members and can filter by `ouId`;
+        other users only see the member linked to their token's organization unit.
       operationId: getAllMembers
       tags:
         - Members
       parameters:
-        - name: idpUserId
+        - name: ouId
           in: query
           required: false
           schema:
             type: string
-          description: Filter by IDP user ID
-        - name: email
-          in: query
-          required: false
-          schema:
-            type: string
-            format: email
-          description: Filter by email address
+          description: Filter by ThunderID organization unit ID (admins only)
       responses:
         '200':
           description: List of members
@@ -1005,12 +1000,13 @@ components:
               format: email
             phoneNumber:
               type: string
-            idpUserId:
+            ouId:
               type: string
+              description: ThunderID organization unit this member organization maps to
 
     CreateMemberRequest:
       type: object
-      required: [name, email, phoneNumber]
+      required: [name, email, phoneNumber, ouId]
       properties:
         name:
           type: string
@@ -1019,16 +1015,13 @@ components:
           format: email
         phoneNumber:
           type: string
-        idpUserId:
+        ouId:
           type: string
           description: |
-            Registers a member whose IDP account was already provisioned
-            directly (e.g. manually via the identity provider's own console,
-            for providers idpfactory doesn't yet support automatic account
-            creation for). When set, creation skips creating the user and
-            assigning them to the member group in the IDP, using this value
-            as-is - the caller is responsible for that group/role assignment
-            having already happened.
+            ID of the ThunderID organization unit this member maps to. The
+            organization unit and its users are managed in ThunderID; nothing
+            is provisioned in the IDP when a member is created. Must be unique
+            across members and cannot be changed afterwards.
 
     UpdateMemberRequest:
       type: object

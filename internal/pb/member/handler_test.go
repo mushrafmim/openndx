@@ -2,7 +2,6 @@ package member
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,52 +11,42 @@ import (
 
 	"github.com/openndx/openndx-core/internal/pb/auth/authtest"
 	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
-	"github.com/openndx/openndx-core/internal/pb/idp"
-	"github.com/openndx/openndx-core/internal/pb/idp/idptest"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
-// newTestHandler creates a member Handler backed by an in-memory SQLite
-// database and a fresh mock IDP.
-func newTestHandler(t *testing.T) (*Handler, *idptest.Mock) {
+// newTestHandler creates a member Handler backed by an in-memory SQLite database.
+func newTestHandler(t *testing.T) (*Handler, *gorm.DB) {
 	db := dbtest.SetupSQLiteDB(t, &Member{})
-	idpMock := &idptest.Mock{}
-	return NewHandler(NewService(db, idpMock)), idpMock
+	return NewHandler(NewService(db)), db
 }
 
-// setupMockIDPForMemberCreation configures the mock IDP to successfully create a member
-func setupMockIDPForMemberCreation(idpMock *idptest.Mock, email string, userID string) {
-	groupId := "group-123"
-	createdUser := &idp.UserInfo{
-		Id:          userID,
-		Email:       email,
-		FirstName:   "Test",
-		LastName:    "User",
+// createTestMember stores a member linked to the given organization unit and returns its ID
+func createTestMember(t *testing.T, db *gorm.DB, ouID string) string {
+	m := Member{
+		MemberID:    "mem_" + fmt.Sprintf("%d", time.Now().UnixNano()),
+		Name:        "Test Member",
+		Email:       fmt.Sprintf("org-%d@example.com", time.Now().UnixNano()),
 		PhoneNumber: "1234567890",
+		OuID:        ouID,
 	}
-	idpMock.CreateUserFunc = func(ctx context.Context, user *idp.User) (*idp.UserInfo, error) {
-		return createdUser, nil
-	}
-	idpMock.AddMemberToGroupByGroupNameFunc = func(ctx context.Context, groupName string, member *idp.GroupMember) (*string, error) {
-		return &groupId, nil
-	}
+	require.NoError(t, db.Create(&m).Error)
+	return m.MemberID
 }
 
 // TestMemberEndpoints tests all member-related endpoints
 func TestMemberEndpoints(t *testing.T) {
-	handler, idpMock := newTestHandler(t)
+	handler, _ := newTestHandler(t)
 
 	t.Run("POST /api/v1/members - CreateMember", func(t *testing.T) {
 		req := CreateMemberRequest{
 			Name:        "Test Member",
 			Email:       fmt.Sprintf("test-%d@example.com", time.Now().UnixNano()),
 			PhoneNumber: "1234567890",
+			OuID:        fmt.Sprintf("ou-%d", time.Now().UnixNano()),
 		}
-
-		// Setup mock IDP for member creation
-		userID := "idp-user-" + fmt.Sprintf("%d", time.Now().UnixNano())
-		setupMockIDPForMemberCreation(idpMock, req.Email, userID)
 
 		reqBody, _ := json.Marshal(req)
 		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBuffer(reqBody))
@@ -73,7 +62,25 @@ func TestMemberEndpoints(t *testing.T) {
 		assert.Equal(t, req.Name, response.Name)
 		assert.Equal(t, req.Email, response.Email)
 		assert.Equal(t, req.PhoneNumber, response.PhoneNumber)
+		assert.Equal(t, req.OuID, response.OuID)
 		assert.NotEmpty(t, response.MemberID)
+	})
+
+	t.Run("POST /api/v1/members - MissingOuID", func(t *testing.T) {
+		req := CreateMemberRequest{
+			Name:        "Test Member",
+			Email:       fmt.Sprintf("test-%d@example.com", time.Now().UnixNano()),
+			PhoneNumber: "1234567890",
+		}
+
+		reqBody, _ := json.Marshal(req)
+		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBuffer(reqBody))
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		handler.CreateMember(w, httpReq)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	t.Run("POST /api/v1/members - Invalid JSON", func(t *testing.T) {
@@ -123,15 +130,6 @@ func TestMemberEndpoints(t *testing.T) {
 		assert.GreaterOrEqual(t, response.Count, 0)
 	})
 
-	t.Run("GET /api/v1/members - WithQueryParams", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/members?email=test@example.com", nil)
-		w := httptest.NewRecorder()
-		handler.GetAllMembers(w, httpReq)
-
-		// May return 500 if query fails, but should handle gracefully
-		assert.Contains(t, []int{http.StatusOK, http.StatusInternalServerError}, w.Code)
-	})
-
 	t.Run("GET /api/v1/members/:memberId - NotFound", func(t *testing.T) {
 		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/members/non-existent-id", nil)
 		httpReq.SetPathValue("memberId", "non-existent-id")
@@ -139,5 +137,87 @@ func TestMemberEndpoints(t *testing.T) {
 		handler.GetMember(w, httpReq)
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+// TestMemberEndpoints_OrganizationUnitOwnership tests that non-admin users can
+// only access the member linked to their own organization unit
+func TestMemberEndpoints_OrganizationUnitOwnership(t *testing.T) {
+	handler, db := newTestHandler(t)
+	ownMemberID := createTestMember(t, db, authtest.MemberUser.OuID)
+	otherMemberID := createTestMember(t, db, "other-ou")
+
+	t.Run("GetMember - own organization unit", func(t *testing.T) {
+		httpReq := authtest.NewMemberRequest(http.MethodGet, "/api/v1/members/"+ownMemberID, nil)
+		httpReq.SetPathValue("memberId", ownMemberID)
+		w := httptest.NewRecorder()
+		handler.GetMember(w, httpReq)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("GetMember - other organization unit", func(t *testing.T) {
+		httpReq := authtest.NewMemberRequest(http.MethodGet, "/api/v1/members/"+otherMemberID, nil)
+		httpReq.SetPathValue("memberId", otherMemberID)
+		w := httptest.NewRecorder()
+		handler.GetMember(w, httpReq)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("UpdateMember - own organization unit", func(t *testing.T) {
+		name := "Renamed Org"
+		reqBody, _ := json.Marshal(UpdateMemberRequest{Name: &name})
+		httpReq := authtest.NewMemberRequest(http.MethodPut, "/api/v1/members/"+ownMemberID, bytes.NewBuffer(reqBody))
+		httpReq.SetPathValue("memberId", ownMemberID)
+		w := httptest.NewRecorder()
+		handler.UpdateMember(w, httpReq)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var response MemberResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		assert.Equal(t, "Renamed Org", response.Name)
+	})
+
+	t.Run("UpdateMember - other organization unit", func(t *testing.T) {
+		name := "Hijacked Org"
+		reqBody, _ := json.Marshal(UpdateMemberRequest{Name: &name})
+		httpReq := authtest.NewMemberRequest(http.MethodPut, "/api/v1/members/"+otherMemberID, bytes.NewBuffer(reqBody))
+		httpReq.SetPathValue("memberId", otherMemberID)
+		w := httptest.NewRecorder()
+		handler.UpdateMember(w, httpReq)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("GetAllMembers - member sees only own organization unit", func(t *testing.T) {
+		// The ouId query param is ignored for non-admin users
+		httpReq := authtest.NewMemberRequest(http.MethodGet, "/api/v1/members?ouId=other-ou", nil)
+		w := httptest.NewRecorder()
+		handler.GetAllMembers(w, httpReq)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var response struct {
+			Items []MemberResponse `json:"items"`
+			Count int              `json:"count"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		require.Len(t, response.Items, 1)
+		assert.Equal(t, ownMemberID, response.Items[0].MemberID)
+	})
+
+	t.Run("GetAllMembers - admin filters by ouId", func(t *testing.T) {
+		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/members?ouId=other-ou", nil)
+		w := httptest.NewRecorder()
+		handler.GetAllMembers(w, httpReq)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var response struct {
+			Items []MemberResponse `json:"items"`
+			Count int              `json:"count"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		require.Len(t, response.Items, 1)
+		assert.Equal(t, otherMemberID, response.Items[0].MemberID)
 	})
 }

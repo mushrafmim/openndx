@@ -16,7 +16,8 @@ type UserClaims struct {
 	PhoneNumber string              `json:"phone_number"`
 	Roles       FlexibleStringSlice `json:"roles"`
 	Groups      FlexibleStringSlice `json:"groups"`
-	IdpUserID   string              `json:"sub"` // Subject is typically the user ID from IdP
+	IdpUserID   string              `json:"sub"`  // Subject is typically the user ID from IdP
+	OuID        string              `json:"ouId"` // ThunderID organization unit the user belongs to
 	// Standard JWT claims - using int64 for Unix timestamps
 	Issuer    string              `json:"iss"`
 	Audience  FlexibleStringSlice `json:"aud"`

@@ -136,15 +136,15 @@ application and requests access to DRP's schema fields.
 
 ```bash
 ondx members create --name "Department of Registrar of Persons" --email drp@drp.gov.lk \
-  --phone "+1234567890" --idp-user-id "01900000-0000-7000-8000-000000000031" \
+  --phone "+1234567890" --ou-id <drpOuId> \
   --pb-url http://localhost:8083
 ```
 
 This prints a `memberId` — keep it, you'll need it as `<drpMemberId>` below.
 
-`--idp-user-id` points at a user already provisioned in ThunderID — Portal Backend can't provision
-users in ThunderID itself yet, so create the user in ThunderID's console first and pass its ID
-here.
+A member is an organization: `--ou-id` points at the ThunderID organization unit DRP's users
+belong to. Portal Backend doesn't create organization units or users, so create the organization
+unit (and its users) in ThunderID's console first and pass its ID here.
 
 ### 3.2 Register DRP's schema
 
@@ -165,7 +165,7 @@ the next steps. A field must be registered here before any application can be gr
 
 ```bash
 ondx members create --name "Department of Immigration and Emigration" --email die@die.gov.lk \
-  --phone "+1234567890" --idp-user-id "01900000-0000-7000-8000-000000000032" \
+  --phone "+1234567890" --ou-id <dieOuId> \
   --pb-url http://localhost:8083
 ```
 
@@ -252,9 +252,11 @@ complete detail (including env var equivalents for every flag).
 - **`ondx login` rejects your `--callback-port`** — ThunderID's `NDX_CLI` client has a redirect
   URI pinned to `http://127.0.0.1:8765/callback`; `ondx` enforces port `8765` for that client
   instead of attempting a login the IDP would reject anyway.
-- **Member/application creation fails without `--idp-*` flags** — Portal Backend can't provision
-  users or OAuth2 clients in ThunderID automatically yet. Provision the user/client manually in
-  ThunderID's console first, then pass `--idp-user-id` / `--idp-application-id --idp-client-id`.
+- **Application creation fails without `--idp-*` flags** — Portal Backend can't provision
+  OAuth2 clients in ThunderID automatically yet. Provision the client manually in ThunderID's
+  console first, then pass `--idp-application-id --idp-client-id`.
+- **Member creation fails without `--ou-id`** — create the member's organization unit in
+  ThunderID's console first and pass its ID.
 
 For anything not covered here — full flag tables, the TLS/callback-port/ThunderID-resource-binding
 notes, and current limitations — see [`cmd/ondx/README.md`](../cmd/ondx/README.md).
