@@ -2,6 +2,7 @@ package member
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -10,6 +11,10 @@ import (
 	"github.com/openndx/openndx-core/internal/pb/auth"
 	"gorm.io/gorm"
 )
+
+// ErrMemberAlreadyExists is returned when a member is already linked to the
+// requested organization unit
+var ErrMemberAlreadyExists = errors.New("a member is already linked to this organization unit")
 
 // Service handles Member-related operations
 type Service struct {
@@ -37,6 +42,9 @@ func (s *Service) CreateMember(ctx context.Context, req *CreateMemberRequest) (*
 		OuID:        req.OuID,
 	}
 	if err := s.db.Create(&member).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return nil, ErrMemberAlreadyExists
+		}
 		return nil, fmt.Errorf("failed to create member in database: %w", err)
 	}
 
@@ -92,11 +100,15 @@ func (s *Service) GetAllMembers(ctx context.Context, ouID *string) ([]MemberResp
 	return s.getAllMembers(ctx)
 }
 
-// getMembersByOuID retrieves the member linked to the given organization unit
+// getMembersByOuID retrieves the member linked to the given organization
+// unit, or an empty list if there is none
 func (s *Service) getMembersByOuID(ctx context.Context, ouID string) ([]MemberResponse, error) {
 	var member Member
 	err := s.db.Where("ou_id = ?", ouID).First(&member).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return []MemberResponse{}, nil
+		}
 		return nil, fmt.Errorf("failed to fetch member: %w", err)
 	}
 

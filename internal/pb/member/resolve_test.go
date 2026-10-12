@@ -27,8 +27,8 @@ func TestResolveMemberID_Caching(t *testing.T) {
 	id, err := service.ResolveMemberID(ctx, user)
 	assert.Error(t, err)
 	assert.Empty(t, id)
-	// Service.getMembersByOuID returns error when record not found
-	assert.Contains(t, err.Error(), "failed to fetch member")
+	// No member is linked to the user's organization unit
+	assert.Contains(t, err.Error(), "user member record not found")
 
 	// Verify error is cached
 	errCached := user.GetCachedMemberIDError()

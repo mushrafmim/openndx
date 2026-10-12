@@ -66,6 +66,23 @@ func TestMemberEndpoints(t *testing.T) {
 		assert.NotEmpty(t, response.MemberID)
 	})
 
+	t.Run("POST /api/v1/members - DuplicateOuID", func(t *testing.T) {
+		ouID := fmt.Sprintf("ou-%d", time.Now().UnixNano())
+		for i, wantCode := range []int{http.StatusCreated, http.StatusBadRequest} {
+			reqBody, _ := json.Marshal(CreateMemberRequest{Name: fmt.Sprintf("Org %d", i), OuID: ouID})
+			httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBuffer(reqBody))
+			w := httptest.NewRecorder()
+			handler.CreateMember(w, httpReq)
+
+			assert.Equal(t, wantCode, w.Code)
+			if wantCode == http.StatusBadRequest {
+				// The fixed public message, not the database driver error
+				assert.Contains(t, w.Body.String(), ErrMemberAlreadyExists.Error())
+				assert.NotContains(t, w.Body.String(), "UNIQUE")
+			}
+		}
+	})
+
 	t.Run("POST /api/v1/members - MissingOuID", func(t *testing.T) {
 		req := CreateMemberRequest{
 			Name:        "Test Member",
@@ -204,6 +221,18 @@ func TestMemberEndpoints_OrganizationUnitOwnership(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 		require.Len(t, response.Items, 1)
 		assert.Equal(t, ownMemberID, response.Items[0].MemberID)
+	})
+
+	t.Run("GetAllMembers - admin filters by unknown ouId", func(t *testing.T) {
+		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/members?ouId=unknown-ou", nil)
+		w := httptest.NewRecorder()
+		handler.GetAllMembers(w, httpReq)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var response kernel.CollectionResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		assert.Equal(t, 0, response.Count)
+		assert.Equal(t, []any{}, response.Items)
 	})
 
 	t.Run("GetAllMembers - admin filters by ouId", func(t *testing.T) {

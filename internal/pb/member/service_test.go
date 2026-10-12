@@ -109,9 +109,8 @@ func TestCreateMember_DuplicateOuID(t *testing.T) {
 		OuID:        "ou-acme",
 	})
 
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrMemberAlreadyExists)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "failed to create member in database")
 }
 
 func TestCreateMember_DatabaseError(t *testing.T) {
@@ -234,7 +233,8 @@ func TestGetAllMembers(t *testing.T) {
 	t.Run("UnknownOuID", func(t *testing.T) {
 		ouID := "ou-unknown"
 		result, err := service.GetAllMembers(ctx, &ouID)
-		assert.Error(t, err)
-		assert.Nil(t, result)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Empty(t, result)
 	})
 }
