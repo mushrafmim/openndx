@@ -124,11 +124,13 @@ Browser-based OAuth2 Authorization Code + PKCE login (RFC 8252). Caches the resu
 
 ### `ondx members create`
 
-Registers a member organization. `--name`, `--email`, `--phone` and `--ou-id` are always required. Nothing is created in the IDP.
+Registers a member organization. `--name` and `--ou-id` are always required. Nothing is created in the IDP.
 
 | Flag                          | Description                                                                                                                       |
 |-------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | `--ou-id`                     | ID of the ThunderID organization unit this member maps to. Create it (and its users) in ThunderID first. Unique and not updatable. |
+| `--email`                     | Optional organization contact email, e.g. a shared mailbox rather than a person's address. Not unique.                            |
+| `--phone`                     | Optional organization contact phone number                                                                                        |
 | `--pb-url` (env `NDX_PB_URL`) | Portal Backend base URL                                                                                                           |
 
 ### `ondx schemas create`

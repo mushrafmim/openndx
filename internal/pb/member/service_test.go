@@ -41,6 +41,35 @@ func TestCreateMember_Success(t *testing.T) {
 	assert.Equal(t, "ou-acme", stored.OuID)
 }
 
+func TestCreateMember_WithoutContactDetails(t *testing.T) {
+	service, _ := newSQLiteService(t)
+
+	result, err := service.CreateMember(context.Background(), &CreateMemberRequest{
+		Name: "Acme Org",
+		OuID: "ou-acme",
+	})
+
+	require.NoError(t, err)
+	assert.Empty(t, result.Email)
+	assert.Empty(t, result.PhoneNumber)
+	assert.Equal(t, "ou-acme", result.OuID)
+}
+
+func TestCreateMember_SharedContactEmail(t *testing.T) {
+	service, _ := newSQLiteService(t)
+	ctx := context.Background()
+
+	// Two departments can share one contact mailbox
+	for _, ouID := range []string{"ou-dept-a", "ou-dept-b"} {
+		_, err := service.CreateMember(ctx, &CreateMemberRequest{
+			Name:  "Department " + ouID,
+			Email: "it@ministry.example",
+			OuID:  ouID,
+		})
+		require.NoError(t, err)
+	}
+}
+
 func TestCreateMember_EmptyOuID(t *testing.T) {
 	service, db := newSQLiteService(t)
 
@@ -120,14 +149,17 @@ func TestUpdateMember_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	newName := "Acme Corporation"
+	newEmail := "data-exchange@acme.example"
 	newPhone := "+1111111111"
 	result, err := service.UpdateMember(ctx, created.MemberID, &UpdateMemberRequest{
 		Name:        &newName,
+		Email:       &newEmail,
 		PhoneNumber: &newPhone,
 	})
 
 	require.NoError(t, err)
 	assert.Equal(t, "Acme Corporation", result.Name)
+	assert.Equal(t, "data-exchange@acme.example", result.Email)
 	assert.Equal(t, "+1111111111", result.PhoneNumber)
 	// The OU link is not updatable
 	assert.Equal(t, "ou-acme", result.OuID)

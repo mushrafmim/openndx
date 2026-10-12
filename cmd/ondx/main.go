@@ -512,8 +512,8 @@ func runMembersCreate(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("members create", flag.ExitOnError)
 	fs.String("profile", profileName, "Named profile to use for defaults (env NDX_PROFILE; see 'ondx profile list')")
 	name := fs.String("name", "", "Member name (required)")
-	email := fs.String("email", "", "Member email (required)")
-	phone := fs.String("phone", "", "Member phone number (required)")
+	email := fs.String("email", "", "Organization contact email, e.g. a shared mailbox (optional)")
+	phone := fs.String("phone", "", "Organization contact phone number (optional)")
 	ouID := fs.String("ou-id", "", "ThunderID organization unit ID for this member (required)")
 	pbURL := fs.String("pb-url", firstNonEmpty(os.Getenv("NDX_PB_URL"), active.PBURL), "Portal Backend base URL (env NDX_PB_URL)")
 	credentialsPath := fs.String("credentials-path", "", "Path to the cached token (default ~/.openndx/credentials.json, or credentials-<profile>.json for a non-default profile)")
@@ -531,12 +531,6 @@ func runMembersCreate(ctx context.Context, args []string) error {
 
 	if *name == "" {
 		return fmt.Errorf("--name is required")
-	}
-	if *email == "" {
-		return fmt.Errorf("--email is required")
-	}
-	if *phone == "" {
-		return fmt.Errorf("--phone is required")
 	}
 	if *ouID == "" {
 		return fmt.Errorf("--ou-id is required")
@@ -572,8 +566,13 @@ func runMembersCreate(ctx context.Context, args []string) error {
 	}
 
 	fmt.Printf("Created member %s (%s)\n", member.MemberID, member.Name)
-	fmt.Printf("Email:       %s\n", member.Email)
 	fmt.Printf("OU:          %s\n", member.OuID)
+	if member.Email != "" {
+		fmt.Printf("Email:       %s\n", member.Email)
+	}
+	if member.PhoneNumber != "" {
+		fmt.Printf("Phone:       %s\n", member.PhoneNumber)
+	}
 	return nil
 }
 

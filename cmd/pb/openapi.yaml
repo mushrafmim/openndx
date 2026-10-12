@@ -998,23 +998,27 @@ components:
             email:
               type: string
               format: email
+              description: Optional organization contact email (omitted when unset)
             phoneNumber:
               type: string
+              description: Optional organization contact phone number (omitted when unset)
             ouId:
               type: string
               description: ThunderID organization unit this member organization maps to
 
     CreateMemberRequest:
       type: object
-      required: [name, email, phoneNumber, ouId]
+      required: [name, ouId]
       properties:
         name:
           type: string
         email:
           type: string
           format: email
+          description: Optional contact email for the organization, e.g. a shared mailbox. Not unique.
         phoneNumber:
           type: string
+          description: Optional contact phone number for the organization
         ouId:
           type: string
           description: |
@@ -1028,6 +1032,9 @@ components:
       properties:
         name:
           type: string
+        email:
+          type: string
+          format: email
         phoneNumber:
           type: string
     BaseModel:

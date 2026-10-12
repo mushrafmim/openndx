@@ -55,6 +55,9 @@ func (s *Service) UpdateMember(ctx context.Context, memberID string, req *Update
 	if req.Name != nil {
 		member.Name = *req.Name
 	}
+	if req.Email != nil {
+		member.Email = *req.Email
+	}
 	if req.PhoneNumber != nil {
 		member.PhoneNumber = *req.PhoneNumber
 	}

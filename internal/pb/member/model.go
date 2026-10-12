@@ -5,12 +5,14 @@ package member
 import "github.com/openndx/openndx-core/internal/pb/kernel"
 
 // Member represents a member organization. Its users live in the IdP, under
-// the ThunderID organization unit identified by OuID.
+// the ThunderID organization unit identified by OuID. Email and PhoneNumber
+// are optional, shared contact channels for the organization (e.g. a team
+// mailbox), not a person's details.
 type Member struct {
 	MemberID    string `gorm:"primarykey;column:member_id" json:"memberId"`
 	Name        string `gorm:"column:name;not null" json:"name"`
-	Email       string `gorm:"column:email;not null;unique" json:"email"`
-	PhoneNumber string `gorm:"column:phone_number;not null" json:"phoneNumber"`
+	Email       string `gorm:"column:email" json:"email,omitempty"`
+	PhoneNumber string `gorm:"column:phone_number" json:"phoneNumber,omitempty"`
 	OuID        string `gorm:"column:ou_id;not null;unique" json:"ouId"`
 	kernel.BaseModel
 }
