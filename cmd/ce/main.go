@@ -1,21 +1,25 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
-	"github.com/openndx/openndx-core/internal/ce/config"
-	"github.com/openndx/openndx-core/internal/monitoring"
-	"github.com/openndx/openndx-core/internal/utils"
-
-	// V1 API imports
+	coredb "github.com/OpenNSW/core/database"
+	_ "github.com/jackc/pgx/v5/stdlib" // Register the PostgreSQL driver for coredb.New.
 	"github.com/openndx/openndx-core/internal/ce/auth"
+	"github.com/openndx/openndx-core/internal/ce/config"
 	"github.com/openndx/openndx-core/internal/ce/database"
 	"github.com/openndx/openndx-core/internal/ce/handlers"
 	"github.com/openndx/openndx-core/internal/ce/router"
 	"github.com/openndx/openndx-core/internal/ce/services"
+	"github.com/openndx/openndx-core/internal/monitoring"
+	"github.com/openndx/openndx-core/internal/utils"
 )
 
 // Build information - set during build
@@ -26,8 +30,21 @@ var (
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("Consent engine failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	// Load configuration using flags
-	cfg := config.LoadConfig("consent-engine")
+	cfg, err := config.LoadConfig("consent-engine")
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load configuration: %w", err)
+	}
 
 	// Setup logging
 	utils.SetupLogging(cfg.Logging.Format, cfg.Logging.Level)
@@ -39,21 +56,12 @@ func main() {
 		"build_time", BuildTime,
 		"git_commit", GitCommit)
 
-	// Initialize V1 database connection
-	slog.Info("Initializing V1 database connection...")
-	v1DBConfig := database.NewDatabaseConfig(&cfg.DBConfigs)
-	v1DB, err := database.ConnectGormDB(v1DBConfig)
+	// OpenNSW owns the SQL pool used by the consent service.
+	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelStartup()
+	v1SqlDB, err := coredb.New(startupCtx, cfg.Database)
 	if err != nil {
-		slog.Error("Failed to connect to V1 database", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("V1 database connected successfully")
-
-	// Get underlying SQL DB for proper cleanup
-	v1SqlDB, err := v1DB.DB()
-	if err != nil {
-		slog.Error("Failed to get V1 database connection", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("connect database: %w", err)
 	}
 	defer func() {
 		if err := v1SqlDB.Close(); err != nil {
@@ -62,6 +70,14 @@ func main() {
 			slog.Info("V1 database connection closed successfully")
 		}
 	}()
+	v1SqlDB.SetConnMaxIdleTime(cfg.DatabaseIdleTimeout)
+	cancelStartup()
+
+	// Temporary adapter until #631 replaces the service's GORM dependency.
+	v1DB, err := database.Wrap(v1SqlDB)
+	if err != nil {
+		return fmt.Errorf("initialize temporary GORM adapter: %w", err)
+	}
 
 	// Get consent portal URL from environment
 	slog.Info("Using consent portal URL", "url", cfg.ConsentPortalUrl)
@@ -69,8 +85,7 @@ func main() {
 	// Initialize V1 consent service
 	v1ConsentService, err := services.NewConsentService(v1DB, cfg.ConsentPortalUrl)
 	if err != nil {
-		slog.Error("Failed to initialize V1 consent service", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("initialize consent service: %w", err)
 	}
 
 	// Initialize V1 handlers
@@ -94,8 +109,7 @@ func main() {
 		InsecureSkipVerify: cfg.IDPConfig.InsecureSkipVerify,
 	})
 	if err != nil {
-		slog.Error("Failed to initialize V1 JWT verifier", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("initialize JWT verifier: %w", err)
 	}
 
 	// Initialize V1 router and register all V1 routes
@@ -127,7 +141,7 @@ func main() {
 
 	// Start server with graceful shutdown
 	if err := utils.StartServerWithGracefulShutdown(httpServer, "consent-engine"); err != nil {
-		slog.Error("Server failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("server failed: %w", err)
 	}
+	return nil
 }

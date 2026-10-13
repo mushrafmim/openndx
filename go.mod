@@ -1,14 +1,16 @@
 module github.com/openndx/openndx-core
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/LSFLK/argus/pkg/audit v0.1.0
 	github.com/MicahParks/keyfunc/v3 v3.7.0
+	github.com/OpenNSW/core/database v0.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/graphql-go/graphql v0.8.1
+	github.com/jackc/pgx/v5 v5.10.0
 	github.com/lib/pq v1.10.9
 	github.com/prometheus/client_golang v1.20.5
 	github.com/stretchr/testify v1.11.1
@@ -37,7 +39,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.23.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.10.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
@@ -53,7 +54,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.3.1 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241104194629-dd2ea8efbc28 // indirect

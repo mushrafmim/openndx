@@ -24,6 +24,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - ./cmd/ce/schema.sql:/opt/openndx/ce-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d postgres"]
       interval: 5s
@@ -163,7 +164,6 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-1234}
       - DB_NAME=${DB_NAME_CE:-consent_engine}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
-      - RUN_MIGRATION=${RUN_MIGRATION:-true}
       # IDP configuration (JWT verification for consent-portal tokens)
       - IDP_ISSUER=${IDP_PUBLIC_URL:-http://localhost:8090}
       - IDP_AUDIENCE=${CONSENT_ENGINE_AUDIENCE:-CONSENT_PORTAL}

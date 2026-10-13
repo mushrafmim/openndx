@@ -1,80 +1,30 @@
 package database
 
 import (
-	"os"
+	"context"
 	"testing"
-	"time"
 
-	"github.com/openndx/openndx-core/internal/ce/config"
-	"github.com/stretchr/testify/assert"
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/stretchr/testify/require"
 )
 
-func TestNewDatabaseConfig(t *testing.T) {
-	// Clear environment variables
-	_ = os.Unsetenv("DB_HOST")
-	_ = os.Unsetenv("DB_PORT")
-	_ = os.Unsetenv("DB_USERNAME")
-	_ = os.Unsetenv("DB_PASSWORD")
-	_ = os.Unsetenv("DB_NAME")
-	_ = os.Unsetenv("DB_SSLMODE")
+func TestWrapUsesProvidedPoolWithoutPing(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	require.NoError(t, err)
+	defer sqlDB.Close()
 
-	dbConfigs := &config.DBConfigs{
-		Host:     "localhost",
-		Port:     "5432",
-		Username: "postgres",
-		Password: "password",
-		Database: "testdb",
-		SSLMode:  "prefer",
-	}
-	config := NewDatabaseConfig(dbConfigs)
+	db, err := Wrap(sqlDB)
+	require.NoError(t, err)
+	underlying, err := db.DB()
+	require.NoError(t, err)
+	require.Same(t, sqlDB, underlying)
 
-	assert.Equal(t, "localhost", config.Host)
-	assert.Equal(t, "5432", config.Port)
-	assert.Equal(t, "postgres", config.Username)
-	assert.Equal(t, "password", config.Password)
-	assert.Equal(t, "testdb", config.Database)
-	assert.Equal(t, "prefer", config.SSLMode)
-	assert.Equal(t, 25, config.MaxOpenConns)
-	assert.Equal(t, 5, config.MaxIdleConns)
-	assert.Equal(t, time.Hour, config.ConnMaxLifetime)
-	assert.Equal(t, 30*time.Minute, config.ConnMaxIdleTime)
-	assert.Equal(t, 5, config.MaxRetries)
+	mock.ExpectExec("SELECT 1").WillReturnResult(sqlmock.NewResult(0, 1))
+	require.NoError(t, db.WithContext(context.Background()).Exec("SELECT 1").Error)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestNewDatabaseConfig_WithEnvVars(t *testing.T) {
-	_ = os.Setenv("DB_HOST", "test-host")
-	_ = os.Setenv("DB_PORT", "5433")
-	_ = os.Setenv("DB_USERNAME", "test-user")
-	_ = os.Setenv("DB_PASSWORD", "test-password")
-	_ = os.Setenv("DB_NAME", "test-db")
-	_ = os.Setenv("DB_SSLMODE", "require")
-	defer func() {
-		_ = os.Unsetenv("DB_HOST")
-		_ = os.Unsetenv("DB_PORT")
-		_ = os.Unsetenv("DB_USERNAME")
-		_ = os.Unsetenv("DB_PASSWORD")
-		_ = os.Unsetenv("DB_NAME")
-		_ = os.Unsetenv("DB_SSLMODE")
-	}()
-
-	dbConfigs := &config.DBConfigs{
-		Host:     "test-host",
-		Port:     "5433",
-		Username: "test-user",
-		Password: "test-password",
-		Database: "test-db",
-		SSLMode:  "require",
-	}
-	config := NewDatabaseConfig(dbConfigs)
-
-	assert.Equal(t, "test-host", config.Host)
-	assert.Equal(t, "5433", config.Port)
-	assert.Equal(t, "test-user", config.Username)
-	assert.Equal(t, "test-password", config.Password)
-	assert.Equal(t, "test-db", config.Database)
-	assert.Equal(t, "require", config.SSLMode)
+func TestWrapRejectsNilPool(t *testing.T) {
+	_, err := Wrap(nil)
+	require.ErrorContains(t, err, "SQL database is required")
 }
-
-// NOTE: Tests for ConnectGormDB with real database connections have been moved to
-// tests/integration/database/database_test.go as integration tests.
-// Unit tests should not use real database connections.

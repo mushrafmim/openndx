@@ -174,7 +174,6 @@ jobs:
           DB_PASSWORD=password \
           DB_NAME=consent_db \
           DB_SSLMODE=disable \
-          RUN_MIGRATION=true \
           IDP_JWKS_URL="https://www.googleapis.com/oauth2/v3/certs" \
           IDP_ISSUER="https://accounts.google.com" \
           IDP_AUDIENCE="test-audience" \

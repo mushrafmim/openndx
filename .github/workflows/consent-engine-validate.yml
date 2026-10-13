@@ -26,6 +26,36 @@ env:
   GO_VERSION: "1.26"
 
 jobs:
+  database:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: consent_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d consent_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CE_TEST_DATABASE_URL: postgres://postgres:password@localhost:5432/consent_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Initialize CE schema
+        run: psql "$CE_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f cmd/ce/schema.sql
+      - name: Verify PostgreSQL connections
+        run: go test -race ./internal/ce/config ./internal/ce/database -count=1 -v
+
   validate:
     runs-on: ubuntu-latest
     permissions:

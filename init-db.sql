@@ -11,3 +11,7 @@ SELECT 'CREATE DATABASE consent_engine' WHERE NOT EXISTS (SELECT FROM pg_databas
 SELECT 'CREATE DATABASE orchestration_engine' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'orchestration_engine')\gexec
 SELECT 'CREATE DATABASE audit' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'audit')\gexec
 SELECT 'CREATE DATABASE portal_backend' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'portal_backend')\gexec
+
+-- Bootstrap CE's schema from its single source file (mounted by compose.yml).
+\connect consent_engine
+\i /opt/openndx/ce-schema.sql
