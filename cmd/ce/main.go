@@ -59,22 +59,22 @@ func run() error {
 	// OpenNSW owns the SQL pool used by the consent service.
 	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelStartup()
-	v1SqlDB, err := coredb.New(startupCtx, cfg.Database)
+	sqlDB, err := coredb.New(startupCtx, cfg.Database)
 	if err != nil {
 		return fmt.Errorf("connect database: %w", err)
 	}
 	defer func() {
-		if err := v1SqlDB.Close(); err != nil {
-			slog.Error("Failed to close V1 database connection", "error", err)
+		if err := sqlDB.Close(); err != nil {
+			slog.Error("Failed to close database connection", "error", err)
 		} else {
-			slog.Info("V1 database connection closed successfully")
+			slog.Info("Database connection closed successfully")
 		}
 	}()
-	v1SqlDB.SetConnMaxIdleTime(cfg.DatabaseIdleTimeout)
+	sqlDB.SetConnMaxIdleTime(cfg.DatabaseIdleTimeout)
 	cancelStartup()
 
 	// Temporary adapter until #631 replaces the service's GORM dependency.
-	v1DB, err := database.Wrap(v1SqlDB)
+	gormDB, err := database.Wrap(sqlDB)
 	if err != nil {
 		return fmt.Errorf("initialize temporary GORM adapter: %w", err)
 	}
@@ -82,15 +82,15 @@ func run() error {
 	// Get consent portal URL from environment
 	slog.Info("Using consent portal URL", "url", cfg.ConsentPortalUrl)
 
-	// Initialize V1 consent service
-	v1ConsentService, err := services.NewConsentService(v1DB, cfg.ConsentPortalUrl)
+	// Initialize consent service
+	consentService, err := services.NewConsentService(gormDB, cfg.ConsentPortalUrl)
 	if err != nil {
 		return fmt.Errorf("initialize consent service: %w", err)
 	}
 
-	// Initialize V1 handlers
-	v1InternalHandler := handlers.NewInternalHandler(v1ConsentService)
-	v1PortalHandler := handlers.NewPortalHandler(v1ConsentService)
+	// Initialize handlers
+	internalHandler := handlers.NewInternalHandler(consentService)
+	portalHandler := handlers.NewPortalHandler(consentService)
 
 	slog.Info("JWT verifier configuration",
 		"client_id", cfg.IDPConfig.ClientID,
@@ -100,7 +100,7 @@ func run() error {
 		"subject_claim", cfg.IDPConfig.SubjectClaim,
 		"jwks_insecure_skip_verify", cfg.IDPConfig.InsecureSkipVerify)
 
-	v1JWTVerifier, err := auth.NewJWTVerifier(auth.JWTVerifierConfig{
+	jwtVerifier, err := auth.NewJWTVerifier(auth.JWTVerifierConfig{
 		JWKSUrl:            cfg.IDPConfig.JwksUrl,
 		Issuer:             cfg.IDPConfig.Issuer,
 		Audience:           cfg.IDPConfig.Audience,
@@ -112,13 +112,13 @@ func run() error {
 		return fmt.Errorf("initialize JWT verifier: %w", err)
 	}
 
-	// Initialize V1 router and register all V1 routes
-	v1Router := router.NewV1Router(cfg.Service.AllowedOrigins, v1InternalHandler, v1PortalHandler, v1JWTVerifier)
+	// Initialize router and register all routes
+	apiRouter := router.NewRouter(cfg.Service.AllowedOrigins, internalHandler, portalHandler, jwtVerifier)
 	mux := http.NewServeMux()
 
-	slog.Info("Registering V1 API routes")
-	v1Router.RegisterRoutes(mux)
-	slog.Info("V1 API routes registered successfully")
+	slog.Info("Registering API routes")
+	apiRouter.RegisterRoutes(mux)
+	slog.Info("API routes registered successfully")
 
 	// Register legacy /health endpoint for compatibility with health checks
 	mux.Handle("/health", utils.PanicRecoveryMiddleware(utils.HealthHandler("consent-engine")))
@@ -134,9 +134,9 @@ func run() error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Wrap the mux with metrics (outermost) and then CORS from v1 router
+	// Wrap the mux with metrics (outermost) and then CORS from the router
 	// Metrics must be outermost to capture all requests, including CORS-blocked ones
-	handler := monitoring.HTTPMetricsMiddleware(v1Router.ApplyCORS(mux))
+	handler := monitoring.HTTPMetricsMiddleware(apiRouter.ApplyCORS(mux))
 	httpServer := utils.CreateServer(serverConfig, handler)
 
 	// Start server with graceful shutdown
