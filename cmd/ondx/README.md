@@ -64,7 +64,8 @@ This walkthrough uses two members: **DRP** (Department of Registrar of Persons),
 Fields taken from `cmd/oe/schema.graphql`'s `PersonInfo` type — the ones sourced from `drp` (`providerKey: "drp"`, `schemaId: "drp-schema-v1"`):
 
 ```bash
-./ondx schemas create --name "DRP Person Registry" --endpoint http://drp.example.gov.lk/graphql \
+./ondx schemas create --schema-id drp-schema-v1 \
+  --name "DRP Person Registry" --endpoint http://drp.example.gov.lk/graphql \
   --member-id <drpMemberId> \
   --field person.fullName:public:primary --field person.otherNames:public:primary \
   --field person.permanentAddress:restricted:primary --field person.profession:restricted:primary \
@@ -140,6 +141,7 @@ Registers a schema and its grantable fields directly, skipping GraphQL SDL/direc
 | Flag                                         | Description                                                                                                                                                                                                                                |
 |----------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `--field fieldName:accessControlType:source` | One field per flag, repeatable. `accessControlType` is `public` or `restricted`; `source` is `primary` or `fallback`. Note this is a **different 3-part format** from `applications create`/`policy update`'s 2-part `schemaId:fieldName`. |
+| `--schema-id`                                | Optional schema ID, e.g. `drp-schema-v1`: 3-64 lowercase letters, digits, `.`, `_` or `-`. Use the ID the Orchestration Engine's `@sourceInfo(schemaId: ...)` names. Defaults to a generated UUID; can't be changed later, and a taken ID fails with 409. |
 | `--description`                              | Schema description                                                                                                                                                                                                                         |
 | `--pb-url` (env `NDX_PB_URL`)                | Portal Backend base URL                                                                                                                                                                                                                    |
 

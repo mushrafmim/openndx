@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,19 @@ import (
 // ErrPolicyMetadataNotFound is returned when a policy metadata record does not
 // exist in the requested schema.
 var ErrPolicyMetadataNotFound = errors.New("policy metadata not found")
+
+var (
+	// ErrInvalidSchemaID is returned when a caller-supplied schema ID doesn't
+	// match schemaIDPattern.
+	ErrInvalidSchemaID = errors.New("invalid schemaId: use 3-64 lowercase letters, digits, '.', '_' or '-', starting with a letter or digit")
+	// ErrSchemaAlreadyExists is returned when a caller-supplied schema ID is
+	// already taken.
+	ErrSchemaAlreadyExists = errors.New("a schema with this schemaId already exists")
+)
+
+// schemaIDPattern keeps caller-supplied schema IDs safe in URL paths and in
+// `schemaId:fieldName` references (no ':' or '/').
+var schemaIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,63}$`)
 
 // Service handles schema-related operations
 type Service struct {
@@ -31,6 +45,10 @@ func NewService(db *gorm.DB, policyService *policy.Client) *Service {
 // CreateSchema creates a new schema. Exactly one of req.SDL / req.Fields must
 // be set: SDL is parsed into policy metadata records via GraphQL directives,
 // while Fields are used directly, skipping that parsing entirely.
+//
+// req.SchemaID, if set, becomes the schema's ID; otherwise a UUID is
+// generated. A fixed ID lets the Orchestration Engine's SDL and config name the
+// schema (`@sourceInfo(schemaId: ...)`) the same way in every environment.
 func (s *Service) CreateSchema(req *CreateSchemaRequest) (*SchemaResponse, error) {
 	hasSDL := req.SDL != ""
 	hasFields := len(req.Fields) > 0
@@ -38,8 +56,16 @@ func (s *Service) CreateSchema(req *CreateSchemaRequest) (*SchemaResponse, error
 		return nil, fmt.Errorf("exactly one of sdl or fields must be provided")
 	}
 
+	schemaID := uuid.New().String()
+	if req.SchemaID != "" {
+		if !schemaIDPattern.MatchString(req.SchemaID) {
+			return nil, ErrInvalidSchemaID
+		}
+		schemaID = req.SchemaID
+	}
+
 	schema := Schema{
-		SchemaID:   uuid.New().String(),
+		SchemaID:   schemaID,
 		SchemaName: req.SchemaName,
 		SDL:        req.SDL,
 		Endpoint:   req.Endpoint,
@@ -52,6 +78,9 @@ func (s *Service) CreateSchema(req *CreateSchemaRequest) (*SchemaResponse, error
 
 	// Step 1: Create schema in database first
 	if err := s.db.Create(&schema).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return nil, ErrSchemaAlreadyExists
+		}
 		return nil, fmt.Errorf("failed to create schema: %w", err)
 	}
 
