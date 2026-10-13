@@ -10,46 +10,40 @@ import (
 
 	coredb "github.com/OpenNSW/core/database"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/openndx/openndx-core/internal/ce/config"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPostgresConnectionPool(t *testing.T) {
-	dsn := os.Getenv("CE_TEST_DATABASE_URL")
+func TestPostgresWrapperPreservesPool(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("set CE_TEST_DATABASE_URL to run PostgreSQL connection tests")
+		t.Skip("set TEST_DATABASE_URL to run PostgreSQL adapter tests")
 	}
 	parsed, err := url.Parse(dsn)
 	require.NoError(t, err)
 	require.NotNil(t, parsed.User)
 	password, _ := parsed.User.Password()
-	require.NotEmpty(t, parsed.Path, "CE_TEST_DATABASE_URL must name a test database")
+	require.NotEmpty(t, parsed.Path, "TEST_DATABASE_URL must name a test database")
 	port := parsed.Port()
 	if port == "" {
 		port = "5432"
 	}
 	portNumber, err := strconv.Atoi(port)
 	require.NoError(t, err)
-	cfg := config.Config{
-		Database: coredb.Config{
-			Driver: coredb.Postgres,
-			Postgres: &coredb.PostgresConfig{
-				Host: parsed.Hostname(), Port: portNumber, User: parsed.User.Username(),
-				Password: password, Name: parsed.Path[1:], SSLMode: parsed.Query().Get("sslmode"),
-				Pool: coredb.PoolConfig{MaxOpenConns: 25, MaxIdleConns: 5, MaxConnLifetimeSeconds: 3600},
-			},
+	cfg := coredb.Config{
+		Driver: coredb.Postgres,
+		Postgres: &coredb.PostgresConfig{
+			Host: parsed.Hostname(), Port: portNumber, User: parsed.User.Username(),
+			Password: password, Name: parsed.Path[1:], SSLMode: parsed.Query().Get("sslmode"),
+			Pool: coredb.PoolConfig{MaxOpenConns: 25, MaxIdleConns: 5, MaxConnLifetimeSeconds: 3600},
 		},
-		DatabaseIdleTimeout: 20 * time.Millisecond,
-		Service:             config.ServiceConfig{Port: "8081", Timeout: 10 * time.Second},
-		ConsentPortalUrl:    "http://localhost:5173",
 	}
 	require.NoError(t, cfg.Validate())
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	db, err := coredb.New(ctx, cfg.Database)
+	db, err := coredb.New(ctx, cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	db.SetConnMaxIdleTime(cfg.DatabaseIdleTimeout)
+	db.SetConnMaxIdleTime(20 * time.Millisecond)
 	wrapped, err := Wrap(db)
 	require.NoError(t, err)
 	underlying, err := wrapped.DB()

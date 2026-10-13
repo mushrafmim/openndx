@@ -66,8 +66,8 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # above, they use the *-go-rootmod-service targets below instead of
 # *-go-service.
 CONSENT_ENGINE_PATH := cmd/ce
-CONSENT_ENGINE_INTERNAL_PATH := internal/ce
-CONSENT_ENGINE_TEST_PATH := ./cmd/ce/... ./internal/ce/...
+CONSENT_ENGINE_INTERNAL_PATH := internal/ce internal/database
+CONSENT_ENGINE_TEST_PATH := ./cmd/ce/... ./internal/ce/... ./internal/database/...
 CONSENT_ENGINE_DOCKERFILE := cmd/ce/Dockerfile
 
 ORCHESTRATION_ENGINE_PATH := cmd/oe

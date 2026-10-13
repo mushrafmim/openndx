@@ -1,4 +1,4 @@
-// Package database adapts an existing SQL pool to CE's temporary GORM service.
+// Package database provides shared PostgreSQL adapters for database/sql pools.
 package database
 
 import (

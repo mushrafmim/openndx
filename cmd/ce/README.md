@@ -51,7 +51,7 @@ and the pgx driver, with a 10-second connection deadline. Startup returns an err
 if the connection fails; a deployment's restart policy can retry startup.
 The pool defaults to 25 open connections, 5 idle connections, a one-hour connection
 lifetime, and a 30-minute idle timeout; the pool environment variables can override them.
-`internal/ce/database` only wraps that pool with GORM for the existing consent service.
+The shared `internal/database` package wraps that pool with GORM for the existing consent service.
 
 `cmd/ce/schema.sql` defines the initial PostgreSQL schema. Initialize the CE database
 before starting the service, using the same `DB_*` settings:
@@ -103,15 +103,15 @@ issue #631 integrates the raw SQL repository.
 
 ```bash
 # From the repo root
-go test ./cmd/ce/... ./internal/ce/... -count=1
+go test ./cmd/ce/... ./internal/ce/... ./internal/database/... -count=1
 ```
 
 PostgreSQL connection tests use an explicit test database. They are skipped when
-`CE_TEST_DATABASE_URL` is unset:
+`TEST_DATABASE_URL` is unset:
 
 ```bash
-CE_TEST_DATABASE_URL='postgres://postgres:password@localhost:5432/consent_test?sslmode=disable' \
-  go test ./internal/ce/config ./internal/ce/database -count=1 -v
+TEST_DATABASE_URL='postgres://postgres:password@localhost:5432/consent_test?sslmode=disable' \
+  go test ./internal/ce/config ./internal/database -count=1 -v
 ```
 
 ## Docker

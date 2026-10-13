@@ -14,10 +14,10 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // Register the PostgreSQL driver for coredb.New.
 	"github.com/openndx/openndx-core/internal/ce/auth"
 	"github.com/openndx/openndx-core/internal/ce/config"
-	"github.com/openndx/openndx-core/internal/ce/database"
 	"github.com/openndx/openndx-core/internal/ce/handlers"
 	"github.com/openndx/openndx-core/internal/ce/router"
 	"github.com/openndx/openndx-core/internal/ce/services"
+	"github.com/openndx/openndx-core/internal/database"
 	"github.com/openndx/openndx-core/internal/monitoring"
 	"github.com/openndx/openndx-core/internal/utils"
 )
