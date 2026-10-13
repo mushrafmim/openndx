@@ -186,7 +186,7 @@ func TestApplicationEndpoints(t *testing.T) {
 		}
 
 		// IDP application creation fails, so the handler should reject the request
-		testHandler.idp.CreateApplicationFunc = func(ctx context.Context, app *idp.Application) (*string, error) {
+		testHandler.idp.CreateApplicationFunc = func(ctx context.Context, app *idp.Application) (*idp.CreatedApplication, error) {
 			return nil, fmt.Errorf("idp unavailable")
 		}
 		defer func() { testHandler.idp.CreateApplicationFunc = nil }()

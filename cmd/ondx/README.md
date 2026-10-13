@@ -8,8 +8,8 @@ A Go CLI for OpenNDX management operations — members, schemas, applications, a
 
 It works against any OIDC-compatible identity provider PB is configured to trust. Today that's usually one of two setups:
 
-- **ThunderID** (local dev) — the IDP this repo's `docker compose` stack runs locally. A member is an organization linked to a ThunderID organization unit: create the organization unit (and its users) in ThunderID first, then register the member with `--ou-id`. Since ThunderID's admin API isn't wired into Portal Backend's own outbound IDP calls yet (see [Limitations](#limitations)), application creation against ThunderID means onboarding the OAuth2 client manually via its console first, then registering it with `--idp-application-id --idp-client-id`.
-- **Asgardeo (WSO2)** — the identity provider Portal Backend's own outbound application calls (creating OAuth2 clients on your behalf) are actually implemented against. Against Asgardeo, application creation can provision the IDP side automatically — omit the `--idp-*` flags.
+- **ThunderID** (local dev) — the IDP this repo's `docker compose` stack runs locally. A member is an organization linked to a ThunderID organization unit: create the organization unit (and its users) in ThunderID first, then register the member with `--ou-id`. Creating an application provisions its M2M OAuth2 client in that member's organization unit, grants it the `getdata` role, and prints its client secret once. To register a client you already onboarded in ThunderID instead, pass `--idp-application-id --idp-client-id`.
+- **Asgardeo (WSO2)** — the identity provider PB was originally built against. `ondx` can still log in against it, but Portal Backend now provisions application clients in ThunderID only.
 
 ## Quick Start
 
@@ -90,10 +90,11 @@ The passport application needs the applicant's full name and permanent address t
 ```bash
 ./ondx applications create --name "Passport Application" --member-id <dieMemberId> \
   --field <schemaId>:person.fullName --field <schemaId>:person.permanentAddress \
-  --idp-application-id <thunder-app-id> --idp-client-id <thunder-client-id> \
   --pb-url http://localhost:8083
-# → prints applicationId
+# → prints applicationId, plus the IdP client ID and secret (shown once)
 ```
+
+Portal Backend creates the application's M2M client in DIE's ThunderID organization unit and grants it the `getdata` role. Store the printed secret: it can't be retrieved again. DIE then calls the Orchestration Engine with a `client_credentials` token for that client (`scope=getdata`, `resource=http://api.openndx.local`).
 
 `applications create` grants only the fields passed at creation time. To change an existing application's granted fields later, use `policy update` — a full replace, so pass every field it should end up with. For example, to additionally grant `person.profession` while keeping the two fields already granted:
 
@@ -154,7 +155,7 @@ Registers an application. `--name`, `--member-id`, and at least one `--field sch
 | Flag                                      | Description                                                                                                                                                 |
 |-------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `--description`                           | Application description                                                                                                                                     |
-| `--idp-application-id`, `--idp-client-id` | An OAuth2 client already provisioned in the IDP — must be given together. If both omitted, Portal Backend provisions the client itself — **Asgardeo only**. |
+| `--idp-application-id`, `--idp-client-id` | An OAuth2 client already provisioned in the IDP — must be given together. If both omitted, Portal Backend provisions the client itself, in the member's organization unit, and prints its secret once. |
 | `--pb-url` (env `NDX_PB_URL`)             | Portal Backend base URL                                                                                                                                     |
 
 ### `ondx applications list [--member-id ...]`
@@ -211,7 +212,7 @@ ThunderID can bind an access token's `aud` claim to a resource server requested 
 
 ### Limitations
 
-- **Application creation against ThunderID always needs the manual-onboarding flags.** Portal Backend's own outbound calls to the IDP (creating an OAuth2 client) only implement Asgardeo's (WSO2) admin API (`internal/pb/idp/idpfactory`) — not ThunderID's. Onboard the client manually via ThunderID's console first, then pass its IDs with `--idp-application-id --idp-client-id` to register it in Portal Backend without Portal Backend trying (and failing) to provision it itself.
+- **An application's client secret is shown only once**, in the `applications create` output. Portal Backend doesn't store it and ThunderID doesn't return it again. Applications created by approving an application submission don't surface it at all yet.
 - **Members need their organization unit created in ThunderID first.** Portal Backend only stores the link (`--ou-id`); it does not create organization units or users. The local stack seeds `drp` (`01900000-0000-7000-8000-0000000000c0`) and `die` (`01900000-0000-7000-8000-0000000000c1`), with staff users `drp-admin` / `die-admin` (password `1234`) who get the `OpenNDX_Member` role and an `ouId` claim.
 - **No delete or update commands yet, and no `schemas list`/`get`.** Only `members create`, `schemas create`, `applications create`/`list`/`get`, and `policy update` are implemented.
 - **`ondx applications get`/`list` output for `--field` values always reflects the full current policy** — there's no "show me the diff" helper; compare manually before running `policy update`.

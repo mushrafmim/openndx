@@ -43,7 +43,7 @@ DB_SSLMODE=disable
 RUN_MIGRATION=true
 
 # JWT Authentication (Required)
-IDP_BASE_URL=https://api.asgardeo.io/t/your-org
+IDP_BASE_URL=https://thunderid.example.com
 IDP_MEMBER_PORTAL_CLIENT_ID=your_member_client_id
 IDP_ADMIN_PORTAL_CLIENT_ID=your_admin_client_id
 
@@ -51,11 +51,20 @@ IDP_ADMIN_PORTAL_CLIENT_ID=your_admin_client_id
 PDP_SERVICE_URL=http://localhost:8082
 
 
-# Optional: IDP Management (for member creation)
-IDP_CLIENT_ID=management_client_id
+# ThunderID management client (creates each application's OAuth2 client)
+IDP_CLIENT_ID=PORTAL_BACKEND
 IDP_CLIENT_SECRET=management_client_secret
-IDP_SCOPE="internal_user_mgt_create internal_user_mgt_list"
+IDP_SCOPE=system
+# The System resource server identifier the `system` scope is requested for,
+# and the role every new application is assigned (grants `getdata`).
+IDP_TOKEN_RESOURCE=https://localhost:8090/mcp
+IDP_DATA_CONSUMER_ROLE_ID=<role id>
 ```
+
+`POST /api/v1/applications` creates the application's M2M client in the owning member's ThunderID
+organization unit, assigns it `IDP_DATA_CONSUMER_ROLE_ID`, and returns its `idpClientSecret` once. The
+local compose stack configures this with the `PORTAL_BACKEND` client from
+`thunderid/bootstrap/application.yaml`.
 
 ### 2. Run the Service
 

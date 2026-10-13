@@ -22,7 +22,7 @@ type Mock struct {
 	CreateGroupFunc                 func(ctx context.Context, group *idp.Group) (*idp.GroupInfo, error)
 	UpdateGroupFunc                 func(ctx context.Context, groupID string, group *idp.Group) (*idp.GroupInfo, error)
 	AddMemberToGroupFunc            func(ctx context.Context, groupID string, memberInfo *idp.GroupMember) error
-	CreateApplicationFunc           func(ctx context.Context, app *idp.Application) (*string, error)
+	CreateApplicationFunc           func(ctx context.Context, app *idp.Application) (*idp.CreatedApplication, error)
 	DeleteApplicationFunc           func(ctx context.Context, applicationID string) error
 	DeleteGroupFunc                 func(ctx context.Context, groupID string) error
 	GetApplicationInfoFunc          func(ctx context.Context, applicationID string) (*idp.ApplicationInfo, error)
@@ -109,12 +109,15 @@ func (m *Mock) AddMemberToGroup(ctx context.Context, groupID string, memberInfo 
 	return nil
 }
 
-func (m *Mock) CreateApplication(ctx context.Context, app *idp.Application) (*string, error) {
+func (m *Mock) CreateApplication(ctx context.Context, app *idp.Application) (*idp.CreatedApplication, error) {
 	if m.CreateApplicationFunc != nil {
 		return m.CreateApplicationFunc(ctx, app)
 	}
-	appID := "mock-idp-app-id"
-	return &appID, nil
+	return &idp.CreatedApplication{
+		Id:           "mock-idp-app-id",
+		ClientId:     "mock-client-id",
+		ClientSecret: "mock-client-secret",
+	}, nil
 }
 
 func (m *Mock) DeleteApplication(ctx context.Context, applicationID string) error {

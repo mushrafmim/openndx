@@ -744,10 +744,9 @@ func runApplicationsCreate(ctx context.Context, args []string) error {
 		fmt.Fprintln(fs.Output(), "Usage of applications create:")
 		fs.PrintDefaults()
 		fmt.Fprint(fs.Output(), "\nIf -idp-application-id/-idp-client-id are both omitted, Portal Backend\n"+
-			"provisions the OAuth2 client itself - this only works against an Asgardeo\n"+
-			"(WSO2) IDP today, not ThunderID. Against ThunderID, onboard the OAuth2 client\n"+
-			"manually via its console first, then pass its resource id and clientId here\n"+
-			"together.\n")
+			"provisions the OAuth2 client itself, in the member's ThunderID organization\n"+
+			"unit, and prints its client secret once. Pass both to register a client you\n"+
+			"already onboarded in the IDP instead.\n")
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -816,6 +815,10 @@ func runApplicationsCreate(ctx context.Context, args []string) error {
 	fmt.Printf("Created application %s (%s)\n", app.ApplicationID, app.ApplicationName)
 	if app.IdpClientID != nil {
 		fmt.Printf("IdP Client:  %s\n", *app.IdpClientID)
+	}
+	if app.IdpClientSecret != nil {
+		fmt.Printf("IdP Secret:  %s\n", *app.IdpClientSecret)
+		fmt.Println("             Shown only once - store it now; it can't be retrieved again.")
 	}
 	fmt.Println("Selected fields (current policy):")
 	for _, f := range app.SelectedFields {

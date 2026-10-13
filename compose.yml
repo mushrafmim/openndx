@@ -60,6 +60,7 @@ services:
       - PUBLIC_URL=${IDP_PUBLIC_URL:-http://localhost:8090}
       - CONSENT_PORTAL_URL=${CONSENT_PORTAL_URL:-http://localhost:5173}
       - DATA_CONSUMER_CLIENT_SECRET=${DATA_CONSUMER_CLIENT_SECRET:-1234}
+      - PORTAL_BACKEND_CLIENT_SECRET=${PORTAL_BACKEND_CLIENT_SECRET:-1234}
       - ADMIN_PASSWORD=${IDP_ADMIN_PASSWORD:-1234}
     volumes:
       - thunderid-db:/opt/thunderid/database
@@ -290,19 +291,19 @@ services:
       - IDP_ISSUER=${IDP_PUBLIC_URL:-http://localhost:8090}
       - IDP_JWKS_URL=${IDP_JWKS_URL:-http://thunderid:8090/oauth2/jwks}
       - IDP_ADMIN_PORTAL_CLIENT_ID=${NDX_CLI_CLIENT_ID:-NDX_CLI}
-      # PB's own outbound calls to the IDP (creating application records —
-      # POST /applications) go through idpfactory, which only implements the
-      # Asgardeo (WSO2) admin API today — see
-      # docs/DESIGN-esignet-citizen-authentication.md §3.1 and
-      # internal/pb/idp/idpfactory/factory.go. These vars only need to be
-      # non-empty for PB to boot; against ThunderID creating an application
-      # will still fail, since ThunderID's admin API isn't Asgardeo-shaped.
-      # Everything else (members, which only link to a ThunderID organization
-      # unit; list/get applications; the policy-update endpoint the ondx CLI
-      # uses) doesn't call the IDP at all and works fine.
+      # PB's own outbound calls to ThunderID's management API: POST /applications
+      # creates the application's M2M client in its member's organization unit
+      # and assigns it the DataConsumerGetData role, so it can request `getdata`
+      # (internal/pb/idp/thunderid). PORTAL_BACKEND is PB's own client
+      # (thunderid/bootstrap/application.yaml). Its `system` scope belongs to
+      # ThunderID's built-in System resource server, whose identifier is fixed
+      # at https://localhost:8090/mcp whatever the public URL.
       - IDP_BASE_URL=http://thunderid:8090
-      - IDP_CLIENT_ID=${NDX_CLI_CLIENT_ID:-NDX_CLI}
-      - IDP_CLIENT_SECRET=${IDP_CLIENT_SECRET:-1234}
+      - IDP_CLIENT_ID=PORTAL_BACKEND
+      - IDP_CLIENT_SECRET=${PORTAL_BACKEND_CLIENT_SECRET:-1234}
+      - IDP_SCOPE=system
+      - IDP_TOKEN_RESOURCE=https://localhost:8090/mcp
+      - IDP_DATA_CONSUMER_ROLE_ID=01900000-0000-7000-8000-000000000092
       # Authorization
       - AUTHORIZATION_MODE=${AUTHORIZATION_MODE:-fail_open_admin_system}
       - AUTHORIZATION_STRICT_MODE=${AUTHORIZATION_STRICT_MODE:-false}

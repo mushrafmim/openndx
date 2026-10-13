@@ -15,11 +15,11 @@ type UserManager interface {
 	DeleteUser(ctx context.Context, userId string) error
 }
 
-// ApplicationManager defines a contract for all Identity Providers
+// ApplicationManager is what Portal Backend needs from the IdP: creating a
+// consumer application's OAuth2 client, and deleting it again on rollback.
+// internal/pb/idp/thunderid implements it.
 type ApplicationManager interface {
-	GetApplicationInfo(ctx context.Context, applicationId string) (*ApplicationInfo, error)
-	CreateApplication(ctx context.Context, app *Application) (*string, error)
-	GetApplicationOIDC(ctx context.Context, applicationId string) (*ApplicationOIDCInfo, error)
+	CreateApplication(ctx context.Context, app *Application) (*CreatedApplication, error)
 	DeleteApplication(ctx context.Context, applicationId string) error
 }
 
@@ -42,6 +42,17 @@ type Application struct {
 	Name        string
 	Description string
 	TemplateId  string
+	// OuID is the ThunderID organization unit the application is created in:
+	// the owning member's organization unit.
+	OuID string
+}
+
+// CreatedApplication is an application just created in the IdP. ClientSecret
+// may only be readable here: ThunderID doesn't return it again afterwards.
+type CreatedApplication struct {
+	Id           string
+	ClientId     string
+	ClientSecret string
 }
 
 type ApplicationInfo struct {

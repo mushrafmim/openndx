@@ -186,12 +186,16 @@ A passport application needs the applicant's full name and permanent address:
 ```bash
 ondx applications create --name "Passport Application" --member-id <dieMemberId> \
   --field <schemaId>:person.fullName --field <schemaId>:person.permanentAddress \
-  --idp-application-id <thunder-app-id> --idp-client-id <thunder-client-id> \
   --pb-url http://localhost:8083
 ```
 
-This prints an `applicationId`. `applications create` grants only the fields passed at creation
-time.
+This prints an `applicationId`, plus the application's IdP client ID and secret. Portal Backend
+creates that M2M client in DIE's ThunderID organization unit and grants it the `getdata` role, so
+DIE can call the Orchestration Engine with a `client_credentials` token. **Store the secret now** —
+it's shown only once. `applications create` grants only the fields passed at creation time.
+
+To register a client you already onboarded in ThunderID yourself instead, pass
+`--idp-application-id <thunder-app-id> --idp-client-id <thunder-client-id>`.
 
 ### 3.5 Change what's granted later
 
@@ -260,9 +264,10 @@ complete detail (including env var equivalents for every flag).
 - **`ondx login` rejects your `--callback-port`** — ThunderID's `NDX_CLI` client has a redirect
   URI pinned to `http://127.0.0.1:8765/callback`; `ondx` enforces port `8765` for that client
   instead of attempting a login the IDP would reject anyway.
-- **Application creation fails without `--idp-*` flags** — Portal Backend can't provision
-  OAuth2 clients in ThunderID automatically yet. Provision the client manually in ThunderID's
-  console first, then pass `--idp-application-id --idp-client-id`.
+- **Application creation fails with a ThunderID error** — Portal Backend creates the client with
+  its own `PORTAL_BACKEND` client (`thunderid/bootstrap/application.yaml`). On a ThunderID
+  database bootstrapped before that client existed, reset the stack (`docker compose down -v`).
+  `Application already exists` means ThunderID already has an application with that name.
 - **Member creation fails without `--ou-id`** — create the member's organization unit in
   ThunderID's console first and pass its ID.
 

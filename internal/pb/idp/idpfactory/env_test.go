@@ -13,6 +13,7 @@ func setIDPEnv(t *testing.T, env map[string]string) {
 	for _, key := range []string{
 		"IDP_BASE_URL", "IDP_JWKS_URL", "IDP_ISSUER", "IDP_TOKEN_URL",
 		"IDP_CLIENT_ID", "IDP_CLIENT_SECRET", "IDP_SCOPE",
+		"IDP_TOKEN_RESOURCE", "IDP_DATA_CONSUMER_ROLE_ID",
 	} {
 		t.Setenv(key, env[key])
 	}
@@ -46,20 +47,22 @@ func TestNewFromEnv(t *testing.T) {
 			wantErr: "failed to create IDP provider: missing required environment variables",
 		},
 		{
-			name: "base URL with scopes",
+			name: "ThunderID management client",
 			env: map[string]string{
-				"IDP_BASE_URL":      "https://api.asgardeo.io/t/testorg",
-				"IDP_CLIENT_ID":     "test-client-id",
-				"IDP_CLIENT_SECRET": "test-client-secret",
-				"IDP_SCOPE":         "scope1 scope2 scope3",
+				"IDP_BASE_URL":              "http://thunderid:8090",
+				"IDP_CLIENT_ID":             "PORTAL_BACKEND",
+				"IDP_CLIENT_SECRET":         "client-secret",
+				"IDP_SCOPE":                 "system",
+				"IDP_TOKEN_RESOURCE":        "https://localhost:8090/mcp",
+				"IDP_DATA_CONSUMER_ROLE_ID": "01900000-0000-7000-8000-000000000092",
 			},
 		},
 		{
 			name: "base URL with empty scopes",
 			env: map[string]string{
-				"IDP_BASE_URL":      "https://api.asgardeo.io/t/testorg",
-				"IDP_CLIENT_ID":     "test-client-id",
-				"IDP_CLIENT_SECRET": "test-client-secret",
+				"IDP_BASE_URL":      "http://thunderid:8090",
+				"IDP_CLIENT_ID":     "PORTAL_BACKEND",
+				"IDP_CLIENT_SECRET": "client-secret",
 			},
 		},
 		{
