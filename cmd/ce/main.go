@@ -29,6 +29,7 @@ var (
 	GitCommit = "unknown"
 )
 
+// main reports startup failures after run has released its resources.
 func main() {
 	if err := run(); err != nil {
 		slog.Error("Consent engine failed", "error", err)
@@ -36,6 +37,7 @@ func main() {
 	}
 }
 
+// run loads validated configuration and owns the consent engine's resources and server.
 func run() error {
 	// Load configuration using flags
 	cfg, err := config.LoadConfig("consent-engine")

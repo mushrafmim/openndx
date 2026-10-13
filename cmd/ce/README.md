@@ -66,6 +66,9 @@ PGPASSWORD="$DB_PASSWORD" psql \
 The root Docker Compose stack and integration-test database container use this same
 file when initializing a fresh PostgreSQL data directory. The service opens the pool
 and expects the schema to exist; it does not run SQL schema setup during startup.
+The root stack passes `DB_NAME_CE` to both PostgreSQL bootstrap and CE, so custom
+database names are created and initialized consistently. An unset or empty value
+uses `consent_engine`.
 
 While CE is pre-stable, schema changes are made directly in this initial schema file.
 There is no versioned upgrade path for existing databases. PB and PDP retain their
@@ -106,12 +109,14 @@ issue #631 integrates the raw SQL repository.
 go test ./cmd/ce/... ./internal/ce/... ./internal/database/... -count=1
 ```
 
-PostgreSQL connection tests use an explicit test database. They are skipped when
+PostgreSQL connection and bootstrap tests use a disposable PostgreSQL instance.
+Bootstrap tests require `psql` and a database user with permission to create databases.
+These tests are skipped when
 `TEST_DATABASE_URL` is unset:
 
 ```bash
 TEST_DATABASE_URL='postgres://postgres:password@localhost:5432/consent_test?sslmode=disable' \
-  go test ./internal/ce/config ./internal/database -count=1 -v
+  go test ./cmd/ce/... ./internal/ce/config ./internal/database -count=1 -v
 ```
 
 ## Docker

@@ -19,6 +19,7 @@ services:
       # Just the server's initial connection database — postgres requires one.
       # The actual per-service databases are created by init-db.sql on first startup.
       - POSTGRES_DB=postgres
+      - DB_NAME_CE=${DB_NAME_CE:-consent_engine}
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:

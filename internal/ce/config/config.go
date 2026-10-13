@@ -65,6 +65,7 @@ func LoadConfig(serviceName string) (*Config, error) {
 	return loadConfig(serviceName, os.Args[1:])
 }
 
+// loadConfig applies CLI overrides to environment settings without global flag state.
 func loadConfig(serviceName string, args []string) (*Config, error) {
 	// Get environment first to determine defaults
 	env := utils.GetEnvOrDefault("ENVIRONMENT", "local")
@@ -184,6 +185,7 @@ func loadConfig(serviceName string, args []string) (*Config, error) {
 	return config, nil
 }
 
+// getDefaultLogLevel reduces default logging verbosity in production.
 func getDefaultLogLevel(env string) string {
 	if env == "production" {
 		return "warn"
@@ -191,6 +193,7 @@ func getDefaultLogLevel(env string) string {
 	return "debug"
 }
 
+// getDefaultLogFormat selects structured production logs or readable local logs.
 func getDefaultLogFormat(env string) string {
 	if env == "production" {
 		return "json"
@@ -198,10 +201,12 @@ func getDefaultLogFormat(env string) string {
 	return "text"
 }
 
+// getDefaultCORS enables the CORS configuration default outside production.
 func getDefaultCORS(env string) bool {
 	return env != "production"
 }
 
+// getDefaultRateLimit selects the default request limit for the environment.
 func getDefaultRateLimit(env string) int {
 	if env == "production" {
 		return 100
@@ -247,6 +252,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// intEnv parses a numeric setting, using defaultValue when it is unset or empty.
 func intEnv(name, defaultValue string) (int, error) {
 	value, err := strconv.Atoi(utils.GetEnvOrDefault(name, defaultValue))
 	if err != nil {
