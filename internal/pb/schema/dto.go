@@ -26,6 +26,10 @@ type UpdateSchemaSubmissionRequest struct {
 // CreateSchemaRequest creates a new provider schema. Exactly one of SDL or
 // Fields must be provided.
 type CreateSchemaRequest struct {
+	// SchemaID optionally fixes the schema's ID, e.g. "drp-schema-v1", so the
+	// Orchestration Engine's SDL and config can reference it. A UUID is
+	// generated when it's empty. It can't be changed after creation.
+	SchemaID          string  `json:"schemaId,omitempty"`
 	SchemaName        string  `json:"schemaName" validate:"required"`
 	SchemaDescription *string `json:"schemaDescription,omitempty"`
 	// SDL is a GraphQL SDL string annotated with @accessControl/@source (and

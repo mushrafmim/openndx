@@ -372,7 +372,11 @@ func (h *Handler) CreateSchema(w http.ResponseWriter, r *http.Request) {
 		// Log audit event for failure
 		middleware.LogAuditEvent(r, string(middleware.ResourceTypeSchemas), nil, string(middleware.AuditStatusFailure))
 
-		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
+		status := http.StatusBadRequest
+		if errors.Is(err, ErrSchemaAlreadyExists) {
+			status = http.StatusConflict
+		}
+		utils.RespondWithError(w, status, err.Error())
 		return
 	}
 
