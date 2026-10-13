@@ -12,10 +12,19 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
+	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 
 	"github.com/openndx/openndx-core/internal/pb/idp"
+)
+
+const (
+	// requestTimeout bounds each call to ThunderID, token requests included.
+	requestTimeout = 15 * time.Second
+	// cleanupTimeout bounds deleting an application after a failed create.
+	cleanupTimeout = 10 * time.Second
 )
 
 // Config configures the ThunderID client.
@@ -53,10 +62,16 @@ func NewClient(cfg Config) *Client {
 		oauthConfig.EndpointParams = url.Values{"resource": {cfg.Resource}}
 	}
 
+	// The token request uses its own context, not the caller's, so bound it
+	// with a client timeout as well as the API calls.
+	tokenCtx := context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Timeout: requestTimeout})
+	httpClient := oauthConfig.Client(tokenCtx)
+	httpClient.Timeout = requestTimeout
+
 	return &Client{
 		baseURL:            cfg.BaseURL,
 		dataConsumerRoleID: cfg.DataConsumerRoleID,
-		httpClient:         oauthConfig.Client(context.Background()),
+		httpClient:         httpClient,
 	}
 }
 
@@ -125,24 +140,42 @@ func (c *Client) CreateApplication(ctx context.Context, app *idp.Application) (*
 		return nil, err
 	}
 
+	if created.ID == "" {
+		return nil, fmt.Errorf("thunderid POST /applications: response has no application id")
+	}
+
 	result := &idp.CreatedApplication{Id: created.ID, ClientId: created.ClientID}
 	for _, cfg := range created.InboundAuthConfig {
 		if cfg.Type == "oauth2" {
 			result.ClientSecret = cfg.Config.ClientSecret
 		}
 	}
+	// The secret can't be read back later, so an application without one is
+	// unusable.
+	if result.ClientId == "" || result.ClientSecret == "" {
+		return nil, c.deleteAfterFailure(ctx, created.ID, fmt.Errorf("thunderid POST /applications: response has no client id or secret"))
+	}
 
 	if c.dataConsumerRoleID != "" {
 		assign := assignmentsRequest{Assignments: []assignment{{Type: "app", ID: created.ID}}}
 		if err := c.do(ctx, http.MethodPost, "/roles/"+url.PathEscape(c.dataConsumerRoleID)+"/assignments/add", assign, http.StatusNoContent, nil); err != nil {
-			if deleteErr := c.DeleteApplication(ctx, created.ID); deleteErr != nil {
-				return nil, fmt.Errorf("failed to assign data-consumer role: %w, and failed to delete application: %w", err, deleteErr)
-			}
-			return nil, fmt.Errorf("failed to assign data-consumer role: %w", err)
+			return nil, c.deleteAfterFailure(ctx, created.ID, fmt.Errorf("failed to assign data-consumer role: %w", err))
 		}
 	}
 
 	return result, nil
+}
+
+// deleteAfterFailure deletes an application CreateApplication just created and
+// returns cause, plus the delete error if that fails too. The delete gets its
+// own deadline, so it still runs when cause was the request being canceled.
+func (c *Client) deleteAfterFailure(ctx context.Context, applicationID string, cause error) error {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+	defer cancel()
+	if err := c.DeleteApplication(cleanupCtx, applicationID); err != nil {
+		return fmt.Errorf("%w, and failed to delete application: %w", cause, err)
+	}
+	return cause
 }
 
 func (c *Client) DeleteApplication(ctx context.Context, applicationId string) error {

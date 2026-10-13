@@ -23,6 +23,8 @@ type fakeThunderID struct {
 	assigned     *assignmentsRequest
 	deleted      []string
 	assignStatus int
+	// cancelOnAssign, if set, is called when the role assignment arrives.
+	cancelOnAssign context.CancelFunc
 }
 
 func (f *fakeThunderID) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +38,11 @@ func (f *fakeThunderID) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(f.t, "Bearer pb-token", r.Header.Get("Authorization"))
 		f.created = &applicationRequest{}
 		require.NoError(f.t, json.NewDecoder(r.Body).Decode(f.created))
+		if f.created.Name == "NoSecret" {
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"app-1","clientId":"client-1","inboundAuthConfig":[]}`))
+			return
+		}
 		if f.created.Name == "Dup" {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"code":"APP-1020","message":{"defaultValue":"Application already exists"},"description":{"defaultValue":"An application with the same name already exists"}}`))
@@ -47,6 +54,12 @@ func (f *fakeThunderID) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/roles/"+roleID+"/assignments/add":
 		f.assigned = &assignmentsRequest{}
 		require.NoError(f.t, json.NewDecoder(r.Body).Decode(f.assigned))
+		if f.cancelOnAssign != nil {
+			// The caller gives up mid-request: wait for the client to drop it.
+			f.cancelOnAssign()
+			<-r.Context().Done()
+			return
+		}
 		if f.assignStatus != 0 {
 			w.WriteHeader(f.assignStatus)
 			return
@@ -116,6 +129,30 @@ func TestClient_CreateApplication(t *testing.T) {
 		assert.Nil(t, created)
 		assert.ErrorContains(t, err, "failed to assign data-consumer role")
 		assert.Equal(t, []string{"app-1"}, fake.deleted)
+	})
+
+	t.Run("still deletes the application when the request is canceled", func(t *testing.T) {
+		client, fake := newTestClient(t, roleID)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		fake.cancelOnAssign = cancel
+
+		created, err := client.CreateApplication(ctx, &idp.Application{Name: "App", OuID: "ou-die"})
+
+		assert.Nil(t, created)
+		assert.ErrorIs(t, err, context.Canceled)
+		assert.Equal(t, []string{"app-1"}, fake.deleted)
+	})
+
+	t.Run("rejects and deletes an application created without a client secret", func(t *testing.T) {
+		client, fake := newTestClient(t, roleID)
+
+		created, err := client.CreateApplication(context.Background(), &idp.Application{Name: "NoSecret", OuID: "ou-die"})
+
+		assert.Nil(t, created)
+		assert.ErrorContains(t, err, "no client id or secret")
+		assert.Equal(t, []string{"app-1"}, fake.deleted)
+		assert.Nil(t, fake.assigned)
 	})
 
 	t.Run("returns ThunderID's error message", func(t *testing.T) {
