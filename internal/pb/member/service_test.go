@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +31,8 @@ func TestCreateMember_Success(t *testing.T) {
 	result, err := service.CreateMember(context.Background(), req)
 
 	require.NoError(t, err)
-	assert.Contains(t, result.MemberID, "mem_")
+	_, err = uuid.Parse(result.MemberID)
+	assert.NoError(t, err, "member ID should be a plain UUID")
 	assert.Equal(t, "Acme Org", result.Name)
 	assert.Equal(t, "contact@acme.example", result.Email)
 	assert.Equal(t, "+1234567890", result.PhoneNumber)

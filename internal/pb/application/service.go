@@ -367,7 +367,7 @@ func (s *Service) CreateApplicationSubmission(ctx context.Context, req *CreateAp
 
 	// Create application submission
 	submission := ApplicationSubmission{
-		SubmissionID:           "sub_" + uuid.New().String(),
+		SubmissionID:           uuid.New().String(),
 		PreviousApplicationID:  req.PreviousApplicationID,
 		ApplicationName:        req.ApplicationName,
 		ApplicationDescription: req.ApplicationDescription,

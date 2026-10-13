@@ -35,7 +35,7 @@ func (s *Service) CreateMember(ctx context.Context, req *CreateMemberRequest) (*
 	}
 
 	member := Member{
-		MemberID:    "mem_" + uuid.New().String(),
+		MemberID:    uuid.New().String(),
 		Name:        req.Name,
 		Email:       req.Email,
 		PhoneNumber: req.PhoneNumber,

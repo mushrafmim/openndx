@@ -39,7 +39,7 @@ func (s *Service) CreateSchema(req *CreateSchemaRequest) (*SchemaResponse, error
 	}
 
 	schema := Schema{
-		SchemaID:   "sch_" + uuid.New().String(),
+		SchemaID:   uuid.New().String(),
 		SchemaName: req.SchemaName,
 		SDL:        req.SDL,
 		Endpoint:   req.Endpoint,
@@ -268,7 +268,7 @@ func (s *Service) CreateSchemaSubmission(req *CreateSchemaSubmissionRequest) (*S
 
 	// Create submission
 	submission := SchemaSubmission{
-		SubmissionID:      "sub_" + uuid.New().String(),
+		SubmissionID:      uuid.New().String(),
 		PreviousSchemaID:  req.PreviousSchemaID,
 		SchemaName:        req.SchemaName,
 		SchemaDescription: req.SchemaDescription,
