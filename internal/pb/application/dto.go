@@ -31,10 +31,9 @@ type CreateApplicationRequest struct {
 	MemberID               string                       `json:"memberId" validate:"required"`
 	// IdpApplicationID and IdpClientID let a caller register an application whose
 	// OAuth2 client was already provisioned directly in the IDP (e.g. manually via
-	// ThunderID's console, since idpfactory only implements Asgardeo's admin API
-	// today - see internal/pb/idp/idpfactory). When both are set, creation skips
-	// calling the IDP entirely and uses these values as-is. Must be provided
-	// together (both or neither) - a single field alone is rejected.
+	// ThunderID's console). When both are set, creation skips calling the IDP
+	// entirely and uses these values as-is. Must be provided together (both or
+	// neither) - a single field alone is rejected.
 	IdpApplicationID *string `json:"idpApplicationId,omitempty"`
 	IdpClientID      *string `json:"idpClientId,omitempty"`
 }
@@ -64,8 +63,11 @@ type ApplicationResponse struct {
 	Version                string                       `json:"version"`
 	IdpApplicationID       *string                      `json:"idpApplicationId,omitempty"`
 	IdpClientID            *string                      `json:"idpClientId,omitempty"`
-	CreatedAt              string                       `json:"createdAt"`
-	UpdatedAt              string                       `json:"updatedAt"`
+	// IdpClientSecret is only set in the response that created the IDP client.
+	// Portal Backend doesn't store it, and ThunderID doesn't return it again.
+	IdpClientSecret *string `json:"idpClientSecret,omitempty"`
+	CreatedAt       string  `json:"createdAt"`
+	UpdatedAt       string  `json:"updatedAt"`
 }
 
 type ApplicationIDResponse struct {

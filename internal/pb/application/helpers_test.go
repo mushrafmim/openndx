@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
 	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/schema"
@@ -20,6 +21,13 @@ func setupSQLiteTestDB(t *testing.T) *gorm.DB {
 		&schema.Schema{},
 		&schema.SchemaSubmission{},
 	)
+}
+
+// expectMemberOuLookup expects CreateApplication's lookup of the owning
+// member's organization unit, which precedes creating the IDP application.
+func expectMemberOuLookup(mock sqlmock.Sqlmock, ouID string) {
+	mock.ExpectQuery(`SELECT "ou_id" FROM "members"`).
+		WillReturnRows(sqlmock.NewRows([]string{"ou_id"}).AddRow(ouID))
 }
 
 // MockRoundTripper is a mock implementation of http.RoundTripper

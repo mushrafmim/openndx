@@ -19,19 +19,20 @@ import (
 type Service struct {
 	db            *gorm.DB
 	policyService *policy.Client
-	idp           idp.IdentityProviderAPI
+	idp           idp.ApplicationManager
 }
 
 // NewService creates a new application service
-func NewService(db *gorm.DB, pdpService *policy.Client, idp idp.IdentityProviderAPI) *Service {
+func NewService(db *gorm.DB, pdpService *policy.Client, idp idp.ApplicationManager) *Service {
 	return &Service{db: db, policyService: pdpService, idp: idp}
 }
 
-// CreateApplication creates a new application. If req.IdpApplicationID and
-// req.IdpClientID are both set, the caller has already provisioned the OAuth2
-// client directly in the IDP (e.g. manually via ThunderID's console, since
-// idpfactory only supports Asgardeo's admin API today) - IDP creation is
-// skipped and those values are used as-is.
+// CreateApplication creates a new application. Unless the caller supplies its
+// IDP client, the application's OAuth2 client is created in the IDP, in the
+// owning member's organization unit, and its client secret is returned once in
+// the response. If req.IdpApplicationID and req.IdpClientID are both set, the
+// caller has already provisioned the OAuth2 client directly in the IDP - IDP
+// creation is skipped and those values are used as-is.
 func (s *Service) CreateApplication(ctx context.Context, req *CreateApplicationRequest) (*ApplicationResponse, error) {
 	externallyProvisioned := req.IdpApplicationID != nil || req.IdpClientID != nil
 	if externallyProvisioned && (req.IdpApplicationID == nil || req.IdpClientID == nil) {
@@ -43,6 +44,8 @@ func (s *Service) CreateApplication(ctx context.Context, req *CreateApplicationR
 
 	var idpApplicationID *string
 	var idpClientID *string
+	// Only returned in this response, never stored.
+	var idpClientSecret *string
 
 	if externallyProvisioned {
 		idpApplicationID = req.IdpApplicationID
@@ -54,21 +57,30 @@ func (s *Service) CreateApplication(ctx context.Context, req *CreateApplicationR
 			description = *req.ApplicationDescription
 		}
 
+		// The IdP application lives in its member's organization unit.
+		var owner member.Member
+		if err := s.db.WithContext(ctx).Select("ou_id").First(&owner, "member_id = ?", req.MemberID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, fmt.Errorf("member not found")
+			}
+			return nil, fmt.Errorf("failed to find member: %w", err)
+		}
+
 		applicationInstance := &idp.Application{
 			Name:        req.ApplicationName,
 			Description: description,
 			TemplateId:  TemplateIDM2M,
+			OuID:        owner.OuID,
 		}
-		var err error
-		idpApplicationID, err = s.idp.CreateApplication(ctx, applicationInstance)
+		created, err := s.idp.CreateApplication(ctx, applicationInstance)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create application: %w", err)
 		}
-		appOIDCInfo, err := s.idp.GetApplicationOIDC(ctx, *idpApplicationID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get application OIDC: %w", err)
+		idpApplicationID = &created.Id
+		idpClientID = &created.ClientId
+		if created.ClientSecret != "" {
+			idpClientSecret = &created.ClientSecret
 		}
-		idpClientID = &appOIDCInfo.ClientId
 	}
 
 	// Step 2: Create application in database
@@ -167,6 +179,7 @@ func (s *Service) CreateApplication(ctx context.Context, req *CreateApplicationR
 		Version:                application.Version,
 		IdpApplicationID:       application.IdpApplicationID,
 		IdpClientID:            application.IdpClientID,
+		IdpClientSecret:        idpClientSecret,
 		CreatedAt:              application.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:              application.UpdatedAt.Format(time.RFC3339),
 	}

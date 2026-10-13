@@ -43,7 +43,13 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 		pdpService := policy.NewClient("http://mock-pdp")
 		pdpService.HTTPClient = &http.Client{Transport: mockTransport}
 
-		mockIDP := &idptest.Mock{}
+		var capturedIdpApp *idp.Application
+		mockIDP := &idptest.Mock{
+			CreateApplicationFunc: func(ctx context.Context, app *idp.Application) (*idp.CreatedApplication, error) {
+				capturedIdpApp = app
+				return &idp.CreatedApplication{Id: "mock-idp-app-id", ClientId: "mock-client-id", ClientSecret: "mock-client-secret"}, nil
+			},
+		}
 		service := NewService(db, pdpService, mockIDP)
 
 		desc := "Test Description"
@@ -57,6 +63,7 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 		}
 
 		// Mock DB expectations
+		expectMemberOuLookup(mock, "ou-123")
 		mock.ExpectQuery(`INSERT INTO "applications"`).
 			WillReturnRows(sqlmock.NewRows([]string{"application_id"}).AddRow("app_123"))
 
@@ -75,6 +82,15 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 		if resp != nil {
 			assert.Equal(t, req.ApplicationName, resp.ApplicationName)
 			assert.Equal(t, req.MemberID, resp.MemberID)
+			// The IDP client secret is returned once, in the create response.
+			if assert.NotNil(t, resp.IdpClientSecret) {
+				assert.Equal(t, "mock-client-secret", *resp.IdpClientSecret)
+			}
+		}
+
+		// The IDP application is created in the owning member's organization unit.
+		if assert.NotNil(t, capturedIdpApp) {
+			assert.Equal(t, "ou-123", capturedIdpApp.OuID)
 		}
 
 		// The PDP allow-list must be keyed by the IdP OIDC client_id (the identity OE
@@ -116,6 +132,7 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 
 		// Mock DB expectations
 		// 1. Create application
+		expectMemberOuLookup(mock, "ou-123")
 		mock.ExpectQuery(`INSERT INTO "applications"`).
 			WillReturnRows(sqlmock.NewRows([]string{"application_id"}).AddRow("app_123"))
 
@@ -131,6 +148,32 @@ func TestApplicationService_CreateApplication(t *testing.T) {
 		assert.Nil(t, resp)
 		assert.Contains(t, err.Error(), "failed to update allow list")
 
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("CreateApplication_MemberNotFound", func(t *testing.T) {
+		db, mock, cleanup := dbtest.SetupMockDB(t)
+		defer cleanup()
+
+		mockIDP := &idptest.Mock{
+			CreateApplicationFunc: func(ctx context.Context, app *idp.Application) (*idp.CreatedApplication, error) {
+				t.Fatal("CreateApplication should not be called when the member doesn't exist")
+				return nil, nil
+			},
+		}
+		service := NewService(db, policy.NewClient("http://mock-pdp"), mockIDP)
+
+		mock.ExpectQuery(`SELECT "ou_id" FROM "members"`).
+			WillReturnRows(sqlmock.NewRows([]string{"ou_id"}))
+
+		resp, err := service.CreateApplication(context.Background(), &CreateApplicationRequest{
+			ApplicationName: "Test Application",
+			SelectedFields:  []policy.SelectedFieldRecord{{FieldName: "field1", SchemaID: "schema-123"}},
+			MemberID:        "missing-member",
+		})
+
+		assert.Nil(t, resp)
+		assert.EqualError(t, err, "member not found")
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }
@@ -159,7 +202,7 @@ func TestApplicationService_CreateApplication_ExternallyProvisioned(t *testing.T
 
 		mockIDP := &idptest.Mock{
 			// These must never be called for an externally provisioned application.
-			CreateApplicationFunc: func(ctx context.Context, app *idp.Application) (*string, error) {
+			CreateApplicationFunc: func(ctx context.Context, app *idp.Application) (*idp.CreatedApplication, error) {
 				t.Fatal("CreateApplication should not be called for an externally provisioned application")
 				return nil, nil
 			},
@@ -850,6 +893,7 @@ func TestApplicationService_UpdateApplicationSubmission(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		// 3. Create Application (will fail on PDP)
+		expectMemberOuLookup(mock, "ou-123")
 		mock.ExpectQuery(`INSERT INTO "applications"`).
 			WillReturnRows(sqlmock.NewRows([]string{"application_id"}).AddRow("app_new"))
 
@@ -1042,6 +1086,7 @@ func TestApplicationService_CreateApplication_EdgeCases(t *testing.T) {
 
 		// Mock DB expectations
 		// 1. Create application
+		expectMemberOuLookup(mock, "ou-123")
 		mock.ExpectQuery(`INSERT INTO "applications"`).
 			WillReturnRows(sqlmock.NewRows([]string{"application_id"}).AddRow("app_123"))
 

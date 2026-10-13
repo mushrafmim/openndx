@@ -59,7 +59,7 @@ func TestMock_CallsConfiguredFuncs(t *testing.T) {
 			mark("AddMemberToGroup")
 			return nil
 		},
-		CreateApplicationFunc: func(context.Context, *idp.Application) (*string, error) {
+		CreateApplicationFunc: func(context.Context, *idp.Application) (*idp.CreatedApplication, error) {
 			mark("CreateApplication")
 			return nil, nil
 		},
