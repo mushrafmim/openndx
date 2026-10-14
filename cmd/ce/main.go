@@ -10,8 +10,6 @@ import (
 	"os"
 	"time"
 
-	coredb "github.com/OpenNSW/core/database"
-	_ "github.com/jackc/pgx/v5/stdlib" // Register the PostgreSQL driver for coredb.New.
 	"github.com/openndx/openndx-core/internal/ce/auth"
 	"github.com/openndx/openndx-core/internal/ce/config"
 	"github.com/openndx/openndx-core/internal/ce/handlers"
@@ -58,12 +56,10 @@ func run() error {
 		"build_time", BuildTime,
 		"git_commit", GitCommit)
 
-	// OpenNSW owns the SQL pool used by the consent service.
-	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancelStartup()
-	sqlDB, err := coredb.New(startupCtx, cfg.Database)
+	// Temporary GORM initialization until #631 switches to database.Open.
+	gormDB, sqlDB, err := database.OpenGORM(context.Background(), cfg.Database, cfg.DatabaseIdleTimeout)
 	if err != nil {
-		return fmt.Errorf("connect database: %w", err)
+		return fmt.Errorf("initialize database: %w", err)
 	}
 	defer func() {
 		if err := sqlDB.Close(); err != nil {
@@ -72,14 +68,6 @@ func run() error {
 			slog.Info("Database connection closed successfully")
 		}
 	}()
-	sqlDB.SetConnMaxIdleTime(cfg.DatabaseIdleTimeout)
-	cancelStartup()
-
-	// Temporary adapter until #631 replaces the service's GORM dependency.
-	gormDB, err := database.Wrap(sqlDB)
-	if err != nil {
-		return fmt.Errorf("initialize temporary GORM adapter: %w", err)
-	}
 
 	// Get consent portal URL from environment
 	slog.Info("Using consent portal URL", "url", cfg.ConsentPortalUrl)

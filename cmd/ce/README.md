@@ -46,12 +46,17 @@ The loader reads environment variables and flags, then calls `Config.Validate()`
 before startup. Existing `DB_*` settings continue to apply.
 `DB_PORT` must be an integer from 1 to 65535, and `DB_PASSWORD` must be non-empty
 (the factory validates it even for PostgreSQL installations using trust authentication).
-`cmd/ce/main.go` opens the validated configuration directly with OpenNSW's `database.New`
-and the pgx driver, with a 10-second connection deadline. Startup returns an error
-if the connection fails; a deployment's restart policy can retry startup.
+`internal/database` owns driver registration, OpenNSW connection setup, the
+10-second connection deadline, and idle-timeout configuration. Startup returns an
+error if the connection fails; a deployment's restart policy can retry startup.
 The pool defaults to 25 open connections, 5 idle connections, a one-hour connection
 lifetime, and a 30-minute idle timeout; the pool environment variables can override them.
-The shared `internal/database` package wraps that pool with GORM for the existing consent service.
+CE makes one `database.OpenGORM(ctx, cfg.Database, cfg.DatabaseIdleTimeout)` call
+to obtain the GORM handle and its SQL pool for the existing consent service.
+Raw SQL callers use `database.Open(ctx, cfg.Database, cfg.DatabaseIdleTimeout)`.
+Both initializers use the same pool setup; GORM wraps that pool without opening
+or pinging another one. The application closes the returned SQL pool on shutdown,
+and the package closes it if GORM initialization fails.
 
 `cmd/ce/schema.sql` defines the initial PostgreSQL schema. Initialize the CE database
 before starting the service, using the same `DB_*` settings:
