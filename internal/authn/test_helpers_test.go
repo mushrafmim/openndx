@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Lanka Software Foundation
+
+package authn
+
+import (
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/base64"
+	"encoding/json"
+	"math/big"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+const (
+	testIssuer   = "https://localhost:8090/oauth2/token"
+	testClientID = "TRADER_PORTAL_APP"
+	testKid      = "test-kid"
+
+	testUserID   = "TRADER-001"
+	testEmail    = "trader@example.com"
+	testPhone    = "+61400111222"
+	testOUID     = "OU-001"
+	testOUHandle = "ou-001"
+)
+
+func newTokenExtractor(t *testing.T) (*TokenExtractor, *rsa.PrivateKey, func()) {
+	t.Helper()
+	return newTokenExtractorWithOptions(t)
+}
+
+// newTokenExtractorWithOptions mirrors newTokenExtractor but threads Options
+// through to NewTokenExtractor, for tests exercising WithClaims.
+func newTokenExtractorWithOptions(t *testing.T, opts ...Option) (*TokenExtractor, *rsa.PrivateKey, func()) {
+	t.Helper()
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("failed to generate rsa key: %v", err)
+	}
+
+	jwksServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"keys": []map[string]any{{
+				"kid": testKid,
+				"kty": "RSA",
+				"alg": "RS256",
+				"use": "sig",
+				"n":   base64.RawURLEncoding.EncodeToString(privateKey.N.Bytes()),
+				"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(privateKey.PublicKey.E)).Bytes()),
+			}},
+		})
+	}))
+
+	extractor, err := NewTokenExtractor(jwksServer.URL, testIssuer, testClientID, opts...)
+	if err != nil {
+		jwksServer.Close()
+		t.Fatalf("failed to create token extractor: %v", err)
+	}
+
+	return extractor, privateKey, jwksServer.Close
+}
+
+func newBaseClaims() jwt.MapClaims {
+	now := time.Now()
+	return jwt.MapClaims{
+		"iss":       testIssuer,
+		"aud":       testClientID,
+		"sub":       testUserID,
+		"client_id": testClientID,
+		"iat":       now.Add(-1 * time.Minute).Unix(),
+		"nbf":       now.Add(-1 * time.Minute).Unix(),
+		"exp":       now.Add(10 * time.Minute).Unix(),
+	}
+}
+
+// newUserToken signs a token as issued to a person signing in through a client:
+// a user subject carrying identity claims.
+func newUserToken(t *testing.T, privateKey *rsa.PrivateKey) string {
+	t.Helper()
+	claims := newBaseClaims()
+	claims["sub"] = testUserID
+	claims["email"] = testEmail
+	claims["phone_number"] = testPhone
+	claims["ouId"] = testOUID
+	claims["ouHandle"] = testOUHandle
+	claims["roles"] = []string{"exporter"}
+	return signToken(t, privateKey, claims)
+}
+
+// newClientToken signs a token as issued to a system via client credentials:
+// the subject is the client itself and no identity claims are carried.
+func newClientToken(t *testing.T, privateKey *rsa.PrivateKey) string {
+	t.Helper()
+	claims := newBaseClaims()
+	claims["sub"] = "FCAU_TO_NSW"
+	return signToken(t, privateKey, claims)
+}
+
+func signToken(t *testing.T, privateKey *rsa.PrivateKey, claims jwt.MapClaims) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = testKid
+	signedToken, err := token.SignedString(privateKey)
+	if err != nil {
+		t.Fatalf("failed to sign token: %v", err)
+	}
+	return signedToken
+}

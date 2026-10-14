@@ -7,6 +7,7 @@ require (
 	github.com/LSFLK/argus/pkg/audit v0.1.0
 	github.com/MicahParks/keyfunc/v3 v3.7.0
 	github.com/OpenNSW/core/database v0.3.0
+	github.com/OpenNSW/core/shared v0.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/graphql-go/graphql v0.8.1
