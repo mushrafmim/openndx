@@ -22,7 +22,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: consent_db
     volumes:
-      - ./init-consent-db.sql:/docker-entrypoint-initdb.d/init-consent-db.sql
+      - ../../cmd/ce/schema.sql:/docker-entrypoint-initdb.d/ce-schema.sql:ro
     ports:
       - "5434:5432"
     healthcheck:

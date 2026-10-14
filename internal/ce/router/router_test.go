@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewV1Router(t *testing.T) {
+func TestNewRouter(t *testing.T) {
 	internalHandler := &handlers.InternalHandler{}
 	portalHandler := &handlers.PortalHandler{}
 
@@ -26,7 +26,7 @@ func TestNewV1Router(t *testing.T) {
 		t.Skipf("Failed to create JWT verifier: %v", err)
 	}
 
-	router := NewV1Router("http://localhost:5173", internalHandler, portalHandler, jwtVerifier)
+	router := NewRouter("http://localhost:5173", internalHandler, portalHandler, jwtVerifier)
 
 	assert.NotNil(t, router)
 	assert.Equal(t, internalHandler, router.internalHandler)
@@ -35,7 +35,7 @@ func TestNewV1Router(t *testing.T) {
 	assert.NotNil(t, router.corsMiddleware)
 }
 
-func TestV1Router_RegisterRoutes(t *testing.T) {
+func TestRouter_RegisterRoutes(t *testing.T) {
 	internalHandler := &handlers.InternalHandler{}
 	portalHandler := &handlers.PortalHandler{}
 
@@ -49,7 +49,7 @@ func TestV1Router_RegisterRoutes(t *testing.T) {
 		t.Skipf("Failed to create JWT verifier: %v", err)
 	}
 
-	router := NewV1Router("http://localhost:5173", internalHandler, portalHandler, jwtVerifier)
+	router := NewRouter("http://localhost:5173", internalHandler, portalHandler, jwtVerifier)
 	mux := http.NewServeMux()
 
 	router.RegisterRoutes(mux)
@@ -69,7 +69,7 @@ func TestV1Router_RegisterRoutes(t *testing.T) {
 	assert.NotEqual(t, http.StatusNotFound, w.Code)
 }
 
-func TestV1Router_ApplyCORS(t *testing.T) {
+func TestRouter_ApplyCORS(t *testing.T) {
 	internalHandler := &handlers.InternalHandler{}
 	portalHandler := &handlers.PortalHandler{}
 
@@ -83,7 +83,7 @@ func TestV1Router_ApplyCORS(t *testing.T) {
 		t.Skipf("Failed to create JWT verifier: %v", err)
 	}
 
-	router := NewV1Router("http://localhost:5173", internalHandler, portalHandler, jwtVerifier)
+	router := NewRouter("http://localhost:5173", internalHandler, portalHandler, jwtVerifier)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

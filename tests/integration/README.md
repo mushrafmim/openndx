@@ -55,7 +55,6 @@ tests/integration/
 ├── run-local-tests.sh          # Automated test script
 ├── schema.graphql              # GraphQL schema for tests
 ├── config.json                 # Orchestration Engine config
-├── init-consent-db.sql         # Consent database initialization script
 ├── init-stats.sh               # Statistics initialization script
 ├── graphql_flow_test.go        # GraphQL workflow tests
 ├── services_integration_test.go # Service health checks
@@ -81,6 +80,9 @@ tests/integration/
 ---
 
 ## Test Scenarios
+
+The CE database container initializes its schema from `../../cmd/ce/schema.sql`,
+the same file used by the root development stack.
 
 ### GraphQL Flow Tests
 

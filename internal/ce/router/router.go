@@ -9,22 +9,22 @@ import (
 	"github.com/openndx/openndx-core/internal/utils"
 )
 
-// V1Router handles all V1 API route registration
-type V1Router struct {
+// Router handles all API route registration
+type Router struct {
 	internalHandler *handlers.InternalHandler
 	portalHandler   *handlers.PortalHandler
 	authMiddleware  *middleware.JWTAuthMiddleware
 	corsMiddleware  func(http.Handler) http.Handler
 }
 
-// NewV1Router creates a new V1 router with all dependencies
-func NewV1Router(
+// NewRouter creates a new router with all dependencies
+func NewRouter(
 	allowedOrigins string,
 	internalHandler *handlers.InternalHandler,
 	portalHandler *handlers.PortalHandler,
 	jwtVerifier *auth.JWTVerifier,
-) *V1Router {
-	return &V1Router{
+) *Router {
+	return &Router{
 		internalHandler: internalHandler,
 		portalHandler:   portalHandler,
 		authMiddleware:  middleware.NewJWTAuthMiddleware(jwtVerifier),
@@ -32,14 +32,14 @@ func NewV1Router(
 	}
 }
 
-// RegisterRoutes registers all V1 API routes to the provided mux
-func (r *V1Router) RegisterRoutes(mux *http.ServeMux) {
+// RegisterRoutes registers all API routes to the provided mux
+func (r *Router) RegisterRoutes(mux *http.ServeMux) {
 	r.registerInternalRoutes(mux)
 	r.registerPortalRoutes(mux)
 }
 
 // registerInternalRoutes registers internal API routes (no authentication required)
-func (r *V1Router) registerInternalRoutes(mux *http.ServeMux) {
+func (r *Router) registerInternalRoutes(mux *http.ServeMux) {
 	// Health check
 	mux.Handle("/internal/api/v1/health",
 		utils.PanicRecoveryMiddleware(http.HandlerFunc(r.internalHandler.HealthCheck)))
@@ -52,7 +52,7 @@ func (r *V1Router) registerInternalRoutes(mux *http.ServeMux) {
 }
 
 // registerPortalRoutes registers portal API routes (authentication required for protected endpoints)
-func (r *V1Router) registerPortalRoutes(mux *http.ServeMux) {
+func (r *Router) registerPortalRoutes(mux *http.ServeMux) {
 	// Health check endpoint (public - no authentication per OpenAPI spec)
 	mux.Handle("/api/v1/health",
 		utils.PanicRecoveryMiddleware(http.HandlerFunc(r.portalHandler.HealthCheck)))
@@ -67,6 +67,6 @@ func (r *V1Router) registerPortalRoutes(mux *http.ServeMux) {
 }
 
 // ApplyCORS wraps a handler with CORS middleware
-func (r *V1Router) ApplyCORS(handler http.Handler) http.Handler {
+func (r *Router) ApplyCORS(handler http.Handler) http.Handler {
 	return r.corsMiddleware(handler)
 }
