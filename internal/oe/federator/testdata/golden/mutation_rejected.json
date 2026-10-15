@@ -1,0 +1,24 @@
+{
+  "response": {
+    "data": null,
+    "errors": [
+      {
+        "extensions": null,
+        "message": "Only query operation is supported"
+      }
+    ]
+  },
+  "policyRequests": [],
+  "consentRequests": [],
+  "providerRequests": {},
+  "auditEvents": [
+    {
+      "eventType": "DATA_REQUEST",
+      "status": "SUCCESS",
+      "actorType": "APPLICATION",
+      "actorId": "app-golden",
+      "targetType": "SERVICE",
+      "targetId": "SERVICE"
+    }
+  ]
+}

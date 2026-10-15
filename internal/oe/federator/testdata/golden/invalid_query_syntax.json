@@ -1,0 +1,19 @@
+{
+  "panicked": true,
+  "response": {
+    "data": null
+  },
+  "policyRequests": [],
+  "consentRequests": [],
+  "providerRequests": {},
+  "auditEvents": [
+    {
+      "eventType": "DATA_REQUEST",
+      "status": "SUCCESS",
+      "actorType": "APPLICATION",
+      "actorId": "app-golden",
+      "targetType": "SERVICE",
+      "targetId": "SERVICE"
+    }
+  ]
+}

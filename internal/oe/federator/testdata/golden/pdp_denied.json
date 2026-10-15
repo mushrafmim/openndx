@@ -1,0 +1,54 @@
+{
+  "response": {
+    "data": null,
+    "errors": [
+      {
+        "extensions": {
+          "code": "PDP_NOT_ALLOWED",
+          "unauthorizedFields": [
+            {
+              "fieldName": "person.permanentAddress",
+              "schemaId": "drp-v1"
+            }
+          ]
+        },
+        "message": "Access denied"
+      }
+    ]
+  },
+  "policyRequests": [
+    {
+      "applicationId": "app-golden",
+      "requiredFields": [
+        {
+          "fieldName": "person.fullName",
+          "schemaId": "drp-v1"
+        },
+        {
+          "fieldName": "person.permanentAddress",
+          "schemaId": "drp-v1"
+        }
+      ]
+    }
+  ],
+  "consentRequests": [],
+  "providerRequests": {},
+  "auditEvents": [
+    {
+      "eventType": "DATA_REQUEST",
+      "status": "SUCCESS",
+      "actorType": "APPLICATION",
+      "actorId": "app-golden",
+      "targetType": "SERVICE",
+      "targetId": "SERVICE"
+    },
+    {
+      "eventType": "POLICY_CHECK",
+      "status": "FAILURE",
+      "actorType": "SERVICE",
+      "actorId": "orchestration-engine",
+      "targetType": "SERVICE",
+      "targetId": "policy-decision-point"
+    }
+  ]
+}

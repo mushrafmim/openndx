@@ -1,0 +1,89 @@
+{
+  "response": {
+    "data": {
+      "personInfo": {
+        "fullName": "Nimal Perera",
+        "ownedVehicles": [
+          {
+            "make": "Toyota",
+            "regNo": "CAB-1234"
+          },
+          {
+            "make": "Honda",
+            "regNo": "WP-5678"
+          }
+        ]
+      }
+    }
+  },
+  "policyRequests": [
+    {
+      "applicationId": "app-golden",
+      "requiredFields": [
+        {
+          "fieldName": "vehicle.getVehicleInfos.data",
+          "schemaId": "dmt-v1"
+        },
+        {
+          "fieldName": "vehicle.getVehicleInfos.data.make",
+          "schemaId": "dmt-v1"
+        },
+        {
+          "fieldName": "vehicle.getVehicleInfos.data.registrationNumber",
+          "schemaId": "dmt-v1"
+        },
+        {
+          "fieldName": "person.fullName",
+          "schemaId": "drp-v1"
+        }
+      ]
+    }
+  ],
+  "consentRequests": [],
+  "providerRequests": {
+    "dmt": [
+      {
+        "query": "query Querydmt { vehicle ( ownerNic : \"199012345678\" ) { getVehicleInfos ( ownerNic : \"199012345678\" ) { data { registrationNumber make } } } }"
+      }
+    ],
+    "drp": [
+      {
+        "query": "query Querydrp { person ( nic : \"199012345678\" ) { fullName } }"
+      }
+    ]
+  },
+  "auditEvents": [
+    {
+      "eventType": "DATA_REQUEST",
+      "status": "SUCCESS",
+      "actorType": "APPLICATION",
+      "actorId": "app-golden",
+      "targetType": "SERVICE",
+      "targetId": "SERVICE"
+    },
+    {
+      "eventType": "POLICY_CHECK",
+      "status": "SUCCESS",
+      "actorType": "SERVICE",
+      "actorId": "orchestration-engine",
+      "targetType": "SERVICE",
+      "targetId": "policy-decision-point"
+    },
+    {
+      "eventType": "PROVIDER_FETCH",
+      "status": "SUCCESS",
+      "actorType": "SERVICE",
+      "actorId": "orchestration-engine",
+      "targetType": "SERVICE",
+      "targetId": "dmt"
+    },
+    {
+      "eventType": "PROVIDER_FETCH",
+      "status": "SUCCESS",
+      "actorType": "SERVICE",
+      "actorId": "orchestration-engine",
+      "targetType": "SERVICE",
+      "targetId": "drp"
+    }
+  ]
+}
