@@ -245,13 +245,15 @@ against a different identity provider.
 | `ondx login [flags]`                                      | Browser-based OAuth2 login; caches a token          |
 | `ondx profile list` / `use <name>` / `set <name> [flags]` | Manage named environments                           |
 | `ondx members create [flags]`                             | Register a member                                   |
+| `ondx members list [--ou-id ...] [--json]`                | List members                                        |
+| `ondx members get --member-id ... [--json]`               | Show a member's details                             |
 | `ondx schemas create [flags]`                             | Register a schema and its grantable fields          |
 | `ondx applications create [flags]`                        | Register an application, optionally granting fields |
 | `ondx applications list [--member-id ...] [--json]`       | List applications                                   |
 | `ondx applications get --app-id ... [--json]`             | Show an application's details and current policy    |
 | `ondx policy update --app-id ... --field ... [flags]`     | Save the selected fields and add or refresh grants  |
 
-Every command that calls Portal Backend (`members create`, `schemas create`,
+Every command that calls Portal Backend (`members create`/`list`/`get`, `schemas create`,
 `applications create`/`list`/`get`, `policy update`) also accepts `--pb-url`, `--credentials-path`,
 `--insecure`, and `--profile`. `ondx login` accepts `--credentials-path`, `--insecure`, and
 `--profile`, but not `--pb-url` (it doesn't talk to Portal Backend). `ondx profile list` and

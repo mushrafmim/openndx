@@ -114,30 +114,38 @@ Portal Backend creates the application's M2M client in DIE's ThunderID organizat
 
 Browser-based OAuth2 Authorization Code + PKCE login (RFC 8252). Caches the resulting token.
 
-| Flag                 | Env var         | Description                                                                                                                                                                                                                                                                                          |
-|----------------------|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--issuer`           | `NDX_ISSUER`    | Identity provider issuer/base URL; `--auth-url`/`--token-url` are discovered from `{issuer}/.well-known/openid-configuration` when they're not set explicitly                                                                                                                                        |
-| `--auth-url`         | `NDX_AUTH_URL`  | Identity provider authorization endpoint. Required unless `--issuer` supports discovery; overrides discovery when both are set                                                                                                                                                                       |
-| `--token-url`        | `NDX_TOKEN_URL` | Identity provider token endpoint. Required unless `--issuer` supports discovery; overrides discovery when both are set                                                                                                                                                                               |
-| `--client-id`        | `NDX_CLIENT_ID` | OAuth2 public client ID (required)                                                                                                                                                                                                                                                                   |
-| `--scopes`           | `NDX_SCOPES`    | Space-separated scopes to request                                                                                                                                                                                                                                                                    |
+| Flag                 | Env var         | Description                                                                                                                                                                                                                                                                    |
+|----------------------|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--issuer`           | `NDX_ISSUER`    | Identity provider issuer/base URL; `--auth-url`/`--token-url` are discovered from `{issuer}/.well-known/openid-configuration` when they're not set explicitly                                                                                                                  |
+| `--auth-url`         | `NDX_AUTH_URL`  | Identity provider authorization endpoint. Required unless `--issuer` supports discovery; overrides discovery when both are set                                                                                                                                                 |
+| `--token-url`        | `NDX_TOKEN_URL` | Identity provider token endpoint. Required unless `--issuer` supports discovery; overrides discovery when both are set                                                                                                                                                         |
+| `--client-id`        | `NDX_CLIENT_ID` | OAuth2 public client ID (required)                                                                                                                                                                                                                                             |
+| `--scopes`           | `NDX_SCOPES`    | Space-separated scopes to request                                                                                                                                                                                                                                              |
 | `--extra key=value`  | —               | Extra authorization *and* token-request query param, repeatable — e.g. `resource=...`, which overrides the profile's `resource` (see [ThunderID resource binding](#thunderid-resource-binding)). Persisted with the cached token, so it's reused automatically on refresh too. |
-| `--callback-port`    | —               | Fixed local port for the redirect callback (0 = OS-assigned random port; see [Callback port](#callback-port))                                                                                                                                                                                        |
-| `--no-browser`       | —               | Print the login URL instead of opening a browser                                                                                                                                                                                                                                                     |
-| `--insecure`         | —               | Skip TLS certificate verification (local dev only — see [TLS](#tls-and---insecure))                                                                                                                                                                                                                  |
-| `--credentials-path` | —               | Where to cache the token (default `~/.openndx/credentials.json`, or `credentials-<profile>.json` for a non-`local` profile)                                                                                                                                                                          |
-| `--profile`          | `NDX_PROFILE`   | Named profile to source defaults from for this invocation (default: the config file's current profile) — see [Profiles](#ondx-profile-list--ondx-profile-use-name--ondx-profile-set-name-flags)                                                                                                      |
+| `--callback-port`    | —               | Fixed local port for the redirect callback (0 = OS-assigned random port; see [Callback port](#callback-port))                                                                                                                                                                  |
+| `--no-browser`       | —               | Print the login URL instead of opening a browser                                                                                                                                                                                                                               |
+| `--insecure`         | —               | Skip TLS certificate verification (local dev only — see [TLS](#tls-and---insecure))                                                                                                                                                                                            |
+| `--credentials-path` | —               | Where to cache the token (default `~/.openndx/credentials.json`, or `credentials-<profile>.json` for a non-`local` profile)                                                                                                                                                    |
+| `--profile`          | `NDX_PROFILE`   | Named profile to source defaults from for this invocation (default: the config file's current profile) — see [Profiles](#ondx-profile-list--ondx-profile-use-name--ondx-profile-set-name-flags)                                                                                |
 
 ### `ondx members create`
 
 Registers a member organization. `--name` and `--ou-id` are always required. Nothing is created in the IDP.
 
-| Flag                          | Description                                                                                                                       |
-|-------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| Flag                          | Description                                                                                                                        |
+|-------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
 | `--ou-id`                     | ID of the ThunderID organization unit this member maps to. Create it (and its users) in ThunderID first. Unique and not updatable. |
-| `--email`                     | Optional organization contact email, e.g. a shared mailbox rather than a person's address. Not unique.                            |
-| `--phone`                     | Optional organization contact phone number                                                                                        |
-| `--pb-url` (env `NDX_PB_URL`) | Portal Backend base URL                                                                                                           |
+| `--email`                     | Optional organization contact email, e.g. a shared mailbox rather than a person's address. Not unique.                             |
+| `--phone`                     | Optional organization contact phone number                                                                                         |
+| `--pb-url` (env `NDX_PB_URL`) | Portal Backend base URL                                                                                                            |
+
+### `ondx members list [--ou-id ...]`
+
+Lists the members you can see: every member for an admin (optionally filtered to one organization unit's with `--ou-id`), or only your own organization unit's member otherwise. Add `--json` for the raw response.
+
+### `ondx members get --member-id ...`
+
+Shows one member's details. Members can only fetch their own organization unit's member. Add `--json` for the raw response.
 
 ### `ondx schemas create`
 
@@ -229,7 +237,7 @@ If you saved a `local` profile in `~/.openndx/config.json` before it had a `reso
 
 - **An application's client secret is shown only once**, in the `applications create` output. Portal Backend doesn't store it and ThunderID doesn't return it again. Applications created by approving an application submission don't surface it at all yet.
 - **Members need their organization unit created in ThunderID first.** Portal Backend only stores the link (`--ou-id`); it does not create organization units or users. The local stack seeds `drp` (`01900000-0000-7000-8000-0000000000c0`) and `die` (`01900000-0000-7000-8000-0000000000c1`), with staff users `drp-admin` / `die-admin` (password `1234`) who get the `OpenNDX_Member` role and an `ouId` claim.
-- **No delete or update commands yet, and no `schemas list`/`get`.** Only `members create`, `schemas create`, `applications create`/`list`/`get`, and `policy update` are implemented.
+- **No delete or update commands yet, and no `schemas list`/`get`.** Only `members create`/`list`/`get`, `schemas create`, `applications create`/`list`/`get`, and `policy update` are implemented.
 - **`ondx applications get`/`list` output for `--field` values always reflects the full current policy** — there's no "show me the diff" helper; compare manually before running `policy update`.
 
 ## Development

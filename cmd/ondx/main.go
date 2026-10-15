@@ -87,6 +87,8 @@ Usage:
   ondx profile use <name>           Switch the active profile
   ondx profile set <name> [flags]   Create or update a named profile
   ondx members create [flags]       Register a new member
+  ondx members list [flags]         List members
+  ondx members get [flags]          Show a member's details
   ondx schemas create [flags]       Register a new schema and its grantable fields
   ondx applications create [flags]  Register a new application
   ondx applications list [flags]    List applications
@@ -501,14 +503,142 @@ func runPolicyUpdate(ctx context.Context, args []string) error {
 
 func runMembers(ctx context.Context, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("expected a subcommand: 'create' (usage: ondx members create [flags])")
+		return fmt.Errorf("expected a subcommand: 'create', 'get', or 'list' (usage: ondx members create|get|list [flags])")
 	}
 	switch args[0] {
 	case "create":
 		return runMembersCreate(ctx, args[1:])
+	case "get":
+		return runMembersGet(ctx, args[1:])
+	case "list":
+		return runMembersList(ctx, args[1:])
 	default:
-		return fmt.Errorf("unknown members subcommand %q (expected 'create')", args[0])
+		return fmt.Errorf("unknown members subcommand %q (expected 'create', 'get', or 'list')", args[0])
 	}
+}
+
+func runMembersList(ctx context.Context, args []string) error {
+	profileName, active, err := resolveActiveProfile(args)
+	if err != nil {
+		return err
+	}
+
+	fs := flag.NewFlagSet("members list", flag.ExitOnError)
+	fs.String("profile", profileName, "Named profile to use for defaults (env NDX_PROFILE; see 'ondx profile list')")
+	ouID := fs.String("ou-id", "", "Filter to the member of one ThunderID organization unit (admins see all members if omitted)")
+	pbURL := fs.String("pb-url", firstNonEmpty(os.Getenv("NDX_PB_URL"), active.PBURL), "Portal Backend base URL (env NDX_PB_URL)")
+	credentialsPath := fs.String("credentials-path", "", "Path to the cached token (default ~/.openndx/credentials.json, or credentials-<profile>.json for a non-default profile)")
+	insecure := fs.Bool("insecure", active.Insecure, "Skip TLS certificate verification (local dev only, e.g. against ThunderID's self-signed cert)")
+	jsonOutput := fs.Bool("json", false, "Print the raw JSON response instead of a formatted summary")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *pbURL == "" {
+		return fmt.Errorf("--pb-url is required (or set NDX_PB_URL, or configure it in a profile)")
+	}
+
+	path := *credentialsPath
+	if path == "" {
+		path = defaultCredentialsPathOrExit(profileName)
+	}
+
+	httpClient := newHTTPClient(*insecure)
+
+	token, err := auth.EnsureFreshToken(ctx, path, httpClient)
+	if err != nil {
+		return err
+	}
+
+	client := pbclient.NewClient(*pbURL, token.AccessToken)
+	client.HTTPClient = httpClient
+
+	var ouFilter *string
+	if *ouID != "" {
+		ouFilter = ouID
+	}
+	members, err := client.ListMembers(ctx, ouFilter)
+	if err != nil {
+		return fmt.Errorf("failed to list members: %w", err)
+	}
+
+	if *jsonOutput {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(members)
+	}
+
+	if len(members.Items) == 0 {
+		fmt.Println("No members found.")
+		return nil
+	}
+	fmt.Printf("%-40s %-45s %-40s %s\n", "MEMBER ID", "NAME", "OU ID", "EMAIL")
+	for _, m := range members.Items {
+		fmt.Printf("%-40s %-45s %-40s %s\n", m.MemberID, m.Name, m.OuID, m.Email)
+	}
+	return nil
+}
+
+func runMembersGet(ctx context.Context, args []string) error {
+	profileName, active, err := resolveActiveProfile(args)
+	if err != nil {
+		return err
+	}
+
+	fs := flag.NewFlagSet("members get", flag.ExitOnError)
+	fs.String("profile", profileName, "Named profile to use for defaults (env NDX_PROFILE; see 'ondx profile list')")
+	memberID := fs.String("member-id", "", "Member ID to fetch (required)")
+	pbURL := fs.String("pb-url", firstNonEmpty(os.Getenv("NDX_PB_URL"), active.PBURL), "Portal Backend base URL (env NDX_PB_URL)")
+	credentialsPath := fs.String("credentials-path", "", "Path to the cached token (default ~/.openndx/credentials.json, or credentials-<profile>.json for a non-default profile)")
+	insecure := fs.Bool("insecure", active.Insecure, "Skip TLS certificate verification (local dev only, e.g. against ThunderID's self-signed cert)")
+	jsonOutput := fs.Bool("json", false, "Print the raw JSON response instead of a formatted summary")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *memberID == "" {
+		return fmt.Errorf("--member-id is required")
+	}
+	if *pbURL == "" {
+		return fmt.Errorf("--pb-url is required (or set NDX_PB_URL, or configure it in a profile)")
+	}
+
+	path := *credentialsPath
+	if path == "" {
+		path = defaultCredentialsPathOrExit(profileName)
+	}
+
+	httpClient := newHTTPClient(*insecure)
+
+	token, err := auth.EnsureFreshToken(ctx, path, httpClient)
+	if err != nil {
+		return err
+	}
+
+	client := pbclient.NewClient(*pbURL, token.AccessToken)
+	client.HTTPClient = httpClient
+	m, err := client.GetMember(ctx, *memberID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch member: %w", err)
+	}
+
+	if *jsonOutput {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(m)
+	}
+
+	fmt.Printf("Member:      %s (%s)\n", m.Name, m.MemberID)
+	fmt.Printf("OU:          %s\n", m.OuID)
+	if m.Email != "" {
+		fmt.Printf("Email:       %s\n", m.Email)
+	}
+	if m.PhoneNumber != "" {
+		fmt.Printf("Phone:       %s\n", m.PhoneNumber)
+	}
+	fmt.Printf("Created:     %s\n", m.CreatedAt)
+	fmt.Printf("Updated:     %s\n", m.UpdatedAt)
+	return nil
 }
 
 func runMembersCreate(ctx context.Context, args []string) error {

@@ -110,6 +110,44 @@ func (c *Client) CreateMember(ctx context.Context, req *member.CreateMemberReque
 	return &resp, nil
 }
 
+// GetMember calls GET /api/v1/members/{memberId}.
+func (c *Client) GetMember(ctx context.Context, memberID string) (*member.MemberResponse, error) {
+	body, err := c.doJSON(ctx, http.MethodGet, "/api/v1/members/"+url.PathEscape(memberID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var resp member.MemberResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &resp, nil
+}
+
+// MemberCollection is the GET /api/v1/members response envelope.
+type MemberCollection struct {
+	Items []member.MemberResponse `json:"items"`
+	Count int                     `json:"count"`
+}
+
+// ListMembers calls GET /api/v1/members, optionally filtered to one
+// organization unit's member.
+func (c *Client) ListMembers(ctx context.Context, ouID *string) (*MemberCollection, error) {
+	path := "/api/v1/members"
+	if ouID != nil && *ouID != "" {
+		path += "?ouId=" + url.QueryEscape(*ouID)
+	}
+
+	body, err := c.doJSON(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	var collection MemberCollection
+	if err := json.Unmarshal(body, &collection); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &collection, nil
+}
+
 // GetApplication calls GET /api/v1/applications/{applicationId}.
 func (c *Client) GetApplication(ctx context.Context, applicationID string) (*application.ApplicationResponse, error) {
 	body, err := c.doJSON(ctx, http.MethodGet, "/api/v1/applications/"+url.PathEscape(applicationID), nil)
