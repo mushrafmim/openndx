@@ -33,7 +33,7 @@ Prebuilt binaries for every OS/CPU are also attached to each [GitHub Release](ht
 ./ondx login
 ```
 
-`ondx` ships with a built-in `local` profile matching this repo's `docker compose` local-dev stack (ThunderID as IDP on `http://localhost:8090`, client `NDX_CLI`, port `8765`, resource `http://pb.openndx.local`, Portal Backend at `http://localhost:8083`), so a bare `ondx login` works out of the box against it — see [Profiles](#profiles) to add other environments (staging, a partner's deployment, ...) or override any of these values.
+`ondx` ships with a built-in `local` profile matching this repo's `docker compose` local-dev stack (ThunderID as IDP on `http://localhost:8090`, client `NDX_CLI`, port `8765`, resource `http://pb.openndx.local`, Portal Backend at `http://localhost:8083`), so a bare `ondx login` works out of the box against it — see [Profiles](#ondx-profile-list--ondx-profile-use-name--ondx-profile-set-name-flags) to add other environments (staging, a partner's deployment, ...) or override any of these values.
 
 This opens your browser to the identity provider's login page, catches the redirect on a local callback server, exchanges the code for a token, and caches it at `~/.openndx/credentials.json`. Every other command reuses that cached token automatically, refreshing it via its `refresh_token` when it's expired — you only need to log in again if the refresh token itself is no longer valid.
 
