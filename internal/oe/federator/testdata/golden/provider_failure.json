@@ -1,0 +1,71 @@
+{
+  "response": {
+    "data": {
+      "personInfo": {
+        "fullName": "Nimal Perera"
+      }
+    }
+  },
+  "policyRequests": [
+    {
+      "applicationId": "app-golden",
+      "requiredFields": [
+        {
+          "fieldName": "person.fullName",
+          "schemaId": "drp-v1"
+        },
+        {
+          "fieldName": "getPersonInfo.birthDate",
+          "schemaId": "rgd-v1"
+        }
+      ]
+    }
+  ],
+  "consentRequests": [],
+  "providerRequests": {
+    "drp": [
+      {
+        "query": "query Querydrp { person ( nic : \"199012345678\" ) { fullName } }"
+      }
+    ],
+    "rgd": [
+      {
+        "query": "query Queryrgd { getPersonInfo ( nic : \"199012345678\" ) { birthDate } }"
+      }
+    ]
+  },
+  "auditEvents": [
+    {
+      "eventType": "DATA_REQUEST",
+      "status": "SUCCESS",
+      "actorType": "APPLICATION",
+      "actorId": "app-golden",
+      "targetType": "SERVICE",
+      "targetId": "SERVICE"
+    },
+    {
+      "eventType": "POLICY_CHECK",
+      "status": "SUCCESS",
+      "actorType": "SERVICE",
+      "actorId": "orchestration-engine",
+      "targetType": "SERVICE",
+      "targetId": "policy-decision-point"
+    },
+    {
+      "eventType": "PROVIDER_FETCH",
+      "status": "SUCCESS",
+      "actorType": "SERVICE",
+      "actorId": "orchestration-engine",
+      "targetType": "SERVICE",
+      "targetId": "drp"
+    },
+    {
+      "eventType": "PROVIDER_FETCH",
+      "status": "FAILURE",
+      "actorType": "SERVICE",
+      "actorId": "orchestration-engine",
+      "targetType": "SERVICE",
+      "targetId": "rgd"
+    }
+  ]
+}

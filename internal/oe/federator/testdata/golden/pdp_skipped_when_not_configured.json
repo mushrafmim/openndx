@@ -1,0 +1,36 @@
+{
+  "response": {
+    "data": {
+      "personInfo": {
+        "fullName": "Nimal Perera"
+      }
+    }
+  },
+  "policyRequests": [],
+  "consentRequests": [],
+  "providerRequests": {
+    "drp": [
+      {
+        "query": "query Querydrp { person ( nic : \"199012345678\" ) { fullName } }"
+      }
+    ]
+  },
+  "auditEvents": [
+    {
+      "eventType": "DATA_REQUEST",
+      "status": "SUCCESS",
+      "actorType": "APPLICATION",
+      "actorId": "app-golden",
+      "targetType": "SERVICE",
+      "targetId": "SERVICE"
+    },
+    {
+      "eventType": "PROVIDER_FETCH",
+      "status": "SUCCESS",
+      "actorType": "SERVICE",
+      "actorId": "orchestration-engine",
+      "targetType": "SERVICE",
+      "targetId": "drp"
+    }
+  ]
+}

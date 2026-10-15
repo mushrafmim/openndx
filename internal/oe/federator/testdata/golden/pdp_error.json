@@ -1,0 +1,44 @@
+{
+  "response": {
+    "data": null,
+    "errors": [
+      {
+        "extensions": {
+          "code": "PDP_ERROR"
+        },
+        "message": "Authorization check failed: PDP request failed, status code: 500, response: pdp unavailable\n"
+      }
+    ]
+  },
+  "policyRequests": [
+    {
+      "applicationId": "app-golden",
+      "requiredFields": [
+        {
+          "fieldName": "person.fullName",
+          "schemaId": "drp-v1"
+        }
+      ]
+    }
+  ],
+  "consentRequests": [],
+  "providerRequests": {},
+  "auditEvents": [
+    {
+      "eventType": "DATA_REQUEST",
+      "status": "SUCCESS",
+      "actorType": "APPLICATION",
+      "actorId": "app-golden",
+      "targetType": "SERVICE",
+      "targetId": "SERVICE"
+    },
+    {
+      "eventType": "POLICY_CHECK",
+      "status": "FAILURE",
+      "actorType": "SERVICE",
+      "actorId": "orchestration-engine",
+      "targetType": "SERVICE",
+      "targetId": "policy-decision-point"
+    }
+  ]
+}
