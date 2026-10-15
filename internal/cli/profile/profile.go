@@ -32,11 +32,18 @@ const (
 	ThunderIDCallbackPort = 8765
 )
 
+// LocalPBResource is the Portal Backend resource server identifier registered
+// with this repo's local ThunderID (thunderid/bootstrap/resource.yaml).
+// ThunderID sets an access token's `aud` to the resource requested at login,
+// and Portal Backend only accepts tokens for this audience.
+const LocalPBResource = "http://pb.openndx.local"
+
 var defaultLocalProfile = Profile{
 	Issuer:       "http://localhost:8090",
 	ClientID:     ThunderIDCLIClientID,
 	Scopes:       "openid roles email",
 	CallbackPort: ThunderIDCallbackPort,
+	Resource:     LocalPBResource,
 	PBURL:        "http://localhost:8083",
 	Insecure:     true,
 }
@@ -51,8 +58,11 @@ type Profile struct {
 	ClientID     string `json:"client_id,omitempty"`
 	Scopes       string `json:"scopes,omitempty"`
 	CallbackPort int    `json:"callback_port,omitempty"`
-	PBURL        string `json:"pb_url,omitempty"`
-	Insecure     bool   `json:"insecure,omitempty"`
+	// Resource is sent as `resource=` at login, so the identity provider
+	// issues the token for Portal Backend's audience.
+	Resource string `json:"resource,omitempty"`
+	PBURL    string `json:"pb_url,omitempty"`
+	Insecure bool   `json:"insecure,omitempty"`
 }
 
 // Config is the on-disk shape of ~/.openndx/config.json.

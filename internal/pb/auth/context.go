@@ -13,37 +13,7 @@ type AuthContextKey string
 
 const (
 	AuthContextKeyUser AuthContextKey = "authenticated_user"
-	AuthContextKeyAuth AuthContextKey = "auth_context"
 )
-
-// ExtractBearerToken extracts the Bearer token from the Authorization header
-func ExtractBearerToken(r *http.Request) (string, error) {
-	/*
-		- ExtractBearerToken extracts the Bearer token from the Authorization header of the HTTP request.
-		- It returns an error if the header is missing, does not start with "Bearer ", or if the token is empty.
-
-		TODO: If the request is hitting through an API Gateway that uses a different auth scheme, this function may need to be adjusted accordingly.
-	*/
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return "", fmt.Errorf("authorization header is missing")
-	}
-
-	// Check if it starts with "Bearer "
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return "", fmt.Errorf("authorization header must start with 'Bearer '")
-	}
-
-	// Extract the token part
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	token = strings.TrimSpace(token)
-
-	if token == "" {
-		return "", fmt.Errorf("bearer token is empty")
-	}
-
-	return token, nil
-}
 
 // GetAuthenticatedUser retrieves the authenticated user from request context
 func GetAuthenticatedUser(ctx context.Context) (*AuthenticatedUser, error) {
@@ -54,23 +24,9 @@ func GetAuthenticatedUser(ctx context.Context) (*AuthenticatedUser, error) {
 	return user, nil
 }
 
-// GetAuthContext retrieves the auth context from request context
-func GetAuthContext(ctx context.Context) (*AuthContext, error) {
-	authCtx, ok := ctx.Value(AuthContextKeyAuth).(*AuthContext)
-	if !ok || authCtx == nil {
-		return nil, fmt.Errorf("no auth context found in request context")
-	}
-	return authCtx, nil
-}
-
 // SetAuthenticatedUser sets the authenticated user in request context
 func SetAuthenticatedUser(ctx context.Context, user *AuthenticatedUser) context.Context {
 	return context.WithValue(ctx, AuthContextKeyUser, user)
-}
-
-// SetAuthContext sets the auth context in request context
-func SetAuthContext(ctx context.Context, authCtx *AuthContext) context.Context {
-	return context.WithValue(ctx, AuthContextKeyAuth, authCtx)
 }
 
 // RequireAuthentication is a helper that checks if a user is authenticated

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/LSFLK/argus/pkg/audit"
+	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/openndx/openndx-core/internal/pb/application"
 	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/database"
@@ -132,56 +133,26 @@ func main() {
 	// Setup middleware chain
 	corsMiddleware := middleware.NewCORSMiddleware()
 
-	// Setup JWT Authentication middleware
-	// Validate required environment variables first
+	// Setup authentication: accept tokens the IdP issued for this API's
+	// audience, whichever client requested them. IDP_JWKS_URL and IDP_ISSUER
+	// default to IDP_BASE_URL's endpoints when unset.
 	idpBaseURL := os.Getenv("IDP_BASE_URL")
-	jwksURL := os.Getenv("IDP_JWKS_URL")
-	issuerURL := os.Getenv("IDP_ISSUER")
-	tokenURL := os.Getenv("IDP_TOKEN_URL")
-
-	if idpBaseURL == "" {
-		if jwksURL == "" {
-			slog.Error("IDP_JWKS_URL environment variable is required when IDP_BASE_URL is not set")
-			os.Exit(1)
-		}
-		if issuerURL == "" && tokenURL == "" {
-			slog.Error("Either IDP_ISSUER or IDP_TOKEN_URL environment variable is required when IDP_BASE_URL is not set")
-			os.Exit(1)
-		}
+	authnConfig := authn.Config{
+		JWKSURL:               utils.GetEnvOrDefault("IDP_JWKS_URL", idpBaseURL+"/oauth2/jwks"),
+		Issuer:                utils.GetEnvOrDefault("IDP_ISSUER", utils.GetEnvOrDefault("IDP_TOKEN_URL", idpBaseURL+"/oauth2/token")),
+		Audience:              os.Getenv("IDP_AUDIENCE"),
+		InsecureSkipTLSVerify: utils.GetEnvOrDefault("IDP_JWKS_INSECURE_SKIP_VERIFY", "false") == "true",
 	}
-
-	// Support multiple valid client IDs for different portals
-	memberPortalClientID := os.Getenv("IDP_MEMBER_PORTAL_CLIENT_ID")
-	adminPortalClientID := os.Getenv("IDP_ADMIN_PORTAL_CLIENT_ID")
-
-	if memberPortalClientID == "" && adminPortalClientID == "" {
-		slog.Error("At least one of IDP_MEMBER_PORTAL_CLIENT_ID or IDP_ADMIN_PORTAL_CLIENT_ID must be set")
+	if err := authnConfig.Validate(); err != nil {
+		slog.Error("Invalid authentication configuration (check IDP_JWKS_URL, IDP_ISSUER and IDP_AUDIENCE)", "error", err)
 		os.Exit(1)
 	}
 
-	var validClientIDs []string
-	if memberPortalClientID != "" {
-		validClientIDs = append(validClientIDs, memberPortalClientID)
-	}
-	if adminPortalClientID != "" {
-		validClientIDs = append(validClientIDs, adminPortalClientID)
-	}
-
-	jwtConfig := auth.JWTConfig{
-		JWKSURL:                utils.GetEnvOrDefault("IDP_JWKS_URL", idpBaseURL+"/oauth2/jwks"),
-		ExpectedIssuer:         utils.GetEnvOrDefault("IDP_ISSUER", utils.GetEnvOrDefault("IDP_TOKEN_URL", idpBaseURL+"/oauth2/token")),
-		ValidClientIDs:         validClientIDs,
-		Timeout:                10 * time.Second,
-		JWKSInsecureSkipVerify: utils.GetEnvOrDefault("IDP_JWKS_INSECURE_SKIP_VERIFY", "false") == "true",
-	}
-
-	// Validate JWT configuration before proceeding
-	if err := jwtConfig.Validate(); err != nil {
-		slog.Error("Invalid JWT configuration", "error", err)
+	authnManager, err := authn.NewManager(authnConfig)
+	if err != nil {
+		slog.Error("Failed to initialize authentication", "error", err)
 		os.Exit(1)
 	}
-
-	jwtAuthMiddleware := auth.NewJWTMiddleware(jwtConfig)
 
 	// Setup Authorization middleware with configurable security policy
 	authMode := utils.GetEnvOrDefault("AUTHORIZATION_MODE", "fail_open_admin_system")
@@ -217,10 +188,12 @@ func main() {
 	})
 	audit.InitializeGlobalAudit(auditClient)
 
-	// Apply middleware chain (CORS -> JWT Auth -> Authorization) to the API mux ONLY
+	// Apply middleware chain (CORS -> Authentication -> user from token -> Authorization) to the API mux ONLY
 	protectedAPIHandler := corsMiddleware(
-		jwtAuthMiddleware.AuthenticateJWT(
-			authorizationMiddleware.AuthorizeRequest(mux),
+		authnManager.RequireAuthMiddleware()(
+			auth.FromAuthn(
+				authorizationMiddleware.AuthorizeRequest(mux),
+			),
 		),
 	)
 

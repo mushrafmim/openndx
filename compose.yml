@@ -288,10 +288,13 @@ services:
       - DB_NAME=${DB_NAME_PB:-portal_backend}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
       - RUN_MIGRATION=${RUN_MIGRATION:-true}
-      # IDP configuration for validating incoming JWTs (ondx CLI, portal frontends)
+      # IDP configuration for validating incoming JWTs (ondx CLI, portal frontends).
+      # IDP_AUDIENCE is PB's resource server (thunderid/bootstrap/resource.yaml):
+      # clients request `resource=http://pb.openndx.local` at login, and PB
+      # accepts tokens for that audience whichever client they were issued to.
       - IDP_ISSUER=${IDP_PUBLIC_URL:-http://localhost:8090}
       - IDP_JWKS_URL=${IDP_JWKS_URL:-http://thunderid:8090/oauth2/jwks}
-      - IDP_ADMIN_PORTAL_CLIENT_ID=${NDX_CLI_CLIENT_ID:-NDX_CLI}
+      - IDP_AUDIENCE=${PB_AUDIENCE:-http://pb.openndx.local}
       # PB's own outbound calls to ThunderID's management API: POST /applications
       # creates the application's M2M client in its member's organization unit
       # and assigns it the DataConsumerGetData role, so it can request `getdata`

@@ -49,17 +49,16 @@ resources:
     handle: access
     description: Consent Portal citizen access
 ---
-# Minimal resource server to give the OpenNDX_Admin role below a valid
-# `permissions` grant — every role example we have (this file's
-# DataConsumerGetData, and ThunderID's own built-in Administrator role) ties
-# permissions to a resource server, so this exists to satisfy that shape.
-# NOT the same thing as wiring Portal Backend to actually trust ThunderID for
-# JWT validation (PB's IDP_* env vars, and its idpfactory only supporting
-# Asgardeo today) — that remains separate, open work.
+# Portal Backend's resource server. Its identifier is PB's API audience: PB
+# only accepts access tokens whose `aud` is http://pb.openndx.local
+# (IDP_AUDIENCE in compose.yml), whichever client requested them, so clients
+# must request `resource=http://pb.openndx.local` (ondx's built-in `local`
+# profile does). The OpenNDX_Admin and OpenNDX_Member roles below grant its
+# permissions.
 resource_type: resource_server
 id: 01900000-0000-7000-8000-0000000000b3
 name: Portal Backend Resource Server
-description: Placeholder resource server so the OpenNDX_Admin role has a permissions grant
+description: Portal Backend API audience
 identifier: http://pb.openndx.local
 ouHandle: default
 resources:

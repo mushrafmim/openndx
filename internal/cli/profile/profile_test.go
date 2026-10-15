@@ -16,6 +16,7 @@ func TestLoad_MissingFileYieldsBuiltinDefault(t *testing.T) {
 	assert.Equal(t, "http://localhost:8090", local.Issuer)
 	assert.Equal(t, "NDX_CLI", local.ClientID)
 	assert.Equal(t, 8765, local.CallbackPort)
+	assert.Equal(t, "http://pb.openndx.local", local.Resource)
 	assert.True(t, local.Insecure)
 }
 

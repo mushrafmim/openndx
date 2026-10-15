@@ -270,6 +270,7 @@ func runProfileSet(args []string) error {
 	clientID := fs.String("client-id", "", "OAuth2 public client ID")
 	scopes := fs.String("scopes", "", "Space-separated OAuth2 scopes to request")
 	callbackPort := fs.Int("callback-port", 0, "Fixed local port for the OAuth2 redirect callback")
+	resource := fs.String("resource", "", "Resource (Portal Backend's audience) to request the token for at login")
 	pbURL := fs.String("pb-url", "", "Portal Backend base URL")
 	insecure := fs.Bool("insecure", false, "Skip TLS certificate verification")
 	fs.Usage = func() {
@@ -311,6 +312,8 @@ func runProfileSet(args []string) error {
 			p.Scopes = *scopes
 		case "callback-port":
 			p.CallbackPort = *callbackPort
+		case "resource":
+			p.Resource = *resource
 		case "pb-url":
 			p.PBURL = *pbURL
 		case "insecure":
@@ -354,6 +357,11 @@ func runLogin(ctx context.Context, args []string) error {
 
 	if *clientID == "" {
 		return fmt.Errorf("--client-id is required (or set NDX_CLIENT_ID, or configure it in a profile)")
+	}
+
+	// Request the profile's resource unless --extra already sets one.
+	if _, ok := extraParams["resource"]; !ok && active.Resource != "" {
+		extraParams["resource"] = active.Resource
 	}
 
 	if *clientID == profile.ThunderIDCLIClientID && *callbackPort != profile.ThunderIDCallbackPort {

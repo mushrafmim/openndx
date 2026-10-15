@@ -58,22 +58,12 @@ func init() {
 
 // createTestUser creates an AuthenticatedUser from test data
 func createTestUser(idpUserID, email, ouID string, roles []auth.Role) *auth.AuthenticatedUser {
-	// Convert roles to string slice for UserClaims
 	roleStrings := make([]string, len(roles))
 	for i, role := range roles {
 		roleStrings[i] = string(role)
 	}
 
-	claims := &auth.UserClaims{
-		IdpUserID: idpUserID,
-		OuID:      ouID,
-		Email:     email,
-		FirstName: "Test",
-		LastName:  "User",
-		Roles:     auth.FlexibleStringSlice(roleStrings),
-	}
-
-	user, err := auth.NewAuthenticatedUser(claims)
+	user, err := auth.NewAuthenticatedUser(idpUserID, ouID, email, roleStrings)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create test user: %v", err))
 	}
