@@ -2,6 +2,10 @@
 
 A Go CLI for OpenNDX management operations — members, schemas, applications, and policies — against the Portal Backend API.
 
+To use these commands against a fresh local stack and retrieve data from the
+mock providers, follow the [end-to-end walkthrough](../../dev/WALKTHROUGH.md).
+It includes policy setup, citizen consent, expected responses, and cleanup.
+
 ## Overview
 
 `ondx` logs an operator in via a browser-based OAuth2 login (Authorization Code + PKCE, like `gh auth login`), caches the resulting token, and uses it to call Portal Backend's management endpoints: creating members, schemas, and applications, listing/inspecting applications, and updating an application's policy (its granted schema fields).
@@ -96,7 +100,7 @@ The passport application needs the applicant's full name and permanent address t
 
 Portal Backend creates the application's M2M client in DIE's ThunderID organization unit and grants it the `getdata` role. Store the printed secret: it can't be retrieved again. DIE then calls the Orchestration Engine with a `client_credentials` token for that client (`scope=getdata`, `resource=http://api.openndx.local`).
 
-`applications create` grants only the fields passed at creation time. To change an existing application's granted fields later, use `policy update` — a full replace, so pass every field it should end up with. For example, to additionally grant `person.profession` while keeping the two fields already granted:
+`applications create` grants only the fields passed at creation time. Use `policy update` to add or refresh grants later, passing every field the application's saved policy should contain. For example, to additionally grant `person.profession` while keeping the two fields already granted:
 
 ```bash
 ./ondx policy update --app-id <applicationId> \
@@ -139,12 +143,12 @@ Registers a member organization. `--name` and `--ou-id` are always required. Not
 
 Registers a schema and its grantable fields directly, skipping GraphQL SDL/directive parsing entirely. `--name`, `--endpoint`, `--member-id`, and at least one `--field fieldName:accessControlType:source` are always required.
 
-| Flag                                         | Description                                                                                                                                                                                                                                |
-|----------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--field fieldName:accessControlType:source` | One field per flag, repeatable. `accessControlType` is `public` or `restricted`; `source` is `primary` or `fallback`. Note this is a **different 3-part format** from `applications create`/`policy update`'s 2-part `schemaId:fieldName`. |
+| Flag                                         | Description                                                                                                                                                                                                                                               |
+|----------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--field fieldName:accessControlType:source` | One field per flag, repeatable. `accessControlType` is `public` or `restricted`; `source` is `primary` or `fallback`. Note this is a **different 3-part format** from `applications create`/`policy update`'s 2-part `schemaId:fieldName`.                |
 | `--schema-id`                                | Optional schema ID, e.g. `drp-schema-v1`: 3-64 lowercase letters, digits, `.`, `_` or `-`. Use the ID the Orchestration Engine's `@sourceInfo(schemaId: ...)` names. Defaults to a generated UUID; can't be changed later, and a taken ID fails with 409. |
-| `--description`                              | Schema description                                                                                                                                                                                                                         |
-| `--pb-url` (env `NDX_PB_URL`)                | Portal Backend base URL                                                                                                                                                                                                                    |
+| `--description`                              | Schema description                                                                                                                                                                                                                                        |
+| `--pb-url` (env `NDX_PB_URL`)                | Portal Backend base URL                                                                                                                                                                                                                                   |
 
 Prints each field as `schemaId:fieldName` — the `--field` shape `applications create`/`policy update` expect, so you can copy straight from here.
 
@@ -152,11 +156,11 @@ Prints each field as `schemaId:fieldName` — the `--field` shape `applications 
 
 Registers an application. `--name`, `--member-id`, and at least one `--field schemaId:fieldName` are always required.
 
-| Flag                                      | Description                                                                                                                                                 |
-|-------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--description`                           | Application description                                                                                                                                     |
+| Flag                                      | Description                                                                                                                                                                                            |
+|-------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--description`                           | Application description                                                                                                                                                                                |
 | `--idp-application-id`, `--idp-client-id` | An OAuth2 client already provisioned in the IDP — must be given together. If both omitted, Portal Backend provisions the client itself, in the member's organization unit, and prints its secret once. |
-| `--pb-url` (env `NDX_PB_URL`)             | Portal Backend base URL                                                                                                                                     |
+| `--pb-url` (env `NDX_PB_URL`)             | Portal Backend base URL                                                                                                                                                                                |
 
 ### `ondx applications list [--member-id ...]`
 
@@ -168,7 +172,12 @@ Shows one application's details and current policy (its granted fields, printed 
 
 ### `ondx policy update --app-id ... --field schemaId:fieldName ...`
 
-Replaces an application's policy (its granted schema fields). **This is a full replace, not an append** — pass every field the application should end up with, including ones it already has; anything you omit gets revoked. Run `applications get` first to see the current set.
+Updates an application's saved policy and adds or refreshes the supplied PDP grants.
+Pass every field the saved policy should contain, including ones it already has;
+Portal Backend replaces its stored selected-field list. **Omitting a field does not
+currently revoke its existing PDP grant.** Run `applications get` first to inspect
+the saved list; it is not an authoritative check that omitted grants were revoked
+in PDP.
 
 | Flag                          | Description                                    |
 |-------------------------------|------------------------------------------------|

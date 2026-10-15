@@ -2,7 +2,7 @@
   "environment": "development",
   "trustUpstream": true,
   "foundationalIdArgName": "nic",
-  "ceUrl": "http://consent-engine:8081",
+  "ceUrl": "http://consent-engine:8081/internal/api/v1",
   "pdpUrl": "http://policy-decision-point:8082",
   "auditConfig": {
     "serviceUrl": "http://audit-service:3001",
@@ -38,14 +38,14 @@
       "schemaId": "drp-schema-v1",
       "targetArgName": "nic",
       "sourceArgPath": "personInfo-nic",
-      "targetArgPath": "drp.person"
+      "targetArgPath": "person"
     },
     {
       "providerKey": "rgd",
       "schemaId": "abc-212",
       "targetArgName": "nic",
       "sourceArgPath": "personInfo-nic",
-      "targetArgPath": "rgd.getPersonInfo"
+      "targetArgPath": "getPersonInfo"
     }
   ]
 }

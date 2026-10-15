@@ -44,8 +44,8 @@ func TestCreateConsent_Success(t *testing.T) {
 			t.Errorf("Expected POST request, got %s", r.Method)
 		}
 
-		if r.URL.Path != "/consents" {
-			t.Errorf("Expected path /consents, got %s", r.URL.Path)
+		if r.URL.Path != "/internal/api/v1/consents" {
+			t.Errorf("Expected path /internal/api/v1/consents, got %s", r.URL.Path)
 		}
 
 		// Verify content type
@@ -89,8 +89,8 @@ func TestCreateConsent_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create client with mock server URL
-	client := NewCEServiceClient(server.URL)
+	// Match the CE base URL used by the local development configurations.
+	client := NewCEServiceClient(server.URL + "/internal/api/v1")
 
 	// Prepare request
 	appName := "Test App"
