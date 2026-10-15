@@ -221,16 +221,7 @@ func TestLogAudit_SendsRequest(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/test", nil)
 
 	// Create an authenticated user to put in context
-	now := time.Now().Unix()
-	claims := &auth.UserClaims{
-		IdpUserID: "test-user-id",
-		Email:     "test@example.com",
-		Roles:     auth.FlexibleStringSlice([]string{"OpenNDX_Member"}),
-		IssuedAt:  now,
-		ExpiresAt: now + 3600,
-	}
-
-	user, err := auth.NewAuthenticatedUser(claims)
+	user, err := auth.NewAuthenticatedUser("test-user-id", "", "test@example.com", []string{"OpenNDX_Member"})
 	if err != nil {
 		t.Fatalf("Failed to create authenticated user: %v", err)
 	}

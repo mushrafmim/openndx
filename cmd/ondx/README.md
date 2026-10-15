@@ -33,7 +33,7 @@ Prebuilt binaries for every OS/CPU are also attached to each [GitHub Release](ht
 ./ondx login
 ```
 
-`ondx` ships with a built-in `local` profile matching this repo's `docker compose` local-dev stack (ThunderID as IDP on `http://localhost:8090`, client `NDX_CLI`, port `8765`, Portal Backend at `http://localhost:8083`), so a bare `ondx login` works out of the box against it — see [Profiles](#profiles) to add other environments (staging, a partner's deployment, ...) or override any of these values.
+`ondx` ships with a built-in `local` profile matching this repo's `docker compose` local-dev stack (ThunderID as IDP on `http://localhost:8090`, client `NDX_CLI`, port `8765`, resource `http://pb.openndx.local`, Portal Backend at `http://localhost:8083`), so a bare `ondx login` works out of the box against it — see [Profiles](#profiles) to add other environments (staging, a partner's deployment, ...) or override any of these values.
 
 This opens your browser to the identity provider's login page, catches the redirect on a local callback server, exchanges the code for a token, and caches it at `~/.openndx/credentials.json`. Every other command reuses that cached token automatically, refreshing it via its `refresh_token` when it's expired — you only need to log in again if the refresh token itself is no longer valid.
 
@@ -117,7 +117,7 @@ Browser-based OAuth2 Authorization Code + PKCE login (RFC 8252). Caches the resu
 | `--token-url`        | `NDX_TOKEN_URL` | Identity provider token endpoint. Required unless `--issuer` supports discovery; overrides discovery when both are set                                                                                                                                                                               |
 | `--client-id`        | `NDX_CLIENT_ID` | OAuth2 public client ID (required)                                                                                                                                                                                                                                                                   |
 | `--scopes`           | `NDX_SCOPES`    | Space-separated scopes to request                                                                                                                                                                                                                                                                    |
-| `--extra key=value`  | —               | Extra authorization *and* token-request query param, repeatable — see [ThunderID resource binding](#thunderid-resource-binding) for what this is for and why it's not needed against today's local-dev Portal Backend. Persisted with the cached token, so it's reused automatically on refresh too. |
+| `--extra key=value`  | —               | Extra authorization *and* token-request query param, repeatable — e.g. `resource=...`, which overrides the profile's `resource` (see [ThunderID resource binding](#thunderid-resource-binding)). Persisted with the cached token, so it's reused automatically on refresh too. |
 | `--callback-port`    | —               | Fixed local port for the redirect callback (0 = OS-assigned random port; see [Callback port](#callback-port))                                                                                                                                                                                        |
 | `--no-browser`       | —               | Print the login URL instead of opening a browser                                                                                                                                                                                                                                                     |
 | `--insecure`         | —               | Skip TLS certificate verification (local dev only — see [TLS](#tls-and---insecure))                                                                                                                                                                                                                  |
@@ -179,12 +179,12 @@ Every command above also accepts `--credentials-path` and `--insecure`.
 
 ### `ondx profile list` / `ondx profile use <name>` / `ondx profile set <name> [flags]`
 
-Every command above also accepts `--profile <name>` (env `NDX_PROFILE`) to source its flag defaults — `--issuer`/`--auth-url`/`--token-url`/`--client-id`/`--scopes`/`--callback-port` (login only), and `--pb-url`/`--insecure` (every command) — from a named profile instead of retyping them each time. Precedence is: explicit flag > `--profile`/`NDX_PROFILE` for that one invocation > the config file's current profile > (nothing).
+Every command above also accepts `--profile <name>` (env `NDX_PROFILE`) to source its flag defaults — `--issuer`/`--auth-url`/`--token-url`/`--client-id`/`--scopes`/`--callback-port`/`--resource` (login only), and `--pb-url`/`--insecure` (every command) — from a named profile instead of retyping them each time. Precedence is: explicit flag > `--profile`/`NDX_PROFILE` for that one invocation > the config file's current profile > (nothing).
 
 Profiles are stored in `~/.openndx/config.json`. A built-in `local` profile (see [Log in](#2-log-in)) always exists even before that file does, so `ondx login` works with zero setup; anything you `ondx profile set local ...` overrides it.
 
 ```bash
-./ondx profile set staging --issuer https://idp.staging.example.com --client-id ondx-cli-staging --pb-url https://pb.staging.example.com
+./ondx profile set staging --issuer https://idp.staging.example.com --client-id ondx-cli-staging --resource https://pb.staging.example.com --pb-url https://pb.staging.example.com
 ./ondx profile use staging       # makes staging the default for every subsequent command
 ./ondx profile list               # * marks the current profile
 ./ondx login --profile local      # one-off override back to local without switching the default
@@ -208,7 +208,13 @@ ThunderID's local-dev instance serves plain HTTP on `http://localhost:8090`, so 
 
 ### ThunderID resource binding
 
-ThunderID can bind an access token's `aud` claim to a resource server requested via a `resource=` parameter (`--extra resource=...`), instead of a fixed audience per client. **Do not use this against this repo's local-dev Portal Backend today** — `compose.yml` sets `IDP_ADMIN_PORTAL_CLIENT_ID=NDX_CLI`, so PB validates `aud` as the `NDX_CLI` client ID (which is what `ondx login`'s default local profile already produces without `--extra`); passing `resource=http://pb.openndx.local` would instead set `aud` to that URL and PB would reject the token. This only becomes relevant if PB's JWT config is changed to validate `aud` against a resource-server identifier instead.
+ThunderID sets an access token's `aud` claim to the resource server requested with a `resource=` parameter. Portal Backend only accepts tokens for its own audience (`IDP_AUDIENCE`, `http://pb.openndx.local` locally, the PB resource server in `thunderid/bootstrap/resource.yaml`), whichever client requested them. So `ondx login` has to request that resource:
+
+- The built-in `local` profile already does (`resource: http://pb.openndx.local`), so a bare `ondx login` works.
+- For another environment, set it once on the profile: `ondx profile set <name> --resource <pb-audience>`.
+- `--extra resource=...` on a single login overrides the profile.
+
+If you saved a `local` profile in `~/.openndx/config.json` before it had a `resource`, run `ondx profile set local --resource http://pb.openndx.local`, then log in again. Tokens cached before that are for the `NDX_CLI` audience and Portal Backend rejects them with 401.
 
 ### Limitations
 
@@ -239,5 +245,5 @@ cmd/ondx/
 internal/cli/
 ├── auth/                    # PKCE, browser-based login flow, token cache/refresh
 ├── pbclient/                # Portal Backend API client (reuses internal/pb member/schema/application types)
-└── profile/                 # Named profiles (issuer/client-id/scopes/pb-url/...) cached at ~/.openndx/config.json
+└── profile/                 # Named profiles (issuer/client-id/scopes/resource/pb-url/...) cached at ~/.openndx/config.json
 ```

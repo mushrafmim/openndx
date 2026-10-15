@@ -6,18 +6,8 @@ import (
 )
 
 func TestAuthenticatedUser_GetPermissions_Caching(t *testing.T) {
-	// Create test claims with admin role
-	claims := &UserClaims{
-		Email:     "admin@example.com",
-		FirstName: "Admin",
-		LastName:  "User",
-		IdpUserID: "admin-123",
-		Roles:     FlexibleStringSlice{"OpenNDX_Admin"},
-		Groups:    []string{"admins"},
-	}
-
-	// Create authenticated user
-	user, err := NewAuthenticatedUser(claims)
+	// Create authenticated user with admin role
+	user, err := NewAuthenticatedUser("admin-123", "", "admin@example.com", []string{"OpenNDX_Admin"})
 	if err != nil {
 		t.Fatalf("Failed to create user: %v", err)
 	}
@@ -57,13 +47,7 @@ func TestAuthenticatedUser_GetPermissions_Caching(t *testing.T) {
 
 func TestAuthenticatedUser_GetPermissions_Immutability(t *testing.T) {
 	// Create test user with member role
-	claims := &UserClaims{
-		Email:     "member@example.com",
-		IdpUserID: "member-123",
-		Roles:     FlexibleStringSlice{"OpenNDX_Member"},
-	}
-
-	user, err := NewAuthenticatedUser(claims)
+	user, err := NewAuthenticatedUser("member-123", "", "member@example.com", []string{"OpenNDX_Member"})
 	if err != nil {
 		t.Fatalf("Failed to create user: %v", err)
 	}
@@ -93,13 +77,7 @@ func TestAuthenticatedUser_GetPermissions_Immutability(t *testing.T) {
 
 func TestAuthenticatedUser_MultipleRoles_PermissionMerging(t *testing.T) {
 	// Create user with multiple roles
-	claims := &UserClaims{
-		Email:     "multirole@example.com",
-		IdpUserID: "multi-123",
-		Roles:     FlexibleStringSlice{"OpenNDX_Member", "OpenNDX_System"},
-	}
-
-	user, err := NewAuthenticatedUser(claims)
+	user, err := NewAuthenticatedUser("multi-123", "", "multirole@example.com", []string{"OpenNDX_Member", "OpenNDX_System"})
 	if err != nil {
 		t.Fatalf("Failed to create user: %v", err)
 	}
@@ -173,13 +151,7 @@ func TestComputePermissions_DuplicatePermissions(t *testing.T) {
 
 // BenchmarkGetPermissions_Cached tests the performance of cached permissions
 func BenchmarkGetPermissions_Cached(b *testing.B) {
-	claims := &UserClaims{
-		Email:     "admin@example.com",
-		IdpUserID: "admin-123",
-		Roles:     FlexibleStringSlice{"OpenNDX_Admin"},
-	}
-
-	user, err := NewAuthenticatedUser(claims)
+	user, err := NewAuthenticatedUser("admin-123", "", "admin@example.com", []string{"OpenNDX_Admin"})
 	if err != nil {
 		b.Fatalf("Failed to create user: %v", err)
 	}
@@ -216,14 +188,10 @@ func BenchmarkGetPermissions_Uncached(b *testing.B) {
 
 // BenchmarkUserCreation tests the performance impact of computing permissions during user creation
 func BenchmarkUserCreation_WithPermissionCaching(b *testing.B) {
-	claims := &UserClaims{
-		Email:     "admin@example.com",
-		IdpUserID: "admin-123",
-		Roles:     FlexibleStringSlice{"OpenNDX_Admin"},
-	}
+	roles := []string{"OpenNDX_Admin"}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = NewAuthenticatedUser(claims)
+		_, _ = NewAuthenticatedUser("admin-123", "", "admin@example.com", roles)
 	}
 }

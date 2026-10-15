@@ -1,27 +1,21 @@
-// Package auth handles authentication and authorization for the Portal
-// Backend: JWT validation, the authenticated user, roles and permissions, and
-// the middleware that enforces them.
+// Package auth handles authorization for the Portal Backend: the
+// authenticated user, roles and permissions, and the middleware that enforces
+// them. Token validation is done by internal/authn; FromAuthn bridges its
+// principal into the AuthenticatedUser used here.
 package auth
 
 import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"time"
 )
 
 // AuthenticatedUser represents the authenticated user context
 type AuthenticatedUser struct {
-	IdpUserID   string    `json:"idpUserId"`
-	OuID        string    `json:"ouId"`
-	Email       string    `json:"email"`
-	FirstName   string    `json:"firstName"`
-	LastName    string    `json:"lastName"`
-	PhoneNumber string    `json:"phoneNumber"`
-	Roles       []Role    `json:"roles"`
-	Groups      []string  `json:"groups"`
-	IssuedAt    time.Time `json:"issuedAt"`
-	ExpiresAt   time.Time `json:"expiresAt"`
+	IdpUserID string `json:"idpUserId"`
+	OuID      string `json:"ouId"`
+	Email     string `json:"email"`
+	Roles     []Role `json:"roles"`
 
 	// Cached permissions - computed once during user creation for performance
 	permissions []Permission `json:"-"` // Don't expose in JSON, use GetPermissions() method
@@ -31,15 +25,6 @@ type AuthenticatedUser struct {
 	memberIDMutex sync.RWMutex `json:"-"` // Protects memberID and memberIDError fields
 	memberID      string       `json:"-"` // Don't expose in JSON
 	memberIDError error        `json:"-"` // Cache the error state as well
-}
-
-// AuthContext represents the authentication context in HTTP requests
-type AuthContext struct {
-	User        *AuthenticatedUser `json:"user"`
-	Token       string             `json:"-"` // Don't expose in JSON
-	IssuedBy    string             `json:"issuedBy"`
-	Audience    []string           `json:"audience"`
-	Permissions []Permission       `json:"permissions"`
 }
 
 // HasRole checks if the user has a specific role
@@ -112,11 +97,6 @@ func (u *AuthenticatedUser) GetPermissions() []Permission {
 	return result
 }
 
-// IsTokenExpired checks if the user's token is expired
-func (u *AuthenticatedUser) IsTokenExpired() bool {
-	return time.Now().After(u.ExpiresAt)
-}
-
 // GetCachedMemberID returns the cached member ID if available
 // Thread-safe using read lock
 func (u *AuthenticatedUser) GetCachedMemberID() (string, bool) {
@@ -170,13 +150,14 @@ func computePermissions(roles []Role) []Permission {
 	return permissions
 }
 
-// NewAuthenticatedUser creates a new authenticated user from JWT claims
-// Returns an error if no valid roles are found in the claims
-func NewAuthenticatedUser(claims *UserClaims) (*AuthenticatedUser, error) {
+// NewAuthenticatedUser creates a new authenticated user from the caller's IdP
+// user ID, organization unit, email and role names.
+// Returns an error if none of the role names is a valid role
+func NewAuthenticatedUser(idpUserID, ouID, email string, roleNames []string) (*AuthenticatedUser, error) {
 	// Convert string roles to Role type, tracking invalid ones for security logging
 	var roles []Role
 	var invalidRoles []string
-	for _, roleStr := range claims.Roles.ToStringSlice() {
+	for _, roleStr := range roleNames {
 		role := Role(roleStr)
 		if role.IsValid() {
 			roles = append(roles, role)
@@ -187,37 +168,22 @@ func NewAuthenticatedUser(claims *UserClaims) (*AuthenticatedUser, error) {
 
 	// Log security-relevant event when invalid roles are filtered
 	if len(invalidRoles) > 0 {
-		slog.Warn("Invalid roles filtered from JWT claims", "user", claims.IdpUserID, "invalid_roles", invalidRoles)
+		slog.Warn("Invalid roles filtered from token", "user", idpUserID, "invalid_roles", invalidRoles)
 	}
 
 	// If no valid roles found, deny access for security
 	if len(roles) == 0 {
-		return nil, fmt.Errorf("access denied: no valid roles found in JWT claims for user %s", claims.IdpUserID)
+		return nil, fmt.Errorf("access denied: no valid roles found for user %s", idpUserID)
 	}
 
 	// Compute permissions once during user creation for optimal performance
 	permissions := computePermissions(roles)
 
-	// Convert Unix timestamps to time.Time for AuthenticatedUser
-	var issuedAt, expiresAt time.Time
-	if claims.IssuedAt != 0 {
-		issuedAt = time.Unix(claims.IssuedAt, 0)
-	}
-	if claims.ExpiresAt != 0 {
-		expiresAt = time.Unix(claims.ExpiresAt, 0)
-	}
-
 	return &AuthenticatedUser{
-		IdpUserID:   claims.IdpUserID,
-		OuID:        claims.OuID,
-		Email:       claims.Email,
-		FirstName:   claims.FirstName,
-		LastName:    claims.LastName,
-		PhoneNumber: claims.PhoneNumber,
+		IdpUserID:   idpUserID,
+		OuID:        ouID,
+		Email:       email,
 		Roles:       roles,
-		Groups:      claims.Groups.ToStringSlice(),
-		IssuedAt:    issuedAt,
-		ExpiresAt:   expiresAt,
 		permissions: permissions,
 	}, nil
 }

@@ -298,8 +298,3 @@ func (a *AuthorizationMiddleware) shouldSkipAuthorization(path string) bool {
 func GetUserFromRequest(r *http.Request) (*AuthenticatedUser, error) {
 	return GetAuthenticatedUser(r.Context())
 }
-
-// GetAuthContextFromRequest is a helper to extract the auth context from request context
-func GetAuthContextFromRequest(r *http.Request) (*AuthContext, error) {
-	return GetAuthContext(r.Context())
-}

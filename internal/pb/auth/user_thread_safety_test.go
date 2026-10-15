@@ -10,13 +10,7 @@ import (
 // TestAuthenticatedUser_MemberIDCaching_ThreadSafety tests the thread safety of member ID caching
 func TestAuthenticatedUser_MemberIDCaching_ThreadSafety(t *testing.T) {
 	// Create a test user
-	claims := &UserClaims{
-		Email:     "threadtest@example.com",
-		IdpUserID: "thread-test-123",
-		Roles:     FlexibleStringSlice{"OpenNDX_Member"},
-	}
-
-	user, err := NewAuthenticatedUser(claims)
+	user, err := NewAuthenticatedUser("thread-test-123", "", "threadtest@example.com", []string{"OpenNDX_Member"})
 	if err != nil {
 		t.Fatalf("Failed to create user: %v", err)
 	}
@@ -82,13 +76,7 @@ func TestAuthenticatedUser_MemberIDCaching_ThreadSafety(t *testing.T) {
 // TestAuthenticatedUser_MemberIDCaching_BasicFunctionality tests basic member ID caching functionality
 func TestAuthenticatedUser_MemberIDCaching_BasicFunctionality(t *testing.T) {
 	// Create a test user
-	claims := &UserClaims{
-		Email:     "cachetest@example.com",
-		IdpUserID: "cache-test-123",
-		Roles:     FlexibleStringSlice{"OpenNDX_Member"},
-	}
-
-	user, err := NewAuthenticatedUser(claims)
+	user, err := NewAuthenticatedUser("cache-test-123", "", "cachetest@example.com", []string{"OpenNDX_Member"})
 	if err != nil {
 		t.Fatalf("Failed to create user: %v", err)
 	}

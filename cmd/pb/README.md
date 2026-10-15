@@ -8,7 +8,7 @@ The Portal Backend provides REST APIs for the Admin Portal and Member Portal, ha
 
 ## Features
 
-- **JWT Authentication** with Asgardeo integration
+- **JWT Authentication** for a single API audience (`internal/authn`)
 - **Role-Based Access Control (RBAC)** with granular permissions
 - **PostgreSQL Database** with automatic schema management
 - **Thread-Safe Caching** for optimal performance
@@ -44,8 +44,8 @@ RUN_MIGRATION=true
 
 # JWT Authentication (Required)
 IDP_BASE_URL=https://thunderid.example.com
-IDP_MEMBER_PORTAL_CLIENT_ID=your_member_client_id
-IDP_ADMIN_PORTAL_CLIENT_ID=your_admin_client_id
+# PB's API audience: its resource server identifier in the IdP
+IDP_AUDIENCE=http://pb.openndx.local
 
 # Policy Decision Point
 PDP_SERVICE_URL=http://localhost:8082
@@ -114,11 +114,11 @@ CORS_ALLOWED_ORIGINS=*            # CORS allowed origins
 - `OpenNDX_Member` - Standard user access to own resources
 - `OpenNDX_System` - System-level read access
 
-**JWT Requirements:**
-- Issuer: Asgardeo identity provider
-- Audience: Configured client IDs (member-portal, admin-portal)
-- Claims: Valid roles and user information
-- Validation: JWKS-based signature verification
+**JWT Requirements** (validated by `internal/authn`):
+- Issuer: `IDP_ISSUER`
+- Audience: `IDP_AUDIENCE`, PB's resource server identifier. Any client's token for this audience is accepted; clients request it with `resource=` at login.
+- Claims: `sub` and `client_id` are required; `roles` must include at least one role above. `ouId` and `email` are read when present.
+- Validation: JWKS-based signature verification (`IDP_JWKS_URL`)
 
 ## Testing
 
@@ -156,7 +156,7 @@ cmd/pb/
 
 internal/pb/
 ├── application/           # Application context: applications, submissions, allow-lists
-├── auth/                  # JWT validation, roles/permissions & authorization middleware
+├── auth/                  # Roles/permissions & authorization middleware (tokens are validated by internal/authn)
 ├── database/              # GORM connection and migrations
 ├── idp/                   # Identity provider integrations
 ├── kernel/                # Types shared across domains (BaseModel, Status, Version)

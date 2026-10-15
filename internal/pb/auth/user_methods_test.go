@@ -2,61 +2,9 @@ package auth
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
-
-func TestUserClaims_Methods(t *testing.T) {
-	now := time.Now()
-	claims := &UserClaims{
-		Issuer:    "test-issuer",
-		IdpUserID: "test-subject",
-		Audience:  FlexibleStringSlice{"test-audience"},
-		ExpiresAt: now.Add(time.Hour).Unix(),
-		IssuedAt:  now.Unix(),
-		NotBefore: now.Add(-time.Hour).Unix(),
-	}
-
-	// Test GetExpirationTime
-	exp, err := claims.GetExpirationTime()
-	assert.NoError(t, err)
-	assert.Equal(t, claims.ExpiresAt, exp.Time.Unix())
-
-	// Test GetIssuedAt
-	iat, err := claims.GetIssuedAt()
-	assert.NoError(t, err)
-	assert.Equal(t, claims.IssuedAt, iat.Time.Unix())
-
-	// Test GetNotBefore
-	nbf, err := claims.GetNotBefore()
-	assert.NoError(t, err)
-	assert.Equal(t, claims.NotBefore, nbf.Time.Unix())
-
-	// Test GetIssuer
-	iss, err := claims.GetIssuer()
-	assert.NoError(t, err)
-	assert.Equal(t, claims.Issuer, iss)
-
-	// Test GetSubject
-	sub, err := claims.GetSubject()
-	assert.NoError(t, err)
-	assert.Equal(t, claims.IdpUserID, sub)
-
-	// Test GetAudience
-	aud, err := claims.GetAudience()
-	assert.NoError(t, err)
-	assert.Equal(t, []string{"test-audience"}, []string(aud))
-
-	// Test zero values
-	emptyClaims := &UserClaims{}
-	exp, _ = emptyClaims.GetExpirationTime()
-	assert.Nil(t, exp)
-	iat, _ = emptyClaims.GetIssuedAt()
-	assert.Nil(t, iat)
-	nbf, _ = emptyClaims.GetNotBefore()
-	assert.Nil(t, nbf)
-}
 
 func TestAuthenticatedUser_Methods(t *testing.T) {
 	user := &AuthenticatedUser{
@@ -65,7 +13,6 @@ func TestAuthenticatedUser_Methods(t *testing.T) {
 			PermissionCreateSchema,
 			PermissionReadSchema,
 		},
-		ExpiresAt: time.Now().Add(time.Hour),
 	}
 
 	// Test HasRole
@@ -102,12 +49,6 @@ func TestAuthenticatedUser_Methods(t *testing.T) {
 	perms := user.GetPermissions()
 	assert.Len(t, perms, 2)
 	assert.Contains(t, perms, PermissionCreateSchema)
-
-	// Test IsTokenExpired
-	assert.False(t, user.IsTokenExpired())
-
-	expiredUser := &AuthenticatedUser{ExpiresAt: time.Now().Add(-time.Hour)}
-	assert.True(t, expiredUser.IsTokenExpired())
 }
 
 func TestAuthenticatedUser_CachedMemberID(t *testing.T) {
