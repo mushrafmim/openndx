@@ -6,6 +6,9 @@ machine and walking through a full onboarding scenario. For the exhaustive flag-
 reference, see [`cmd/ondx/README.md`](../cmd/ondx/README.md); this doc is the narrative,
 start-to-finish version.
 
+For a local demo that continues through mock-provider queries and citizen
+consent approval, use the [end-to-end walkthrough](../dev/WALKTHROUGH.md).
+
 ## Prerequisites
 
 - Network access to an OpenNDX Portal Backend instance and ThunderID, the identity provider it
@@ -199,8 +202,10 @@ To register a client you already onboarded in ThunderID yourself instead, pass
 
 ### 3.5 Change what's granted later
 
-`policy update` is a **full replace** of an application's granted fields, not an append — pass
-every field it should end up with. Check what's currently granted first:
+`policy update` replaces Portal Backend's saved field list and adds or refreshes
+the supplied PDP grants. Pass every field the saved list should contain.
+Omitting a field does not currently revoke its existing PDP grant. Inspect the
+saved list first:
 
 ```bash
 ondx applications get --app-id <applicationId> --pb-url http://localhost:8083
@@ -244,7 +249,7 @@ against a different identity provider.
 | `ondx applications create [flags]`                        | Register an application, optionally granting fields |
 | `ondx applications list [--member-id ...] [--json]`       | List applications                                   |
 | `ondx applications get --app-id ... [--json]`             | Show an application's details and current policy    |
-| `ondx policy update --app-id ... --field ... [flags]`     | Replace an application's granted fields             |
+| `ondx policy update --app-id ... --field ... [flags]`     | Save the selected fields and add or refresh grants  |
 
 Every command that calls Portal Backend (`members create`, `schemas create`,
 `applications create`/`list`/`get`, `policy update`) also accepts `--pb-url`, `--credentials-path`,

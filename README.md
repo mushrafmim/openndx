@@ -132,6 +132,11 @@ make quality-check <service>  # Run code quality checks
 
 ## Local Development Stack (Docker Compose)
 
+For a full flow using the mock DRP/RGD providers, follow the
+[local end-to-end walkthrough](dev/WALKTHROUGH.md). It uses `ondx` to register
+members and schemas, grant application policy, and then walks through citizen
+consent approval and verification of the returned data.
+
 The repo root `compose.yml` brings up Postgres, ThunderID (IdP), OE, PDP, CE,
 Portal Backend, the consent portal, and the optional audit service — a
 self-contained stack for exercising the full request flow end-to-end without

@@ -4,6 +4,11 @@
 This folder brings up mock member services locally so you can exercise the
 full exchange flow.
 
+For the complete flow, follow the **[local end-to-end walkthrough with `ondx`](WALKTHROUGH.md)**.
+It covers starting the stack, operator login, registering members and both mock
+schemas, granting application policy, citizen consent approval, and checking the
+returned DRP/RGD data.
+
 The services are the DRP and RGD mocks from the
 [opendif-farajaland](https://github.com/LSFLK/opendif-farajaland) reference
 country implementation. We depend only on their **published Docker images**,
@@ -34,7 +39,8 @@ and `oe` itself), which already knows how to reach the containers above via
 `host.docker.internal`:
 
 ```bash
-docker compose up --build
+docker compose up -d --build postgres thunderid policy-decision-point \
+  consent-engine consent-portal orchestration-engine portal-backend
 ```
 
 Or, if you're iterating on `oe` itself and don't want to rebuild its image on
@@ -86,10 +92,12 @@ fields from both providers in one request. The mock data uses the fictional
 names (Suresh, Ramesh, Naresh, Gomesh) used for test accounts across our other
 projects, not real people.
 
-Note this still goes through OE's normal authorization pipeline: PDP has to
-allow the query and, for citizen-owned fields, CE has to have an approved
-consent on file. A freshly started stack has no policies or consent records
-yet, so expect `PDP_NOT_ALLOWED` / `CE_NOT_APPROVED` until those are set up.
+This request needs policy metadata, application grants, and citizen consent.
+A freshly started stack has none of those. Follow the
+[walkthrough](WALKTHROUGH.md#4-register-members-and-both-provider-schemas) to
+register them with `ondx`, then use the client credentials printed for your
+registered application. The seeded `DATA_CONSUMER` client above has no automatic
+policy grants.
 
 To approve the consent yourself, log in to the consent portal (see
 [Consent portal](#consent-portal) below) as the matching seeded `Citizen`
@@ -125,13 +133,15 @@ match the `5173` baked into `CONSENT_PORTAL_URL`, ThunderID's registered
 redirect URIs, and `thunderid/bootstrap/cors.yaml`'s allowed origins — it
 isn't wired for this sandbox.
 
-I haven't driven this login through an actual browser myself (no UI access
-here), so treat it as the config that *should* work end-to-end, not a
-verified one — if it doesn't, that's the first thing to check.
+Use the exact consent URL returned by OE, including its `consentId` parameter,
+and use a separate browser session from the management operator. The
+[walkthrough](WALKTHROUGH.md#8-request-and-approve-citizen-consent) describes
+approval and the required data checks after retrying the query.
 
 ## Stopping
 
 ```bash
+docker compose down
 docker compose -f dev/compose.yml down
 ```
 
