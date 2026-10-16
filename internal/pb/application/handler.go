@@ -1,37 +1,23 @@
 package application
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
-	"github.com/openndx/openndx-core/internal/pb/auth"
+	"github.com/openndx/openndx-core/internal/pb/caller"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
 	"github.com/openndx/openndx-core/internal/utils"
 )
 
-// memberResolver resolves the member ID of an authenticated user
-type memberResolver interface {
-	ResolveMemberID(ctx context.Context, user *auth.AuthenticatedUser) (string, error)
-}
-
 // Handler handles the application and application submission HTTP API
 type Handler struct {
-	members memberResolver
 	service *Service
 }
 
-// getUserMemberID gets the member ID for the authenticated user with caching
-// This avoids repeated database calls for the same user within the same request context
-func (h *Handler) getUserMemberID(r *http.Request, user *auth.AuthenticatedUser) (string, error) {
-	return h.members.ResolveMemberID(r.Context(), user)
-}
-
-// NewHandler creates a new application Handler. members resolves the member ID
-// of the authenticated user (see member.Service).
-func NewHandler(service *Service, members memberResolver) *Handler {
-	return &Handler{service: service, members: members}
+// NewHandler creates a new application Handler
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
 }
 
 // Application submission handlers
@@ -41,29 +27,17 @@ func (h *Handler) GetAllApplicationSubmissions(w http.ResponseWriter, r *http.Re
 	memberId := r.URL.Query().Get("memberId")
 	statusFilter := r.URL.Query()["status"]
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	var finalMemberId *string = &memberId
-
-	// Unless the caller reads across organization units, force filtering to their own submissions only
-	if !user.HasScope(auth.ScopeApplicationSubmissionReadAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
+	// Unless the caller reads across organization units, limit it to its own submissions
+	if !caller.HasScope(r.Context(), caller.ScopeApplicationSubmissionReadAll) {
+		callerMemberID, ok := caller.MemberID(r.Context())
+		if !ok {
 			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
 			return
 		}
-
-		// Force the memberId to the authenticated user's member ID
-		finalMemberId = &userMemberID
+		memberId = callerMemberID
 	}
 
-	submissions, err := h.service.GetApplicationSubmissions(r.Context(), finalMemberId, &statusFilter)
+	submissions, err := h.service.GetApplicationSubmissions(r.Context(), &memberId, &statusFilter)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -80,33 +54,15 @@ func (h *Handler) GetAllApplicationSubmissions(w http.ResponseWriter, r *http.Re
 func (h *Handler) GetApplicationSubmission(w http.ResponseWriter, r *http.Request) {
 	submissionId := r.PathValue("submissionId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	submission, err := h.service.GetApplicationSubmission(r.Context(), submissionId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	// Unless the caller reads across organization units, check ownership
-	if !user.HasScope(auth.ScopeApplicationSubmissionReadAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
-			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
-			return
-		}
-
-		// Check if submission belongs to the user
-		if submission.MemberID != userMemberID {
-			utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
-			return
-		}
+	if !caller.CanAccess(r.Context(), caller.ScopeApplicationSubmissionReadAll, submission.MemberID) {
+		utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
+		return
 	}
 
 	utils.RespondWithSuccess(w, http.StatusOK, submission)
@@ -114,13 +70,6 @@ func (h *Handler) GetApplicationSubmission(w http.ResponseWriter, r *http.Reques
 
 // CreateApplicationSubmission handles POST /api/v1/application-submissions
 func (h *Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.Request) {
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	var req CreateApplicationSubmissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
@@ -128,25 +77,19 @@ func (h *Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.Req
 	}
 
 	// Unless the caller writes across organization units, ensure they can only create submissions for themselves
-	if !user.HasScope(auth.ScopeApplicationSubmissionWriteAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
+	if !caller.HasScope(r.Context(), caller.ScopeApplicationSubmissionWriteAll) {
+		callerMemberID, ok := caller.MemberID(r.Context())
+		if !ok {
 			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
 			return
 		}
 
-		// If MemberID is provided, validate ownership
-		if req.MemberID != "" {
-			// Check if the provided MemberID belongs to the authenticated user
-			if req.MemberID != userMemberID {
-				utils.RespondWithError(w, http.StatusForbidden, "Access denied: cannot create submission for another user")
-				return
-			}
-		} else {
-			// If no MemberID provided, set it to the authenticated user's member ID
-			req.MemberID = userMemberID
+		// A provided MemberID must be the caller's own; an omitted one defaults to it
+		if req.MemberID != "" && req.MemberID != callerMemberID {
+			utils.RespondWithError(w, http.StatusForbidden, "Access denied: cannot create submission for another user")
+			return
 		}
+		req.MemberID = callerMemberID
 	}
 
 	submission, err := h.service.CreateApplicationSubmission(r.Context(), &req)
@@ -168,13 +111,6 @@ func (h *Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.Req
 func (h *Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.Request) {
 	submissionId := r.PathValue("submissionId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	// Get existing submission to check ownership
 	existingSubmission, err := h.service.GetApplicationSubmission(r.Context(), submissionId)
 	if err != nil {
@@ -182,20 +118,9 @@ func (h *Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Unless the caller writes across organization units, check ownership before updating
-	if !user.HasScope(auth.ScopeApplicationSubmissionWriteAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
-			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
-			return
-		}
-
-		// Check if submission belongs to the user
-		if existingSubmission.MemberID != userMemberID {
-			utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
-			return
-		}
+	if !caller.CanAccess(r.Context(), caller.ScopeApplicationSubmissionWriteAll, existingSubmission.MemberID) {
+		utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
+		return
 	}
 
 	var req UpdateApplicationSubmissionRequest
@@ -225,33 +150,17 @@ func (h *Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.Req
 func (h *Handler) GetAllApplications(w http.ResponseWriter, r *http.Request) {
 	memberId := r.URL.Query().Get("memberId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	// Check permission
-	var filteredMemberId *string
-	if user.HasScope(auth.ScopeApplicationReadAll) {
-		// Callers reading across organization units can use provided filters or see all
-		filteredMemberId = &memberId
-	} else if user.HasScope(auth.ScopeApplicationRead) {
-		// Regular users can only see their own applications
-		// Get member ID for the authenticated user (cached)
-		userMemberId, err := h.getUserMemberID(r, user)
-		if err != nil {
+	// Unless the caller reads across organization units, limit it to its own applications
+	if !caller.HasScope(r.Context(), caller.ScopeApplicationReadAll) {
+		callerMemberID, ok := caller.MemberID(r.Context())
+		if !ok {
 			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
 			return
 		}
-		filteredMemberId = &userMemberId
-	} else {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
+		memberId = callerMemberID
 	}
 
-	applications, err := h.service.GetApplications(r.Context(), filteredMemberId)
+	applications, err := h.service.GetApplications(r.Context(), &memberId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -268,33 +177,15 @@ func (h *Handler) GetAllApplications(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 	applicationId := r.PathValue("applicationId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	application, err := h.service.GetApplication(r.Context(), applicationId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	// Unless the caller reads across organization units, check ownership
-	if !user.HasScope(auth.ScopeApplicationReadAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
-			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
-			return
-		}
-
-		// Check if application belongs to the user
-		if application.MemberID != userMemberID {
-			utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
-			return
-		}
+	if !caller.CanAccess(r.Context(), caller.ScopeApplicationReadAll, application.MemberID) {
+		utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
+		return
 	}
 
 	utils.RespondWithSuccess(w, http.StatusOK, application)
@@ -318,30 +209,20 @@ func (h *Handler) GetApplicationIdByClientId(w http.ResponseWriter, r *http.Requ
 
 // CreateApplication handles POST /api/v1/applications
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	var req CreateApplicationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// Unless the caller writes across organization units, ensure they can only create applications for themselves
-	if !user.HasScope(auth.ScopeApplicationWriteAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
+	// Unless the caller writes across organization units, it creates applications for its own member
+	if !caller.HasScope(r.Context(), caller.ScopeApplicationWriteAll) {
+		callerMemberID, ok := caller.MemberID(r.Context())
+		if !ok {
 			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
 			return
 		}
-
-		// Set the member ID to the authenticated user's member ID
-		req.MemberID = userMemberID
+		req.MemberID = callerMemberID
 	}
 
 	application, err := h.service.CreateApplication(r.Context(), &req)
@@ -363,13 +244,6 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	applicationId := r.PathValue("applicationId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	// Get existing application to check ownership
 	existingApplication, err := h.service.GetApplication(r.Context(), applicationId)
 	if err != nil {
@@ -377,20 +251,9 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Unless the caller writes across organization units, check ownership
-	if !user.HasScope(auth.ScopeApplicationWriteAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
-			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
-			return
-		}
-
-		// Check if application belongs to the user
-		if existingApplication.MemberID != userMemberID {
-			utils.RespondWithError(w, http.StatusForbidden, "Access denied to update this resource")
-			return
-		}
+	if !caller.CanAccess(r.Context(), caller.ScopeApplicationWriteAll, existingApplication.MemberID) {
+		utils.RespondWithError(w, http.StatusForbidden, "Access denied to update this resource")
+		return
 	}
 
 	var req UpdateApplicationRequest
@@ -418,13 +281,6 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 	applicationId := r.PathValue("applicationId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	// Get existing application to check ownership
 	existingApplication, err := h.service.GetApplication(r.Context(), applicationId)
 	if err != nil {
@@ -432,20 +288,9 @@ func (h *Handler) UpdateApplicationPolicy(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Unless the caller writes across organization units, check ownership
-	if !user.HasScope(auth.ScopeApplicationWriteAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
-			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
-			return
-		}
-
-		// Check if application belongs to the user
-		if existingApplication.MemberID != userMemberID {
-			utils.RespondWithError(w, http.StatusForbidden, "Access denied to update this resource")
-			return
-		}
+	if !caller.CanAccess(r.Context(), caller.ScopeApplicationWriteAll, existingApplication.MemberID) {
+		utils.RespondWithError(w, http.StatusForbidden, "Access denied to update this resource")
+		return
 	}
 
 	var req UpdateApplicationPolicyRequest

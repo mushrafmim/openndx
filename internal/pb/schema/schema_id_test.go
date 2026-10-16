@@ -11,8 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/openndx/openndx-core/internal/pb/auth/authtest"
-	"github.com/openndx/openndx-core/internal/pb/member"
+	"github.com/openndx/openndx-core/internal/pb/caller/callertest"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,7 +34,7 @@ func newSchemaIDTestHandler(t *testing.T) (*Handler, *gorm.DB, *[]string) {
 	t.Cleanup(pdp.Close)
 
 	db := setupSQLiteTestDB(t)
-	return NewHandler(NewService(db, policy.NewClient(pdp.URL)), member.NewService(db)), db, &pdpSchemaIDs
+	return NewHandler(NewService(db, policy.NewClient(pdp.URL))), db, &pdpSchemaIDs
 }
 
 func postSchema(t *testing.T, h *Handler, schemaID, memberID string) *httptest.ResponseRecorder {
@@ -52,7 +51,7 @@ func postSchema(t *testing.T, h *Handler, schemaID, memberID string) *httptest.R
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
-	h.CreateSchema(w, authtest.NewAdminRequest(http.MethodPost, "/api/v1/schemas", bytes.NewBuffer(body)))
+	h.CreateSchema(w, callertest.NewAdminRequest(http.MethodPost, "/api/v1/schemas", bytes.NewBuffer(body)))
 	return w
 }
 

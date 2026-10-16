@@ -119,7 +119,11 @@ A missing or invalid token gets `401`.
 
 ### Authorization
 
-Every `/api/v1/` route requires an OAuth2 scope from the token's `scope` claim, checked with `github.com/OpenNSW/core/authz`. The scope sits next to each route in `cmd/pb/main.go`; a token without it gets `403`. Scopes are defined in `internal/pb/auth/scopes.go`.
+Every `/api/v1/` route requires an OAuth2 scope from the token's `scope` claim, checked with `github.com/OpenNSW/core/authz`. The scope sits next to each route in `cmd/pb/main.go`; a token without it gets `403`. Scopes are defined in `internal/pb/caller/scopes.go`.
+
+**Caller's member.** After authentication, `caller.Middleware` looks up the member linked to the token's `ouId` and puts it on the request context. A caller without an `ouId`, or whose organization unit has no member, proceeds without one. Handlers then apply one rule: a caller holding the resource's `-all` scope reaches every member's records; any other caller reaches only its own member's, and gets `403` for another member's record or when it has no member.
+
+**Audit.** Write operations are audited with the token's `sub` as the actor and its `client_id` in the event metadata.
 
 **Scopes.** Each is `<resource>:<action>`, the permission ThunderID builds from an action on PB's resource server:
 
@@ -180,7 +184,7 @@ cmd/pb/
 
 internal/pb/
 ├── application/           # Application context: applications, submissions, allow-lists
-├── auth/                  # Scopes and the caller's identity (tokens are validated by internal/authn)
+├── caller/                # Scopes and the caller's member (tokens are validated by internal/authn)
 ├── database/              # GORM connection and migrations
 ├── idp/                   # Identity provider integrations
 ├── kernel/                # Types shared across domains (BaseModel, Status, Version)

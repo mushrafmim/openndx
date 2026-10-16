@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/openndx/openndx-core/internal/pb/auth"
+	"github.com/openndx/openndx-core/internal/pb/caller"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
 	"github.com/openndx/openndx-core/internal/utils"
@@ -47,13 +47,6 @@ func (h *Handler) CreateMember(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 	memberId := r.PathValue("memberId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	// Get the existing member to check ownership
 	existingMember, err := h.service.GetMember(r.Context(), memberId)
 	if err != nil {
@@ -61,9 +54,8 @@ func (h *Handler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user can update this member resource
-	// Callers writing across organization units can update any member, others only their own organization unit's
-	if !user.HasScope(auth.ScopeMemberWriteAll) && existingMember.OuID != user.OuID {
+	// Callers writing across organization units can update any member, others only their own
+	if !caller.CanAccess(r.Context(), caller.ScopeMemberWriteAll, existingMember.MemberID) {
 		utils.RespondWithError(w, http.StatusForbidden, "Access denied to update this resource")
 		return
 	}
@@ -94,13 +86,6 @@ func (h *Handler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetMember(w http.ResponseWriter, r *http.Request) {
 	memberId := r.PathValue("memberId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	// Get the member from database
 	// Pass request context to service for proper context propagation
 	member, err := h.service.GetMember(r.Context(), memberId)
@@ -109,9 +94,8 @@ func (h *Handler) GetMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user can access this member resource
-	// Callers reading across organization units can access any member, others only their own organization unit's
-	if !user.HasScope(auth.ScopeMemberReadAll) && member.OuID != user.OuID {
+	// Callers reading across organization units can access any member, others only their own
+	if !caller.CanAccess(r.Context(), caller.ScopeMemberReadAll, member.MemberID) {
 		utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
 		return
 	}
@@ -123,33 +107,18 @@ func (h *Handler) GetMember(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
 	ouID := r.URL.Query().Get("ouId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	// Callers reading across organization units see every member, others only their own
-	var filteredOuID *string
-
-	if user.HasScope(auth.ScopeMemberReadAll) {
-		// Can filter by organization unit or see all
-		filteredOuID = &ouID
-	} else if user.HasScope(auth.ScopeMemberRead) {
-		// Regular users can only see their own organization unit's member
-		if user.OuID == "" {
+	// Callers reading across organization units can filter by organization unit
+	// or see every member, others only their own organization unit's
+	if !caller.HasScope(r.Context(), caller.ScopeMemberReadAll) {
+		ouID = caller.OUID(r.Context())
+		if ouID == "" {
 			utils.RespondWithError(w, http.StatusForbidden, "User has no organization unit")
 			return
 		}
-		filteredOuID = &user.OuID
-	} else {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
 	}
 
 	// Pass request context to service for proper context propagation
-	members, err := h.service.GetAllMembers(r.Context(), filteredOuID)
+	members, err := h.service.GetAllMembers(r.Context(), &ouID)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return

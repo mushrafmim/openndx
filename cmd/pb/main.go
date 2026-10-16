@@ -13,7 +13,7 @@ import (
 	"github.com/OpenNSW/core/authz"
 	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/openndx/openndx-core/internal/pb/application"
-	"github.com/openndx/openndx-core/internal/pb/auth"
+	"github.com/openndx/openndx-core/internal/pb/caller"
 	"github.com/openndx/openndx-core/internal/pb/database"
 	"github.com/openndx/openndx-core/internal/pb/idp/idpfactory"
 	"github.com/openndx/openndx-core/internal/pb/member"
@@ -99,10 +99,10 @@ func main() {
 	memberHandler := member.NewHandler(memberService)
 
 	schemaService := schema.NewService(gormDB, pdpClient)
-	schemaHandler := schema.NewHandler(schemaService, memberService)
+	schemaHandler := schema.NewHandler(schemaService)
 
 	applicationService := application.NewService(gormDB, pdpClient, idpProvider)
-	applicationHandler := application.NewHandler(applicationService, memberService)
+	applicationHandler := application.NewHandler(applicationService)
 
 	// Setup authentication: accept tokens the IdP issued for this API's
 	// audience, whichever client requested them. IDP_JWKS_URL and IDP_ISSUER
@@ -126,7 +126,7 @@ func main() {
 	}
 
 	// Check each API route's OAuth2 scope against the principal internal/authn validated
-	authzr, err := authz.New(auth.PrincipalFromContext)
+	authzr, err := authz.New(caller.PrincipalFromContext)
 	if err != nil {
 		slog.Error("Failed to initialize authorization", "error", err)
 		os.Exit(1)
@@ -137,44 +137,45 @@ func main() {
 	apiMux := http.NewServeMux()
 
 	// Member endpoints
-	apiMux.Handle("GET /api/v1/members", authzr.RequireScope(auth.ScopeMemberRead)(http.HandlerFunc(memberHandler.GetAllMembers)))
-	apiMux.Handle("POST /api/v1/members", authzr.RequireScope(auth.ScopeMemberWriteAll)(http.HandlerFunc(memberHandler.CreateMember)))
-	apiMux.Handle("GET /api/v1/members/{memberId}", authzr.RequireScope(auth.ScopeMemberRead)(http.HandlerFunc(memberHandler.GetMember)))
-	apiMux.Handle("PUT /api/v1/members/{memberId}", authzr.RequireScope(auth.ScopeMemberWrite)(http.HandlerFunc(memberHandler.UpdateMember)))
+	apiMux.Handle("GET /api/v1/members", authzr.RequireScope(caller.ScopeMemberRead)(http.HandlerFunc(memberHandler.GetAllMembers)))
+	apiMux.Handle("POST /api/v1/members", authzr.RequireScope(caller.ScopeMemberWriteAll)(http.HandlerFunc(memberHandler.CreateMember)))
+	apiMux.Handle("GET /api/v1/members/{memberId}", authzr.RequireScope(caller.ScopeMemberRead)(http.HandlerFunc(memberHandler.GetMember)))
+	apiMux.Handle("PUT /api/v1/members/{memberId}", authzr.RequireScope(caller.ScopeMemberWrite)(http.HandlerFunc(memberHandler.UpdateMember)))
 
 	// Schema endpoints
-	apiMux.Handle("GET /api/v1/schemas", authzr.RequireScope(auth.ScopeSchemaRead)(http.HandlerFunc(schemaHandler.GetAllSchemas)))
-	apiMux.Handle("POST /api/v1/schemas", authzr.RequireScope(auth.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.CreateSchema)))
-	apiMux.Handle("GET /api/v1/schemas/{schemaId}", authzr.RequireScope(auth.ScopeSchemaRead)(http.HandlerFunc(schemaHandler.GetSchema)))
-	apiMux.Handle("PUT /api/v1/schemas/{schemaId}", authzr.RequireScope(auth.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.UpdateSchema)))
+	apiMux.Handle("GET /api/v1/schemas", authzr.RequireScope(caller.ScopeSchemaRead)(http.HandlerFunc(schemaHandler.GetAllSchemas)))
+	apiMux.Handle("POST /api/v1/schemas", authzr.RequireScope(caller.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.CreateSchema)))
+	apiMux.Handle("GET /api/v1/schemas/{schemaId}", authzr.RequireScope(caller.ScopeSchemaRead)(http.HandlerFunc(schemaHandler.GetSchema)))
+	apiMux.Handle("PUT /api/v1/schemas/{schemaId}", authzr.RequireScope(caller.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.UpdateSchema)))
 
 	// Schema policy metadata endpoints
-	apiMux.Handle("GET /api/v1/schemas/{schemaId}/policy-metadata", authzr.RequireScope(auth.ScopeSchemaRead)(http.HandlerFunc(schemaHandler.ListSchemaPolicyMetadata)))
-	apiMux.Handle("PATCH /api/v1/schemas/{schemaId}/policy-metadata/{id}", authzr.RequireScope(auth.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.PatchSchemaPolicyMetadata)))
-	apiMux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}", authzr.RequireScope(auth.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.DeleteSchemaPolicyMetadata)))
-	apiMux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}/allowlist/{applicationId}", authzr.RequireScope(auth.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.RevokeSchemaPolicyAllowListEntry)))
+	apiMux.Handle("GET /api/v1/schemas/{schemaId}/policy-metadata", authzr.RequireScope(caller.ScopeSchemaRead)(http.HandlerFunc(schemaHandler.ListSchemaPolicyMetadata)))
+	apiMux.Handle("PATCH /api/v1/schemas/{schemaId}/policy-metadata/{id}", authzr.RequireScope(caller.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.PatchSchemaPolicyMetadata)))
+	apiMux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}", authzr.RequireScope(caller.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.DeleteSchemaPolicyMetadata)))
+	apiMux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}/allowlist/{applicationId}", authzr.RequireScope(caller.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.RevokeSchemaPolicyAllowListEntry)))
 
 	// Schema submission endpoints
-	apiMux.Handle("GET /api/v1/schema-submissions", authzr.RequireScope(auth.ScopeSchemaSubmissionRead)(http.HandlerFunc(schemaHandler.GetAllSchemaSubmissions)))
-	apiMux.Handle("POST /api/v1/schema-submissions", authzr.RequireScope(auth.ScopeSchemaSubmissionWrite)(http.HandlerFunc(schemaHandler.CreateSchemaSubmission)))
-	apiMux.Handle("GET /api/v1/schema-submissions/{submissionId}", authzr.RequireScope(auth.ScopeSchemaSubmissionRead)(http.HandlerFunc(schemaHandler.GetSchemaSubmission)))
-	apiMux.Handle("PUT /api/v1/schema-submissions/{submissionId}", authzr.RequireScope(auth.ScopeSchemaSubmissionWrite)(http.HandlerFunc(schemaHandler.UpdateSchemaSubmission)))
+	apiMux.Handle("GET /api/v1/schema-submissions", authzr.RequireScope(caller.ScopeSchemaSubmissionRead)(http.HandlerFunc(schemaHandler.GetAllSchemaSubmissions)))
+	apiMux.Handle("POST /api/v1/schema-submissions", authzr.RequireScope(caller.ScopeSchemaSubmissionWrite)(http.HandlerFunc(schemaHandler.CreateSchemaSubmission)))
+	apiMux.Handle("GET /api/v1/schema-submissions/{submissionId}", authzr.RequireScope(caller.ScopeSchemaSubmissionRead)(http.HandlerFunc(schemaHandler.GetSchemaSubmission)))
+	apiMux.Handle("PUT /api/v1/schema-submissions/{submissionId}", authzr.RequireScope(caller.ScopeSchemaSubmissionWrite)(http.HandlerFunc(schemaHandler.UpdateSchemaSubmission)))
 
 	// Application endpoints
-	apiMux.Handle("GET /api/v1/applications", authzr.RequireScope(auth.ScopeApplicationRead)(http.HandlerFunc(applicationHandler.GetAllApplications)))
-	apiMux.Handle("POST /api/v1/applications", authzr.RequireScope(auth.ScopeApplicationWrite)(http.HandlerFunc(applicationHandler.CreateApplication)))
-	apiMux.Handle("GET /api/v1/applications/{applicationId}", authzr.RequireScope(auth.ScopeApplicationRead)(http.HandlerFunc(applicationHandler.GetApplication)))
-	apiMux.Handle("PUT /api/v1/applications/{applicationId}", authzr.RequireScope(auth.ScopeApplicationWrite)(http.HandlerFunc(applicationHandler.UpdateApplication)))
-	apiMux.Handle("PUT /api/v1/applications/{applicationId}/policy", authzr.RequireScope(auth.ScopeApplicationWrite)(http.HandlerFunc(applicationHandler.UpdateApplicationPolicy)))
+	apiMux.Handle("GET /api/v1/applications", authzr.RequireScope(caller.ScopeApplicationRead)(http.HandlerFunc(applicationHandler.GetAllApplications)))
+	apiMux.Handle("POST /api/v1/applications", authzr.RequireScope(caller.ScopeApplicationWrite)(http.HandlerFunc(applicationHandler.CreateApplication)))
+	apiMux.Handle("GET /api/v1/applications/{applicationId}", authzr.RequireScope(caller.ScopeApplicationRead)(http.HandlerFunc(applicationHandler.GetApplication)))
+	apiMux.Handle("PUT /api/v1/applications/{applicationId}", authzr.RequireScope(caller.ScopeApplicationWrite)(http.HandlerFunc(applicationHandler.UpdateApplication)))
+	apiMux.Handle("PUT /api/v1/applications/{applicationId}/policy", authzr.RequireScope(caller.ScopeApplicationWrite)(http.HandlerFunc(applicationHandler.UpdateApplicationPolicy)))
 
 	// Application submission endpoints
-	apiMux.Handle("GET /api/v1/application-submissions", authzr.RequireScope(auth.ScopeApplicationSubmissionRead)(http.HandlerFunc(applicationHandler.GetAllApplicationSubmissions)))
-	apiMux.Handle("POST /api/v1/application-submissions", authzr.RequireScope(auth.ScopeApplicationSubmissionWrite)(http.HandlerFunc(applicationHandler.CreateApplicationSubmission)))
-	apiMux.Handle("GET /api/v1/application-submissions/{submissionId}", authzr.RequireScope(auth.ScopeApplicationSubmissionRead)(http.HandlerFunc(applicationHandler.GetApplicationSubmission)))
-	apiMux.Handle("PUT /api/v1/application-submissions/{submissionId}", authzr.RequireScope(auth.ScopeApplicationSubmissionWrite)(http.HandlerFunc(applicationHandler.UpdateApplicationSubmission)))
+	apiMux.Handle("GET /api/v1/application-submissions", authzr.RequireScope(caller.ScopeApplicationSubmissionRead)(http.HandlerFunc(applicationHandler.GetAllApplicationSubmissions)))
+	apiMux.Handle("POST /api/v1/application-submissions", authzr.RequireScope(caller.ScopeApplicationSubmissionWrite)(http.HandlerFunc(applicationHandler.CreateApplicationSubmission)))
+	apiMux.Handle("GET /api/v1/application-submissions/{submissionId}", authzr.RequireScope(caller.ScopeApplicationSubmissionRead)(http.HandlerFunc(applicationHandler.GetApplicationSubmission)))
+	apiMux.Handle("PUT /api/v1/application-submissions/{submissionId}", authzr.RequireScope(caller.ScopeApplicationSubmissionWrite)(http.HandlerFunc(applicationHandler.UpdateApplicationSubmission)))
 
 	// All incoming traffic. Public routes register here directly; everything
-	// under /api/v1/ goes through CORS and authentication to apiMux. The
+	// under /api/v1/ goes through CORS, authentication and the caller's member
+	// lookup to apiMux. The
 	// method-less /api/v1/ pattern also catches CORS preflight (OPTIONS)
 	// requests, which no apiMux route matches.
 	mux := http.NewServeMux()
@@ -183,7 +184,7 @@ func main() {
 	mux.HandleFunc("GET /debug", debugHandler)
 	mux.HandleFunc("GET /debug/db", debugDBHandler(gormDB, v1DbConfig.Database))
 
-	mux.Handle("/api/v1/", middleware.NewCORSMiddleware()(authnManager.RequireAuthMiddleware()(apiMux)))
+	mux.Handle("/api/v1/", middleware.NewCORSMiddleware()(authnManager.RequireAuthMiddleware()(caller.Middleware(memberService.MemberIDByOuID)(apiMux))))
 
 	// Register internal API routes (no authentication required for internal services)
 	// SECURITY WARNING: These endpoints are exposed WITHOUT authentication!

@@ -1,40 +1,26 @@
 package schema
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 
-	"github.com/openndx/openndx-core/internal/pb/auth"
+	"github.com/openndx/openndx-core/internal/pb/caller"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/utils"
 )
 
-// memberResolver resolves the member ID of an authenticated user
-type memberResolver interface {
-	ResolveMemberID(ctx context.Context, user *auth.AuthenticatedUser) (string, error)
-}
-
 // Handler handles the schema, schema submission and schema policy metadata HTTP API
 type Handler struct {
 	service *Service
-	members memberResolver
 }
 
-// NewHandler creates a new schema Handler. members resolves the member ID of
-// the authenticated user (see member.Service).
-func NewHandler(service *Service, members memberResolver) *Handler {
-	return &Handler{service: service, members: members}
-}
-
-// getUserMemberID gets the member ID for the authenticated user with caching
-// This avoids repeated database calls for the same user within the same request context
-func (h *Handler) getUserMemberID(r *http.Request, user *auth.AuthenticatedUser) (string, error) {
-	return h.members.ResolveMemberID(r.Context(), user)
+// NewHandler creates a new schema Handler
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
 }
 
 // Schema submission handlers
@@ -44,33 +30,17 @@ func (h *Handler) GetAllSchemaSubmissions(w http.ResponseWriter, r *http.Request
 	memberId := r.URL.Query().Get("memberId")
 	statusFilter := r.URL.Query()["status"]
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	// Check permission
-	var filteredMemberId *string
-	if user.HasScope(auth.ScopeSchemaSubmissionReadAll) {
-		// Callers reading across organization units can use provided filters or see all
-		filteredMemberId = &memberId
-	} else if user.HasScope(auth.ScopeSchemaSubmissionRead) {
-		// Regular users can only see their own submissions
-		// Get member ID for the authenticated user (cached)
-		userMemberId, err := h.getUserMemberID(r, user)
-		if err != nil {
+	// Unless the caller reads across organization units, limit it to its own submissions
+	if !caller.HasScope(r.Context(), caller.ScopeSchemaSubmissionReadAll) {
+		callerMemberID, ok := caller.MemberID(r.Context())
+		if !ok {
 			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
 			return
 		}
-		filteredMemberId = &userMemberId
-	} else {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
+		memberId = callerMemberID
 	}
 
-	submissions, err := h.service.GetSchemaSubmissions(filteredMemberId, &statusFilter)
+	submissions, err := h.service.GetSchemaSubmissions(&memberId, &statusFilter)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -87,33 +57,15 @@ func (h *Handler) GetAllSchemaSubmissions(w http.ResponseWriter, r *http.Request
 func (h *Handler) GetSchemaSubmission(w http.ResponseWriter, r *http.Request) {
 	submissionId := r.PathValue("submissionId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	submission, err := h.service.GetSchemaSubmission(submissionId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	// Unless the caller reads across organization units, check ownership
-	if !user.HasScope(auth.ScopeSchemaSubmissionReadAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
-			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
-			return
-		}
-
-		// Check if submission belongs to the user
-		if submission.MemberID != userMemberID {
-			utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
-			return
-		}
+	if !caller.CanAccess(r.Context(), caller.ScopeSchemaSubmissionReadAll, submission.MemberID) {
+		utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
+		return
 	}
 
 	utils.RespondWithSuccess(w, http.StatusOK, submission)
@@ -121,13 +73,6 @@ func (h *Handler) GetSchemaSubmission(w http.ResponseWriter, r *http.Request) {
 
 // CreateSchemaSubmission handles POST /api/v1/schema-submissions
 func (h *Handler) CreateSchemaSubmission(w http.ResponseWriter, r *http.Request) {
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	var req CreateSchemaSubmissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
@@ -135,25 +80,19 @@ func (h *Handler) CreateSchemaSubmission(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Unless the caller writes across organization units, ensure they can only create submissions for themselves
-	if !user.HasScope(auth.ScopeSchemaSubmissionWriteAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
+	if !caller.HasScope(r.Context(), caller.ScopeSchemaSubmissionWriteAll) {
+		callerMemberID, ok := caller.MemberID(r.Context())
+		if !ok {
 			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
 			return
 		}
 
-		// If MemberID is provided, validate ownership
-		if req.MemberID != "" {
-			// Check if the provided MemberID belongs to the authenticated user
-			if req.MemberID != userMemberID {
-				utils.RespondWithError(w, http.StatusForbidden, "Access denied: cannot create submission for another user")
-				return
-			}
-		} else {
-			// If no MemberID provided, set it to the authenticated user's member ID
-			req.MemberID = userMemberID
+		// A provided MemberID must be the caller's own; an omitted one defaults to it
+		if req.MemberID != "" && req.MemberID != callerMemberID {
+			utils.RespondWithError(w, http.StatusForbidden, "Access denied: cannot create submission for another user")
+			return
 		}
+		req.MemberID = callerMemberID
 	}
 
 	submission, err := h.service.CreateSchemaSubmission(&req)
@@ -175,13 +114,6 @@ func (h *Handler) CreateSchemaSubmission(w http.ResponseWriter, r *http.Request)
 func (h *Handler) UpdateSchemaSubmission(w http.ResponseWriter, r *http.Request) {
 	submissionId := r.PathValue("submissionId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	// Get existing submission to check ownership
 	existingSubmission, err := h.service.GetSchemaSubmission(submissionId)
 	if err != nil {
@@ -189,20 +121,9 @@ func (h *Handler) UpdateSchemaSubmission(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Unless the caller writes across organization units, check ownership
-	if !user.HasScope(auth.ScopeSchemaSubmissionWriteAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
-			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
-			return
-		}
-
-		// Check if submission belongs to the user
-		if existingSubmission.MemberID != userMemberID {
-			utils.RespondWithError(w, http.StatusForbidden, "Access denied to update this resource")
-			return
-		}
+	if !caller.CanAccess(r.Context(), caller.ScopeSchemaSubmissionWriteAll, existingSubmission.MemberID) {
+		utils.RespondWithError(w, http.StatusForbidden, "Access denied to update this resource")
+		return
 	}
 
 	var req UpdateSchemaSubmissionRequest
@@ -232,29 +153,17 @@ func (h *Handler) UpdateSchemaSubmission(w http.ResponseWriter, r *http.Request)
 func (h *Handler) GetAllSchemas(w http.ResponseWriter, r *http.Request) {
 	memberId := r.URL.Query().Get("memberId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	// Unless the caller reads across organization units, filter results to only their own schemas
-	var filteredMemberId *string
-	if !user.HasScope(auth.ScopeSchemaReadAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberId, err := h.getUserMemberID(r, user)
-		if err != nil {
+	// Unless the caller reads across organization units, limit it to its own schemas
+	if !caller.HasScope(r.Context(), caller.ScopeSchemaReadAll) {
+		callerMemberID, ok := caller.MemberID(r.Context())
+		if !ok {
 			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
 			return
 		}
-		filteredMemberId = &userMemberId
-	} else {
-		// Callers reading across organization units can specify memberId or see all
-		filteredMemberId = &memberId
+		memberId = callerMemberID
 	}
 
-	schemas, err := h.service.GetSchemas(filteredMemberId)
+	schemas, err := h.service.GetSchemas(&memberId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -271,33 +180,15 @@ func (h *Handler) GetAllSchemas(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetSchema(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	schema, err := h.service.GetSchema(schemaId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	// Unless the caller reads across organization units, check ownership
-	if !user.HasScope(auth.ScopeSchemaReadAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
-			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
-			return
-		}
-
-		// Check if schema belongs to the user
-		if schema.MemberID != userMemberID {
-			utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
-			return
-		}
+	if !caller.CanAccess(r.Context(), caller.ScopeSchemaReadAll, schema.MemberID) {
+		utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
+		return
 	}
 
 	utils.RespondWithSuccess(w, http.StatusOK, schema)
@@ -305,30 +196,20 @@ func (h *Handler) GetSchema(w http.ResponseWriter, r *http.Request) {
 
 // CreateSchema handles POST /api/v1/schemas
 func (h *Handler) CreateSchema(w http.ResponseWriter, r *http.Request) {
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	var req CreateSchemaRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// Unless the caller writes across organization units, ensure they can only create schemas for themselves
-	if !user.HasScope(auth.ScopeSchemaWriteAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
+	// Unless the caller writes across organization units, it creates schemas for its own member
+	if !caller.HasScope(r.Context(), caller.ScopeSchemaWriteAll) {
+		callerMemberID, ok := caller.MemberID(r.Context())
+		if !ok {
 			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
 			return
 		}
-
-		// Set the member ID to the authenticated user's member ID
-		req.MemberID = userMemberID
+		req.MemberID = callerMemberID
 	}
 
 	schema, err := h.service.CreateSchema(&req)
@@ -354,13 +235,6 @@ func (h *Handler) CreateSchema(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateSchema(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
 
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	// Get existing schema to check ownership
 	existingSchema, err := h.service.GetSchema(schemaId)
 	if err != nil {
@@ -368,20 +242,9 @@ func (h *Handler) UpdateSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Unless the caller writes across organization units, check ownership
-	if !user.HasScope(auth.ScopeSchemaWriteAll) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
-			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
-			return
-		}
-
-		// Check if schema belongs to the user
-		if existingSchema.MemberID != userMemberID {
-			utils.RespondWithError(w, http.StatusForbidden, "Access denied to update this resource")
-			return
-		}
+	if !caller.CanAccess(r.Context(), caller.ScopeSchemaWriteAll, existingSchema.MemberID) {
+		utils.RespondWithError(w, http.StatusForbidden, "Access denied to update this resource")
+		return
 	}
 
 	var req UpdateSchemaRequest
@@ -407,37 +270,19 @@ func (h *Handler) UpdateSchema(w http.ResponseWriter, r *http.Request) {
 
 // Schema policy metadata handlers
 
-// authorizeSchemaAccess checks that the authenticated user owns the schema,
-// unless they hold allScope, which covers every organization unit. It writes
-// the error response and returns false when access is denied.
+// authorizeSchemaAccess checks that the caller owns the schema, unless it
+// holds allScope, which covers every organization unit. It writes the error
+// response and returns false when access is denied.
 func (h *Handler) authorizeSchemaAccess(w http.ResponseWriter, r *http.Request, schemaId string, allScope string) bool {
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return false
-	}
-
 	schema, err := h.service.GetSchema(schemaId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return false
 	}
 
-	// Unless the caller holds allScope, check ownership
-	if !user.HasScope(allScope) {
-		// Get member ID for the authenticated user (cached)
-		userMemberID, err := h.getUserMemberID(r, user)
-		if err != nil {
-			utils.RespondWithError(w, http.StatusForbidden, "User member record not found")
-			return false
-		}
-
-		// Check if schema belongs to the user
-		if schema.MemberID != userMemberID {
-			utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
-			return false
-		}
+	if !caller.CanAccess(r.Context(), allScope, schema.MemberID) {
+		utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
+		return false
 	}
 
 	return true
@@ -446,7 +291,7 @@ func (h *Handler) authorizeSchemaAccess(w http.ResponseWriter, r *http.Request, 
 // ListSchemaPolicyMetadata handles GET /api/v1/schemas/{schemaId}/policy-metadata
 func (h *Handler) ListSchemaPolicyMetadata(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
-	if !h.authorizeSchemaAccess(w, r, schemaId, auth.ScopeSchemaReadAll) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, caller.ScopeSchemaReadAll) {
 		return
 	}
 
@@ -467,7 +312,7 @@ func (h *Handler) ListSchemaPolicyMetadata(w http.ResponseWriter, r *http.Reques
 func (h *Handler) PatchSchemaPolicyMetadata(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
 	id := r.PathValue("id")
-	if !h.authorizeSchemaAccess(w, r, schemaId, auth.ScopeSchemaWriteAll) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, caller.ScopeSchemaWriteAll) {
 		return
 	}
 
@@ -503,7 +348,7 @@ func (h *Handler) PatchSchemaPolicyMetadata(w http.ResponseWriter, r *http.Reque
 func (h *Handler) DeleteSchemaPolicyMetadata(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
 	id := r.PathValue("id")
-	if !h.authorizeSchemaAccess(w, r, schemaId, auth.ScopeSchemaWriteAll) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, caller.ScopeSchemaWriteAll) {
 		return
 	}
 
@@ -526,7 +371,7 @@ func (h *Handler) RevokeSchemaPolicyAllowListEntry(w http.ResponseWriter, r *htt
 	schemaId := r.PathValue("schemaId")
 	id := r.PathValue("id")
 	applicationId := r.PathValue("applicationId")
-	if !h.authorizeSchemaAccess(w, r, schemaId, auth.ScopeSchemaWriteAll) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, caller.ScopeSchemaWriteAll) {
 		return
 	}
 

@@ -1,4 +1,4 @@
-package auth
+package caller
 
 // OAuth2 scopes the Portal Backend checks. Each route in cmd/pb/main.go
 // requires one of them; the PB README maps them to ThunderID roles.

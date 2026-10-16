@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/openndx/openndx-core/internal/pb/auth/authtest"
+	"github.com/openndx/openndx-core/internal/pb/caller/callertest"
 	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +50,7 @@ func TestMemberEndpoints(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBuffer(reqBody))
+		httpReq := callertest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBuffer(reqBody))
 		httpReq.Header.Set("Content-Type", "application/json")
 
 		w := httptest.NewRecorder()
@@ -70,7 +71,7 @@ func TestMemberEndpoints(t *testing.T) {
 		ouID := fmt.Sprintf("ou-%d", time.Now().UnixNano())
 		for i, wantCode := range []int{http.StatusCreated, http.StatusBadRequest} {
 			reqBody, _ := json.Marshal(CreateMemberRequest{Name: fmt.Sprintf("Org %d", i), OuID: ouID})
-			httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBuffer(reqBody))
+			httpReq := callertest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBuffer(reqBody))
 			w := httptest.NewRecorder()
 			handler.CreateMember(w, httpReq)
 
@@ -91,7 +92,7 @@ func TestMemberEndpoints(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBuffer(reqBody))
+		httpReq := callertest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBuffer(reqBody))
 		httpReq.Header.Set("Content-Type", "application/json")
 
 		w := httptest.NewRecorder()
@@ -101,7 +102,7 @@ func TestMemberEndpoints(t *testing.T) {
 	})
 
 	t.Run("POST /api/v1/members - Invalid JSON", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBufferString("invalid json"))
+		httpReq := callertest.NewAdminRequest(http.MethodPost, "/api/v1/members", bytes.NewBufferString("invalid json"))
 		httpReq.Header.Set("Content-Type", "application/json")
 
 		w := httptest.NewRecorder()
@@ -111,7 +112,7 @@ func TestMemberEndpoints(t *testing.T) {
 	})
 
 	t.Run("PUT /api/v1/members/:id - UpdateMember_InvalidJSON", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodPut, "/api/v1/members/test-id", bytes.NewBufferString("invalid json"))
+		httpReq := callertest.NewAdminRequest(http.MethodPut, "/api/v1/members/test-id", bytes.NewBufferString("invalid json"))
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.SetPathValue("memberId", "test-id")
 		w := httptest.NewRecorder()
@@ -125,7 +126,7 @@ func TestMemberEndpoints(t *testing.T) {
 			Name: &name,
 		}
 		reqBody, _ := json.Marshal(req)
-		httpReq := authtest.NewAdminRequest(http.MethodPut, "/api/v1/members/non-existent-id", bytes.NewBuffer(reqBody))
+		httpReq := callertest.NewAdminRequest(http.MethodPut, "/api/v1/members/non-existent-id", bytes.NewBuffer(reqBody))
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.SetPathValue("memberId", "non-existent-id")
 		w := httptest.NewRecorder()
@@ -134,7 +135,7 @@ func TestMemberEndpoints(t *testing.T) {
 	})
 
 	t.Run("GET /api/v1/members - GetAllMembers", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/members", nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, "/api/v1/members", nil)
 		w := httptest.NewRecorder()
 		handler.GetAllMembers(w, httpReq)
 
@@ -148,7 +149,7 @@ func TestMemberEndpoints(t *testing.T) {
 	})
 
 	t.Run("GET /api/v1/members/:memberId - NotFound", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/members/non-existent-id", nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, "/api/v1/members/non-existent-id", nil)
 		httpReq.SetPathValue("memberId", "non-existent-id")
 		w := httptest.NewRecorder()
 		handler.GetMember(w, httpReq)
@@ -161,11 +162,17 @@ func TestMemberEndpoints(t *testing.T) {
 // only access the member linked to their own organization unit
 func TestMemberEndpoints_OrganizationUnitOwnership(t *testing.T) {
 	handler, db := newTestHandler(t)
-	ownMemberID := createTestMember(t, db, authtest.MemberUser.OuID)
+	ownMemberID := createTestMember(t, db, callertest.MemberUser.OuID)
 	otherMemberID := createTestMember(t, db, "other-ou")
 
+	// A member-scoped caller whose organization unit belongs to ownMemberID
+	memberUser := callertest.MemberUser.WithMember(ownMemberID)
+	newMemberRequest := func(method, url string, body io.Reader) *http.Request {
+		return callertest.NewAuthenticatedRequest(method, url, body, memberUser)
+	}
+
 	t.Run("GetMember - own organization unit", func(t *testing.T) {
-		httpReq := authtest.NewMemberRequest(http.MethodGet, "/api/v1/members/"+ownMemberID, nil)
+		httpReq := newMemberRequest(http.MethodGet, "/api/v1/members/"+ownMemberID, nil)
 		httpReq.SetPathValue("memberId", ownMemberID)
 		w := httptest.NewRecorder()
 		handler.GetMember(w, httpReq)
@@ -174,7 +181,7 @@ func TestMemberEndpoints_OrganizationUnitOwnership(t *testing.T) {
 	})
 
 	t.Run("GetMember - other organization unit", func(t *testing.T) {
-		httpReq := authtest.NewMemberRequest(http.MethodGet, "/api/v1/members/"+otherMemberID, nil)
+		httpReq := newMemberRequest(http.MethodGet, "/api/v1/members/"+otherMemberID, nil)
 		httpReq.SetPathValue("memberId", otherMemberID)
 		w := httptest.NewRecorder()
 		handler.GetMember(w, httpReq)
@@ -185,7 +192,7 @@ func TestMemberEndpoints_OrganizationUnitOwnership(t *testing.T) {
 	t.Run("UpdateMember - own organization unit", func(t *testing.T) {
 		name := "Renamed Org"
 		reqBody, _ := json.Marshal(UpdateMemberRequest{Name: &name})
-		httpReq := authtest.NewMemberRequest(http.MethodPut, "/api/v1/members/"+ownMemberID, bytes.NewBuffer(reqBody))
+		httpReq := newMemberRequest(http.MethodPut, "/api/v1/members/"+ownMemberID, bytes.NewBuffer(reqBody))
 		httpReq.SetPathValue("memberId", ownMemberID)
 		w := httptest.NewRecorder()
 		handler.UpdateMember(w, httpReq)
@@ -199,7 +206,7 @@ func TestMemberEndpoints_OrganizationUnitOwnership(t *testing.T) {
 	t.Run("UpdateMember - other organization unit", func(t *testing.T) {
 		name := "Hijacked Org"
 		reqBody, _ := json.Marshal(UpdateMemberRequest{Name: &name})
-		httpReq := authtest.NewMemberRequest(http.MethodPut, "/api/v1/members/"+otherMemberID, bytes.NewBuffer(reqBody))
+		httpReq := newMemberRequest(http.MethodPut, "/api/v1/members/"+otherMemberID, bytes.NewBuffer(reqBody))
 		httpReq.SetPathValue("memberId", otherMemberID)
 		w := httptest.NewRecorder()
 		handler.UpdateMember(w, httpReq)
@@ -209,7 +216,7 @@ func TestMemberEndpoints_OrganizationUnitOwnership(t *testing.T) {
 
 	t.Run("GetAllMembers - member sees only own organization unit", func(t *testing.T) {
 		// The ouId query param is ignored for non-admin users
-		httpReq := authtest.NewMemberRequest(http.MethodGet, "/api/v1/members?ouId=other-ou", nil)
+		httpReq := newMemberRequest(http.MethodGet, "/api/v1/members?ouId=other-ou", nil)
 		w := httptest.NewRecorder()
 		handler.GetAllMembers(w, httpReq)
 
@@ -224,7 +231,7 @@ func TestMemberEndpoints_OrganizationUnitOwnership(t *testing.T) {
 	})
 
 	t.Run("GetAllMembers - admin filters by unknown ouId", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/members?ouId=unknown-ou", nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, "/api/v1/members?ouId=unknown-ou", nil)
 		w := httptest.NewRecorder()
 		handler.GetAllMembers(w, httpReq)
 
@@ -236,7 +243,7 @@ func TestMemberEndpoints_OrganizationUnitOwnership(t *testing.T) {
 	})
 
 	t.Run("GetAllMembers - admin filters by ouId", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/members?ouId=other-ou", nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, "/api/v1/members?ouId=other-ou", nil)
 		w := httptest.NewRecorder()
 		handler.GetAllMembers(w, httpReq)
 

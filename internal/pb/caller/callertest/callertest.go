@@ -1,6 +1,6 @@
-// Package authtest provides authenticated test personas and request helpers
+// Package callertest provides authenticated test personas and request helpers
 // for Portal Backend handler tests. Import it only from _test.go files.
-package authtest
+package callertest
 
 import (
 	"context"
@@ -9,81 +9,98 @@ import (
 	"net/http/httptest"
 
 	"github.com/openndx/openndx-core/internal/authn"
-	"github.com/openndx/openndx-core/internal/pb/auth"
+	"github.com/openndx/openndx-core/internal/pb/caller"
 )
 
-// TestUser is an authenticated caller with the scopes its token was granted.
-// For testing authentication failures (no caller in context), use
-// NewUnauthenticatedRequest instead.
+// TestUser is an authenticated caller with the scopes its token was granted
+// and, when MemberID is set, the member caller.Middleware would have found
+// for its organization unit. For testing authentication failures (no caller
+// in context), use NewUnauthenticatedRequest instead.
 type TestUser struct {
-	IdpUserID string
-	OuID      string
-	Email     string
-	Scopes    []string
+	Subject  string
+	ClientID string
+	OuID     string
+	Email    string
+	Scopes   []string
+	MemberID string
+}
+
+// WithMember returns a copy of u whose organization unit belongs to memberID.
+func (u TestUser) WithMember(memberID string) TestUser {
+	u.MemberID = memberID
+	return u
 }
 
 // MemberScopes are the scopes the OpenNDX_Member role grants: read and write
 // within the member's own organization unit.
 var MemberScopes = []string{
-	auth.ScopeMemberRead, auth.ScopeMemberWrite,
-	auth.ScopeSchemaRead, auth.ScopeSchemaWrite,
-	auth.ScopeSchemaSubmissionRead, auth.ScopeSchemaSubmissionWrite,
-	auth.ScopeApplicationRead, auth.ScopeApplicationWrite,
-	auth.ScopeApplicationSubmissionRead, auth.ScopeApplicationSubmissionWrite,
+	caller.ScopeMemberRead, caller.ScopeMemberWrite,
+	caller.ScopeSchemaRead, caller.ScopeSchemaWrite,
+	caller.ScopeSchemaSubmissionRead, caller.ScopeSchemaSubmissionWrite,
+	caller.ScopeApplicationRead, caller.ScopeApplicationWrite,
+	caller.ScopeApplicationSubmissionRead, caller.ScopeApplicationSubmissionWrite,
 }
 
 // ReadAllScopes are read access across every organization unit and nothing
 // else. Each -all scope comes with its base scope, because -all alone never
 // opens a route.
 var ReadAllScopes = []string{
-	auth.ScopeMemberRead, auth.ScopeMemberReadAll,
-	auth.ScopeSchemaRead, auth.ScopeSchemaReadAll,
-	auth.ScopeSchemaSubmissionRead, auth.ScopeSchemaSubmissionReadAll,
-	auth.ScopeApplicationRead, auth.ScopeApplicationReadAll,
-	auth.ScopeApplicationSubmissionRead, auth.ScopeApplicationSubmissionReadAll,
+	caller.ScopeMemberRead, caller.ScopeMemberReadAll,
+	caller.ScopeSchemaRead, caller.ScopeSchemaReadAll,
+	caller.ScopeSchemaSubmissionRead, caller.ScopeSchemaSubmissionReadAll,
+	caller.ScopeApplicationRead, caller.ScopeApplicationReadAll,
+	caller.ScopeApplicationSubmissionRead, caller.ScopeApplicationSubmissionReadAll,
 }
 
 // AdminScopes are the scopes the OpenNDX_Admin role grants: every PB scope.
-var AdminScopes = auth.AllScopes
+var AdminScopes = caller.AllScopes
 
-// Predefined test users for testing authorization scenarios
+// Predefined test users for testing authorization scenarios. None has a
+// member; use WithMember for a caller whose organization unit has one.
 var (
 	// AdminUser holds every PB scope
 	AdminUser = TestUser{
-		IdpUserID: "admin-test-user-123",
-		OuID:      "admin-test-ou-123",
-		Email:     "admin@test.com",
-		Scopes:    AdminScopes,
+		Subject:  "admin-test-user-123",
+		ClientID: "admin-test-client",
+		OuID:     "admin-test-ou-123",
+		Email:    "admin@test.com",
+		Scopes:   AdminScopes,
 	}
 
 	// MemberUser holds the own-organization-unit scopes
 	MemberUser = TestUser{
-		IdpUserID: "member-test-user-456",
-		OuID:      "member-test-ou-456",
-		Email:     "member@test.com",
-		Scopes:    MemberScopes,
+		Subject:  "member-test-user-456",
+		ClientID: "member-test-client",
+		OuID:     "member-test-ou-456",
+		Email:    "member@test.com",
+		Scopes:   MemberScopes,
 	}
 
 	// ReadOnlyUser can read across organization units but write nothing
 	ReadOnlyUser = TestUser{
-		IdpUserID: "readonly-test-user-789",
-		OuID:      "readonly-test-ou-789",
-		Email:     "readonly@test.com",
-		Scopes:    ReadAllScopes,
+		Subject:  "readonly-test-user-789",
+		ClientID: "readonly-test-client",
+		OuID:     "readonly-test-ou-789",
+		Email:    "readonly@test.com",
+		Scopes:   ReadAllScopes,
 	}
 )
 
 // WithAuth returns req carrying testUser as the principal internal/authn
-// would have validated.
+// would have validated, and its member if it has one.
 func WithAuth(req *http.Request, testUser TestUser) *http.Request {
 	ctx := context.WithValue(req.Context(), authn.AuthContextKey, &authn.AuthContext{
 		Principal: authn.Principal{
-			Subject: testUser.IdpUserID,
-			OUID:    testUser.OuID,
-			Email:   testUser.Email,
-			Scopes:  testUser.Scopes,
+			Subject:  testUser.Subject,
+			ClientID: testUser.ClientID,
+			OUID:     testUser.OuID,
+			Email:    testUser.Email,
+			Scopes:   testUser.Scopes,
 		},
 	})
+	if testUser.MemberID != "" {
+		ctx = caller.WithMemberID(ctx, testUser.MemberID)
+	}
 	return req.WithContext(ctx)
 }
 
@@ -119,11 +136,11 @@ func NewUnauthenticatedRequest(method, url string, body io.Reader) *http.Request
 
 // CreateCustomTestUser creates a test user in the given organization unit
 // with the given scopes
-func CreateCustomTestUser(idpUserID, email, ouID string, scopes []string) TestUser {
+func CreateCustomTestUser(subject, email, ouID string, scopes []string) TestUser {
 	return TestUser{
-		IdpUserID: idpUserID,
-		OuID:      ouID,
-		Email:     email,
-		Scopes:    scopes,
+		Subject: subject,
+		OuID:    ouID,
+		Email:   email,
+		Scopes:  scopes,
 	}
 }

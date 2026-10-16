@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/openndx/openndx-core/internal/pb/auth"
 	"gorm.io/gorm"
 )
 
@@ -131,42 +130,19 @@ func (s *Service) getAllMembers(ctx context.Context) ([]MemberResponse, error) {
 	return response, nil
 }
 
-// ResolveMemberID returns the member ID of the authenticated user's
-// organization unit, caching the result (or the lookup error) on the user so
-// repeated calls within the same request avoid extra database lookups.
-func (s *Service) ResolveMemberID(ctx context.Context, user *auth.AuthenticatedUser) (string, error) {
-	// Check if we already have cached the member ID
-	if memberID, cached := user.GetCachedMemberID(); cached {
-		// Return cached error if the previous lookup failed
-		if err := user.GetCachedMemberIDError(); err != nil {
-			return "", err
-		}
-		return memberID, nil
+// MemberIDByOuID returns the ID of the member linked to the given
+// organization unit, or "" when none is. It is the caller.MemberLookup PB
+// uses to find a caller's member.
+func (s *Service) MemberIDByOuID(ctx context.Context, ouID string) (string, error) {
+	if ouID == "" {
+		return "", nil
 	}
 
-	if user.OuID == "" {
-		err := fmt.Errorf("user has no organization unit claim")
-		user.SetCachedMemberID("", err)
+	members, err := s.getMembersByOuID(ctx, ouID)
+	if err != nil || len(members) == 0 {
 		return "", err
 	}
-
-	// Not cached, perform the database lookup
-	members, err := s.GetAllMembers(ctx, &user.OuID)
-	if err != nil {
-		user.SetCachedMemberID("", err)
-		return "", err
-	}
-
-	if len(members) == 0 {
-		err = fmt.Errorf("user member record not found")
-		user.SetCachedMemberID("", err)
-		return "", err
-	}
-
-	// Cache the successful result
-	memberID := members[0].MemberID
-	user.SetCachedMemberID(memberID, nil)
-	return memberID, nil
+	return members[0].MemberID, nil
 }
 
 // buildMemberResponse converts a Member model to MemberResponse
