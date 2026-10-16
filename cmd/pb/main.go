@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/LSFLK/argus/pkg/audit"
+	"github.com/OpenNSW/core/authz"
 	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/openndx/openndx-core/internal/pb/application"
 	"github.com/openndx/openndx-core/internal/pb/auth"
@@ -80,6 +80,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize Audit system
+	// Services will work without auditing - gracefully degrades if disabled via ENABLE_AUDIT=false
+	// or if AUDIT_SERVICE_URL is not provided
+	auditServiceURL := os.Getenv("AUDIT_SERVICE_URL")
+	apiKey := os.Getenv("ARGUS_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("ARGUS_AUTH_TOKEN")
+	}
+	auditClient := audit.NewClient(audit.Config{
+		BaseURL: auditServiceURL,
+		APIKey:  apiKey,
+	})
+	audit.InitializeGlobalAudit(auditClient)
+
 	// Initialize services and handlers
 	memberService := member.NewService(gormDB)
 	memberHandler := member.NewHandler(memberService)
@@ -89,49 +103,6 @@ func main() {
 
 	applicationService := application.NewService(gormDB, pdpClient, idpProvider)
 	applicationHandler := application.NewHandler(applicationService, memberService)
-
-	// Create a mux for API routes
-	mux := http.NewServeMux()
-
-	// Member endpoints
-	mux.Handle("GET /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(memberHandler.GetAllMembers)))
-	mux.Handle("POST /api/v1/members", utils.PanicRecoveryMiddleware(http.HandlerFunc(memberHandler.CreateMember)))
-	mux.Handle("GET /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(memberHandler.GetMember)))
-	mux.Handle("PUT /api/v1/members/{memberId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(memberHandler.UpdateMember)))
-
-	// Schema endpoints
-	mux.Handle("GET /api/v1/schemas", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.GetAllSchemas)))
-	mux.Handle("POST /api/v1/schemas", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.CreateSchema)))
-	mux.Handle("GET /api/v1/schemas/{schemaId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.GetSchema)))
-	mux.Handle("PUT /api/v1/schemas/{schemaId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.UpdateSchema)))
-
-	// Schema policy metadata endpoints
-	mux.Handle("GET /api/v1/schemas/{schemaId}/policy-metadata", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.ListSchemaPolicyMetadata)))
-	mux.Handle("PATCH /api/v1/schemas/{schemaId}/policy-metadata/{id}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.PatchSchemaPolicyMetadata)))
-	mux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.DeleteSchemaPolicyMetadata)))
-	mux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}/allowlist/{applicationId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.RevokeSchemaPolicyAllowListEntry)))
-
-	// Schema submission endpoints
-	mux.Handle("GET /api/v1/schema-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.GetAllSchemaSubmissions)))
-	mux.Handle("POST /api/v1/schema-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.CreateSchemaSubmission)))
-	mux.Handle("GET /api/v1/schema-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.GetSchemaSubmission)))
-	mux.Handle("PUT /api/v1/schema-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(schemaHandler.UpdateSchemaSubmission)))
-
-	// Application endpoints
-	mux.Handle("GET /api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.GetAllApplications)))
-	mux.Handle("POST /api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.CreateApplication)))
-	mux.Handle("GET /api/v1/applications/{applicationId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.GetApplication)))
-	mux.Handle("PUT /api/v1/applications/{applicationId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.UpdateApplication)))
-	mux.Handle("PUT /api/v1/applications/{applicationId}/policy", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.UpdateApplicationPolicy)))
-
-	// Application submission endpoints
-	mux.Handle("GET /api/v1/application-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.GetAllApplicationSubmissions)))
-	mux.Handle("POST /api/v1/application-submissions", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.CreateApplicationSubmission)))
-	mux.Handle("GET /api/v1/application-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.GetApplicationSubmission)))
-	mux.Handle("PUT /api/v1/application-submissions/{submissionId}", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.UpdateApplicationSubmission)))
-
-	// Setup middleware chain
-	corsMiddleware := middleware.NewCORSMiddleware()
 
 	// Setup authentication: accept tokens the IdP issued for this API's
 	// audience, whichever client requested them. IDP_JWKS_URL and IDP_ISSUER
@@ -154,181 +125,72 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup Authorization middleware with configurable security policy
-	authMode := utils.GetEnvOrDefault("AUTHORIZATION_MODE", "fail_open_admin_system")
-	strictMode := utils.GetEnvOrDefault("AUTHORIZATION_STRICT_MODE", "false") == "true"
-
-	var authConfig auth.AuthorizationConfig
-	switch authMode {
-	case "fail_closed":
-		authConfig.Mode = auth.AuthorizationModeFailClosed
-	case "fail_open_admin":
-		authConfig.Mode = auth.AuthorizationModeFailOpenAdmin
-	case "fail_open_admin_system":
-		authConfig.Mode = auth.AuthorizationModeFailOpenAdminSystem
-	default:
-		slog.Error("Invalid authorization mode. Valid options: fail_closed, fail_open_admin, fail_open_admin_system", "mode", authMode)
+	// Check each API route's OAuth2 scope against the principal internal/authn validated
+	authzr, err := authz.New(auth.PrincipalFromContext)
+	if err != nil {
+		slog.Error("Failed to initialize authorization", "error", err)
 		os.Exit(1)
 	}
-	authConfig.StrictMode = strictMode
 
-	authorizationMiddleware := auth.NewAuthorizationMiddlewareWithConfig(authConfig)
+	// API routes. Each requires one scope: the "-all" scopes never open a
+	// route, handlers check them only to widen the caller past its own records.
+	apiMux := http.NewServeMux()
 
-	// Initialize Audit system
-	// Services will work without auditing - gracefully degrades if disabled via ENABLE_AUDIT=false
-	// or if AUDIT_SERVICE_URL is not provided
-	auditServiceURL := os.Getenv("AUDIT_SERVICE_URL")
-	apiKey := os.Getenv("ARGUS_API_KEY")
-	if apiKey == "" {
-		apiKey = os.Getenv("ARGUS_AUTH_TOKEN")
-	}
-	auditClient := audit.NewClient(audit.Config{
-		BaseURL: auditServiceURL,
-		APIKey:  apiKey,
-	})
-	audit.InitializeGlobalAudit(auditClient)
+	// Member endpoints
+	apiMux.Handle("GET /api/v1/members", authzr.RequireScope(auth.ScopeMemberRead)(http.HandlerFunc(memberHandler.GetAllMembers)))
+	apiMux.Handle("POST /api/v1/members", authzr.RequireScope(auth.ScopeMemberWriteAll)(http.HandlerFunc(memberHandler.CreateMember)))
+	apiMux.Handle("GET /api/v1/members/{memberId}", authzr.RequireScope(auth.ScopeMemberRead)(http.HandlerFunc(memberHandler.GetMember)))
+	apiMux.Handle("PUT /api/v1/members/{memberId}", authzr.RequireScope(auth.ScopeMemberWrite)(http.HandlerFunc(memberHandler.UpdateMember)))
 
-	// Apply middleware chain (CORS -> Authentication -> user from token -> Authorization) to the API mux ONLY
-	protectedAPIHandler := corsMiddleware(
-		authnManager.RequireAuthMiddleware()(
-			auth.FromAuthn(
-				authorizationMiddleware.AuthorizeRequest(mux),
-			),
-		),
-	)
+	// Schema endpoints
+	apiMux.Handle("GET /api/v1/schemas", authzr.RequireScope(auth.ScopeSchemaRead)(http.HandlerFunc(schemaHandler.GetAllSchemas)))
+	apiMux.Handle("POST /api/v1/schemas", authzr.RequireScope(auth.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.CreateSchema)))
+	apiMux.Handle("GET /api/v1/schemas/{schemaId}", authzr.RequireScope(auth.ScopeSchemaRead)(http.HandlerFunc(schemaHandler.GetSchema)))
+	apiMux.Handle("PUT /api/v1/schemas/{schemaId}", authzr.RequireScope(auth.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.UpdateSchema)))
 
-	// Create the MAIN (top-level) mux for all incoming traffic
-	topLevelMux := http.NewServeMux()
+	// Schema policy metadata endpoints
+	apiMux.Handle("GET /api/v1/schemas/{schemaId}/policy-metadata", authzr.RequireScope(auth.ScopeSchemaRead)(http.HandlerFunc(schemaHandler.ListSchemaPolicyMetadata)))
+	apiMux.Handle("PATCH /api/v1/schemas/{schemaId}/policy-metadata/{id}", authzr.RequireScope(auth.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.PatchSchemaPolicyMetadata)))
+	apiMux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}", authzr.RequireScope(auth.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.DeleteSchemaPolicyMetadata)))
+	apiMux.Handle("DELETE /api/v1/schemas/{schemaId}/policy-metadata/{id}/allowlist/{applicationId}", authzr.RequireScope(auth.ScopeSchemaWrite)(http.HandlerFunc(schemaHandler.RevokeSchemaPolicyAllowListEntry)))
 
-	// Register public routes directly on the top-level mux
-	// These routes will bypass the audit middleware
-	topLevelMux.Handle("GET /health", utils.PanicRecoveryMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		type DBHealth struct {
-			Status   string `json:"status"`
-			Error    string `json:"error,omitempty"`
-			Database string `json:"database,omitempty"`
-		}
-		type HealthStatus struct {
-			Status    string              `json:"status"`
-			Service   string              `json:"service"`
-			Databases map[string]DBHealth `json:"databases"`
-		}
+	// Schema submission endpoints
+	apiMux.Handle("GET /api/v1/schema-submissions", authzr.RequireScope(auth.ScopeSchemaSubmissionRead)(http.HandlerFunc(schemaHandler.GetAllSchemaSubmissions)))
+	apiMux.Handle("POST /api/v1/schema-submissions", authzr.RequireScope(auth.ScopeSchemaSubmissionWrite)(http.HandlerFunc(schemaHandler.CreateSchemaSubmission)))
+	apiMux.Handle("GET /api/v1/schema-submissions/{submissionId}", authzr.RequireScope(auth.ScopeSchemaSubmissionRead)(http.HandlerFunc(schemaHandler.GetSchemaSubmission)))
+	apiMux.Handle("PUT /api/v1/schema-submissions/{submissionId}", authzr.RequireScope(auth.ScopeSchemaSubmissionWrite)(http.HandlerFunc(schemaHandler.UpdateSchemaSubmission)))
 
-		status := HealthStatus{
-			Status:  "healthy",
-			Service: "portal-backend",
-			Databases: map[string]DBHealth{
-				"v1": {Status: "unknown"},
-			},
-		}
+	// Application endpoints
+	apiMux.Handle("GET /api/v1/applications", authzr.RequireScope(auth.ScopeApplicationRead)(http.HandlerFunc(applicationHandler.GetAllApplications)))
+	apiMux.Handle("POST /api/v1/applications", authzr.RequireScope(auth.ScopeApplicationWrite)(http.HandlerFunc(applicationHandler.CreateApplication)))
+	apiMux.Handle("GET /api/v1/applications/{applicationId}", authzr.RequireScope(auth.ScopeApplicationRead)(http.HandlerFunc(applicationHandler.GetApplication)))
+	apiMux.Handle("PUT /api/v1/applications/{applicationId}", authzr.RequireScope(auth.ScopeApplicationWrite)(http.HandlerFunc(applicationHandler.UpdateApplication)))
+	apiMux.Handle("PUT /api/v1/applications/{applicationId}/policy", authzr.RequireScope(auth.ScopeApplicationWrite)(http.HandlerFunc(applicationHandler.UpdateApplicationPolicy)))
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+	// Application submission endpoints
+	apiMux.Handle("GET /api/v1/application-submissions", authzr.RequireScope(auth.ScopeApplicationSubmissionRead)(http.HandlerFunc(applicationHandler.GetAllApplicationSubmissions)))
+	apiMux.Handle("POST /api/v1/application-submissions", authzr.RequireScope(auth.ScopeApplicationSubmissionWrite)(http.HandlerFunc(applicationHandler.CreateApplicationSubmission)))
+	apiMux.Handle("GET /api/v1/application-submissions/{submissionId}", authzr.RequireScope(auth.ScopeApplicationSubmissionRead)(http.HandlerFunc(applicationHandler.GetApplicationSubmission)))
+	apiMux.Handle("PUT /api/v1/application-submissions/{submissionId}", authzr.RequireScope(auth.ScopeApplicationSubmissionWrite)(http.HandlerFunc(applicationHandler.UpdateApplicationSubmission)))
 
-		// Test V1 GORM database connection
-		if gormDB == nil {
-			status.Databases["v1"] = DBHealth{Status: "unhealthy", Error: "GORM connection is nil"}
-			status.Status = "unhealthy"
-		} else {
-			sqlDB, err := gormDB.DB()
-			if err != nil {
-				status.Databases["v1"] = DBHealth{Status: "unhealthy", Error: fmt.Sprintf("failed to get sql.DB: %v", err)}
-				status.Status = "unhealthy"
-			} else if err := sqlDB.PingContext(ctx); err != nil {
-				status.Databases["v1"] = DBHealth{Status: "unhealthy", Error: err.Error()}
-				status.Status = "unhealthy"
-			} else {
-				status.Databases["v1"] = DBHealth{Status: "healthy", Database: v1DbConfig.Database}
-			}
-		}
+	// All incoming traffic. Public routes register here directly; everything
+	// under /api/v1/ goes through CORS and authentication to apiMux. The
+	// method-less /api/v1/ pattern also catches CORS preflight (OPTIONS)
+	// requests, which no apiMux route matches.
+	mux := http.NewServeMux()
 
-		statusCode := http.StatusOK
-		if status.Status != "healthy" {
-			statusCode = http.StatusServiceUnavailable
-		}
+	mux.HandleFunc("GET /health", healthHandler(gormDB, v1DbConfig.Database))
+	mux.HandleFunc("GET /debug", debugHandler)
+	mux.HandleFunc("GET /debug/db", debugDBHandler(gormDB, v1DbConfig.Database))
 
-		utils.RespondWithJSON(w, statusCode, status)
-	})))
-
-	topLevelMux.Handle("GET /debug", utils.PanicRecoveryMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		utils.RespondWithJSON(w, http.StatusOK, map[string]string{
-			"service":    "portal-backend",
-			"version":    Version,
-			"build_time": BuildTime,
-			"git_commit": GitCommit,
-			"path":       r.URL.Path,
-			"method":     r.Method,
-		})
-	})))
-
-	topLevelMux.Handle("GET /debug/db", utils.PanicRecoveryMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		debugInfo := map[string]interface{}{
-			"v1": map[string]interface{}{},
-		}
-
-		// Test V1 GORM database connection
-		if gormDB == nil {
-			debugInfo["v1"] = map[string]interface{}{
-				"error": "GORM connection is nil",
-			}
-		} else {
-			sqlDB, err := gormDB.DB()
-			if err != nil {
-				debugInfo["v1"] = map[string]interface{}{
-					"error": fmt.Sprintf("failed to get sql.DB: %v", err),
-				}
-			} else if err := sqlDB.PingContext(ctx); err != nil {
-				debugInfo["v1"] = map[string]interface{}{
-					"error": fmt.Sprintf("V1 database ping failed: %v", err),
-				}
-			} else {
-				v1Info := map[string]interface{}{
-					"status":   "connected",
-					"database": v1DbConfig.Database,
-				}
-
-				// Check if members table exists in V1 DB
-				var membersExists bool
-				checkMembersQuery := `SELECT EXISTS (
-                       SELECT FROM information_schema.tables 
-                       WHERE table_schema = 'public' 
-                       AND table_name = 'members'
-                   )`
-
-				if err := sqlDB.QueryRowContext(ctx, checkMembersQuery).Scan(&membersExists); err != nil {
-					v1Info["table_check_error"] = fmt.Sprintf("failed to check members table: %v", err)
-				} else {
-					v1Info["members_table_exists"] = membersExists
-					if membersExists {
-						var memberCount int
-						countMembersQuery := `SELECT COUNT(*) FROM members`
-						if err := sqlDB.QueryRowContext(ctx, countMembersQuery).Scan(&memberCount); err != nil {
-							v1Info["count_error"] = fmt.Sprintf("failed to count members: %v", err)
-						} else {
-							v1Info["members_count"] = memberCount
-						}
-					}
-				}
-				debugInfo["v1"] = v1Info
-			}
-		}
-
-		utils.RespondWithJSON(w, http.StatusOK, debugInfo)
-	})))
-
-	// Register the protected API routes to the top-level mux
-	// All traffic to /api/v1/ (and its sub-paths) will pass through the middleware chain
-	topLevelMux.Handle("/api/v1/", protectedAPIHandler)
+	mux.Handle("/api/v1/", middleware.NewCORSMiddleware()(authnManager.RequireAuthMiddleware()(apiMux)))
 
 	// Register internal API routes (no authentication required for internal services)
 	// SECURITY WARNING: These endpoints are exposed WITHOUT authentication!
 	// MUST be protected at network level (VPC, firewall, service mesh, etc.)
 	// See README.md "Deployment Security" section for required security measures.
 	// DO NOT expose this service directly to public internet without proper network isolation.
-	topLevelMux.Handle("GET /internal/api/v1/applications", utils.PanicRecoveryMiddleware(http.HandlerFunc(applicationHandler.GetApplicationIdByClientId)))
+	mux.HandleFunc("GET /internal/api/v1/applications", applicationHandler.GetApplicationIdByClientId)
 
 	// Start server
 	port := os.Getenv("PORT")
@@ -339,7 +201,7 @@ func main() {
 	addr := ":" + port
 	server := &http.Server{
 		Addr:         addr,
-		Handler:      topLevelMux,
+		Handler:      utils.PanicRecoveryMiddleware(mux),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,

@@ -22,19 +22,6 @@ func NewHandler(service *Service) *Handler {
 
 // CreateMember handles POST /api/v1/members
 func (h *Handler) CreateMember(w http.ResponseWriter, r *http.Request) {
-	// Get authenticated user
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	// Check permission - only admin users can create members
-	if !user.HasPermission(auth.PermissionCreateMember) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	var req CreateMemberRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
@@ -75,8 +62,8 @@ func (h *Handler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user can update this member resource
-	// Admin can update any member, regular members can only update their own organization unit's
-	if !user.IsAdmin() && existingMember.OuID != user.OuID {
+	// Callers writing across organization units can update any member, others only their own organization unit's
+	if !user.HasScope(auth.ScopeMemberWriteAll) && existingMember.OuID != user.OuID {
 		utils.RespondWithError(w, http.StatusForbidden, "Access denied to update this resource")
 		return
 	}
@@ -123,8 +110,8 @@ func (h *Handler) GetMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user can access this member resource
-	// Admin can access any member, regular members can only access their own organization unit's
-	if !user.IsAdmin() && member.OuID != user.OuID {
+	// Callers reading across organization units can access any member, others only their own organization unit's
+	if !user.HasScope(auth.ScopeMemberReadAll) && member.OuID != user.OuID {
 		utils.RespondWithError(w, http.StatusForbidden, "Access denied to this resource")
 		return
 	}
@@ -143,13 +130,13 @@ func (h *Handler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check permission - admin can read all members, regular users need specific permission
+	// Callers reading across organization units see every member, others only their own
 	var filteredOuID *string
 
-	if user.HasPermission(auth.PermissionReadAllMembers) {
-		// Admin can filter by organization unit or see all
+	if user.HasScope(auth.ScopeMemberReadAll) {
+		// Can filter by organization unit or see all
 		filteredOuID = &ouID
-	} else if user.HasPermission(auth.PermissionReadMember) {
+	} else if user.HasScope(auth.ScopeMemberRead) {
 		// Regular users can only see their own organization unit's member
 		if user.OuID == "" {
 			utils.RespondWithError(w, http.StatusForbidden, "User has no organization unit")

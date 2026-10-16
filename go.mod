@@ -1,11 +1,12 @@
 module github.com/openndx/openndx-core
 
-go 1.26.0
+go 1.26.4
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/LSFLK/argus/pkg/audit v0.1.0
 	github.com/MicahParks/keyfunc/v3 v3.7.0
+	github.com/OpenNSW/core/authz v0.1.0
 	github.com/OpenNSW/core/database v0.3.0
 	github.com/OpenNSW/core/shared v0.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1

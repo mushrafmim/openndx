@@ -107,18 +107,42 @@ CORS_ALLOWED_ORIGINS=*            # CORS allowed origins
 - **Health Check** - `/health` - System health and database status
 - **API Documentation** - `/openapi.yaml` - OpenAPI specification
 
-### Authentication & Authorization
-
-**Supported Roles:**
-- `OpenNDX_Admin` - Full system access
-- `OpenNDX_Member` - Standard user access to own resources
-- `OpenNDX_System` - System-level read access
+### Authentication
 
 **JWT Requirements** (validated by `internal/authn`):
 - Issuer: `IDP_ISSUER`
 - Audience: `IDP_AUDIENCE`, PB's resource server identifier. Any client's token for this audience is accepted; clients request it with `resource=` at login.
-- Claims: `sub` and `client_id` are required; `roles` must include at least one role above. `ouId` and `email` are read when present.
+- Claims: `sub` and `client_id` are required; `scope` carries the scopes below. `ouId` and `email` are read when present; `ouId` ties a caller to its member.
 - Validation: JWKS-based signature verification (`IDP_JWKS_URL`)
+
+A missing or invalid token gets `401`.
+
+### Authorization
+
+Every `/api/v1/` route requires an OAuth2 scope from the token's `scope` claim, checked with `github.com/OpenNSW/core/authz`. The scope sits next to each route in `cmd/pb/main.go`; a token without it gets `403`. Scopes are defined in `internal/pb/auth/scopes.go`.
+
+**Scopes.** Each is `<resource>:<action>`, the permission ThunderID builds from an action on PB's resource server:
+
+| Resource                 | Own organization unit                                          | Every organization unit                                                |
+|--------------------------|----------------------------------------------------------------|------------------------------------------------------------------------|
+| Members                  | `member:read`, `member:write`                                  | `member:read-all`, `member:write-all`                                  |
+| Schemas                  | `schema:read`, `schema:write`                                  | `schema:read-all`, `schema:write-all`                                  |
+| Schema submissions       | `schema-submission:read`, `schema-submission:write`            | `schema-submission:read-all`, `schema-submission:write-all`            |
+| Applications             | `application:read`, `application:write`                        | `application:read-all`, `application:write-all`                        |
+| Application submissions  | `application-submission:read`, `application-submission:write`  | `application-submission:read-all`, `application-submission:write-all`  |
+
+Each route requires exactly one scope: `GET` routes `<resource>:read`, and `POST`, `PUT`, `PATCH` and `DELETE` routes `<resource>:write`. The `-all` scopes never open a route on their own; the handler checks them only to widen the caller past its own member's records. A caller working across organization units therefore needs both, e.g. `schema:read` and `schema:read-all`. Creating a member (`POST /api/v1/members`) takes `member:write-all` only. Policy metadata routes under `/api/v1/schemas/{schemaId}/` use the schema scopes, and `PUT /api/v1/applications/{applicationId}/policy` the application scopes.
+
+The scopes carry no namespace prefix: PB only accepts tokens for its own audience, and ThunderID binds each token to exactly one resource server, so a scope in a PB token can only be PB's.
+
+**Roles.** ThunderID grants the scopes through roles on PB's resource server (`thunderid/bootstrap/resource.yaml`); PB never reads role names. Changing what a role may do is a ThunderID change, not a PB release:
+
+| ThunderID role   | Scopes                                                                                                                    |
+|------------------|---------------------------------------------------------------------------------------------------------------------------|
+| `OpenNDX_Admin`  | All of the above                                                                                                          |
+| `OpenNDX_Member` | `member:read`, `member:write` and `read`/`write` on schemas, schema submissions, applications and application submissions |
+
+**Clients** must request the scopes along with `resource=<IDP_AUDIENCE>`: ThunderID issues only scopes that the client requests and the user's roles grant. The `ondx` CLI's `local` profile requests all of them; the admin and member portals take theirs from their scope setting (`VITE_IDP_SCOPE` / `VITE_SCOPE`).
 
 ## Testing
 
@@ -156,7 +180,7 @@ cmd/pb/
 
 internal/pb/
 ├── application/           # Application context: applications, submissions, allow-lists
-├── auth/                  # Roles/permissions & authorization middleware (tokens are validated by internal/authn)
+├── auth/                  # Scopes and the caller's identity (tokens are validated by internal/authn)
 ├── database/              # GORM connection and migrations
 ├── idp/                   # Identity provider integrations
 ├── kernel/                # Types shared across domains (BaseModel, Status, Version)
@@ -171,10 +195,10 @@ internal/utils/            # HTTP/server helpers shared across services
 ### Security Architecture
 
 ```
-Request → CORS → JWT Validation → Authorization → Resource Access
+Request → CORS → JWT Validation → Route Scope → Resource Access
     ↓        ↓           ↓              ↓             ↓
- Origin   Token      Role Check    Permission    Ownership
- Check    Verify     & Claims      Validation    Validation
+ Origin   Token      Audience       Scope Check   Ownership
+ Check    Verify     & Claims       (403)         Validation
 ```
 
 ### Database Schema

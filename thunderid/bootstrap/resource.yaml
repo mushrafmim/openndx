@@ -53,8 +53,13 @@ resources:
 # only accepts access tokens whose `aud` is http://pb.openndx.local
 # (IDP_AUDIENCE in compose.yml), whichever client requested them, so clients
 # must request `resource=http://pb.openndx.local` (ondx's built-in `local`
-# profile does). The OpenNDX_Admin and OpenNDX_Member roles below grant its
-# permissions.
+# profile does).
+#
+# Each resource's actions are PB's OAuth2 scopes, named <resource>:<action>
+# (internal/pb/auth/scopes.go): read and write cover the caller's own
+# organization unit, read-all and write-all every organization unit. PB checks
+# these scopes on each route, so a token only gets the ones the client requests
+# AND the user's roles below grant. See "Authorization" in cmd/pb/README.md.
 resource_type: resource_server
 id: 01900000-0000-7000-8000-0000000000b3
 name: Portal Backend Resource Server
@@ -62,45 +67,104 @@ description: Portal Backend API audience
 identifier: http://pb.openndx.local
 ouHandle: default
 resources:
-  - name: Admin
-    handle: manage
-    description: OpenNDX administrative access
   - name: Member
     handle: member
-    description: OpenNDX member organization access
+    description: Member organizations
+    actions:
+      - name: Read
+        handle: read
+      - name: Write
+        handle: write
+      - name: Read all
+        handle: read-all
+      - name: Write all
+        handle: write-all
+  - name: Schema
+    handle: schema
+    description: Provider data schemas
+    actions:
+      - name: Read
+        handle: read
+      - name: Write
+        handle: write
+      - name: Read all
+        handle: read-all
+      - name: Write all
+        handle: write-all
+  - name: Schema submission
+    handle: schema-submission
+    description: Schema submissions awaiting review
+    actions:
+      - name: Read
+        handle: read
+      - name: Write
+        handle: write
+      - name: Read all
+        handle: read-all
+      - name: Write all
+        handle: write-all
+  - name: Application
+    handle: application
+    description: Consumer applications
+    actions:
+      - name: Read
+        handle: read
+      - name: Write
+        handle: write
+      - name: Read all
+        handle: read-all
+      - name: Write all
+        handle: write-all
+  - name: Application submission
+    handle: application-submission
+    description: Application submissions awaiting review
+    actions:
+      - name: Read
+        handle: read
+      - name: Write
+        handle: write
+      - name: Read all
+        handle: read-all
+      - name: Write all
+        handle: write-all
 
 ---
 # Grants members of the OpenNDX Admins group (thunderid/bootstrap/users.yaml,
-# id ...b2) a `roles` claim value of "OpenNDX_Admin" once NDX_CLI requests the
-# `roles` scope (see that client's scopeClaims in application.yaml). The NAME
-# here is load-bearing: Portal Backend's authorization middleware
-# (internal/pb/auth/permissions.go) does an exact string match against
-# "OpenNDX_Admin" — not against role IDs or permissions — so this role must be
-# named exactly that, unlike ThunderID's own built-in "Administrator" role
-# (a different name, for a different authorization domain — see users.yaml).
-#
-# VERIFIED: confirmed against a running instance by logging in as ndx-admin
-# via `ondx login` and decoding the access token — the `roles` claim carries
-# role NAMES like this one (not resourceServer:permission strings the way the
-# `permissions` block below is scoped).
+# id ...b2) every Portal Backend scope, across all organization units.
 resource_type: role
 id: 01900000-0000-7000-8000-0000000000b4
 name: OpenNDX_Admin
-description: Grants OpenNDX Portal Backend admin access via the CLI
+description: Grants OpenNDX Portal Backend admin access across all organization units
 ouHandle: default
 permissions:
   - resourceServerId: 01900000-0000-7000-8000-0000000000b3
     permissions:
-      - manage
+      - member:read
+      - member:write
+      - member:read-all
+      - member:write-all
+      - schema:read
+      - schema:write
+      - schema:read-all
+      - schema:write-all
+      - schema-submission:read
+      - schema-submission:write
+      - schema-submission:read-all
+      - schema-submission:write-all
+      - application:read
+      - application:write
+      - application:read-all
+      - application:write-all
+      - application-submission:read
+      - application-submission:write
+      - application-submission:read-all
+      - application-submission:write-all
 assignments:
   - id: 01900000-0000-7000-8000-0000000000b2
     type: group
 ---
 # Grants members of the OpenNDX Members group (thunderid/bootstrap/users.yaml,
-# id ...c4) a `roles` claim value of "OpenNDX_Member". As with OpenNDX_Admin
-# above, the NAME is load-bearing: it must match auth.RoleMember in
-# internal/pb/auth/permissions.go exactly, or Portal Backend rejects the token
-# for having no valid role.
+# id ...c4) read and write access to their own organization unit's records.
 resource_type: role
 id: 01900000-0000-7000-8000-0000000000c5
 name: OpenNDX_Member
@@ -109,7 +173,16 @@ ouHandle: default
 permissions:
   - resourceServerId: 01900000-0000-7000-8000-0000000000b3
     permissions:
-      - member
+      - member:read
+      - member:write
+      - schema:read
+      - schema:write
+      - schema-submission:read
+      - schema-submission:write
+      - application:read
+      - application:write
+      - application-submission:read
+      - application-submission:write
 assignments:
   - id: 01900000-0000-7000-8000-0000000000c4
     type: group

@@ -87,27 +87,17 @@ func extractActorInfoFromRequest(r *http.Request) (actorType string, actorID *st
 	userID := user.IdpUserID
 	actorID = &userID
 
-	// Map user's primary role to actor type
-	primaryRole := user.GetPrimaryRole()
+	// Classify the actor by what its token may do rather than by role name:
+	// onboarding members is an administrator's job, a caller in an
+	// organization unit acts for that member, and anything else is a service.
 	var actorTypeConst ActorType
-
-	switch primaryRole {
-	case auth.RoleAdmin:
+	switch {
+	case user.HasScope(auth.ScopeMemberWriteAll):
 		actorTypeConst = ActorTypeAdmin
-	case auth.RoleMember:
+	case user.OuID != "":
 		actorTypeConst = ActorTypeMember
-	case auth.RoleSystem:
-		actorTypeConst = ActorTypeSystem
 	default:
-		// Security: Use SYSTEM for unknown roles instead of MEMBER to prevent privilege escalation
-		// Unknown roles should be investigated and properly mapped
 		actorTypeConst = ActorTypeSystem
-		slog.Warn("Unknown role encountered in audit log - using SYSTEM actor type as safe default",
-			"user_id", userID,
-			"primary_role", primaryRole,
-			"all_roles", user.Roles,
-			"path", r.URL.Path,
-			"method", r.Method)
 	}
 
 	// Convert to string for both actorType and actorRole

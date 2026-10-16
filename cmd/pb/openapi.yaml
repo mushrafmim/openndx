@@ -7,23 +7,26 @@ info:
     ## Authentication
     All /api/v1/ endpoints require JWT authentication using Bearer tokens from the configured OIDC-compliant
     identity provider (ThunderID is the primary supported provider; other OIDC-compliant IdPs may also be
-    configured), enforced by a CORS -> JWT authentication -> RBAC authorization middleware chain.
+    configured), enforced by a CORS -> JWT authentication middleware chain and a scope check on each route.
 
     /health, /debug, and /debug/db are exempt from authentication.
 
     The /internal/api/v1/ endpoints (for service-to-service communication) bypass this entire middleware
-    chain - no CORS, no JWT authentication, and no RBAC authorization is applied. They are intended to be
+    chain - no CORS, no JWT authentication, and no scope check is applied. They are intended to be
     reachable only from within the internal network and must never be exposed publicly.
     
     ## Authorization  
-    The API implements role-based access control (RBAC) with the following roles:
-    - **OpenNDX_Admin**: Full system access and management capabilities
-    - **OpenNDX_Member**: Standard user access to own resources only
-    - **OpenNDX_System**: System-level operations with read access
-    
+    Each route requires exactly one OAuth2 scope from the token's `scope` claim, named `<resource>:<action>`:
+    `member`, `schema`, `schema-submission`, `application` and `application-submission`, each with
+    `read`, `write`, `read-all` and `write-all`. GET routes require `read`; writes require `write`.
+    With only those, the caller is limited to its own organization unit's records. The `-all` scopes
+    never open a route on their own: held alongside `read` or `write`, they widen the caller to every
+    organization unit. Creating a member requires `member:write-all`.
+    A missing or invalid token gets 401; a token without the route's scope gets 403.
+
     ## Features
     - JWT authentication with pluggable OIDC identity provider integration
-    - Role-based access control with granular permissions
+    - Scope-based access control on every route
     - Thread-safe caching for optimal performance
     - Ownership-based resource access validation
     - Comprehensive audit logging

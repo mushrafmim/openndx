@@ -53,10 +53,10 @@ func (h *Handler) GetAllSchemaSubmissions(w http.ResponseWriter, r *http.Request
 
 	// Check permission
 	var filteredMemberId *string
-	if user.HasPermission(auth.PermissionReadAllSchemaSubmissions) {
-		// Admin/System can use provided filters or see all
+	if user.HasScope(auth.ScopeSchemaSubmissionReadAll) {
+		// Callers reading across organization units can use provided filters or see all
 		filteredMemberId = &memberId
-	} else if user.HasPermission(auth.PermissionReadSchemaSubmission) {
+	} else if user.HasScope(auth.ScopeSchemaSubmissionRead) {
 		// Regular users can only see their own submissions
 		// Get member ID for the authenticated user (cached)
 		userMemberId, err := h.getUserMemberID(r, user)
@@ -94,20 +94,14 @@ func (h *Handler) GetSchemaSubmission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionReadSchemaSubmission) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	submission, err := h.service.GetSchemaSubmission(submissionId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	// For non-admin users, check ownership
-	if !user.IsAdmin() {
+	// Unless the caller reads across organization units, check ownership
+	if !user.HasScope(auth.ScopeSchemaSubmissionReadAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -134,20 +128,14 @@ func (h *Handler) CreateSchemaSubmission(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionCreateSchemaSubmission) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	var req CreateSchemaSubmissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// For non-admin users, ensure they can only create submissions for themselves
-	if !user.IsAdmin() {
+	// Unless the caller writes across organization units, ensure they can only create submissions for themselves
+	if !user.HasScope(auth.ScopeSchemaSubmissionWriteAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -194,12 +182,6 @@ func (h *Handler) UpdateSchemaSubmission(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionUpdateSchemaSubmission) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	// Get existing submission to check ownership
 	existingSubmission, err := h.service.GetSchemaSubmission(submissionId)
 	if err != nil {
@@ -207,8 +189,8 @@ func (h *Handler) UpdateSchemaSubmission(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// For non-admin users, check ownership
-	if !user.IsAdmin() {
+	// Unless the caller writes across organization units, check ownership
+	if !user.HasScope(auth.ScopeSchemaSubmissionWriteAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -257,15 +239,9 @@ func (h *Handler) GetAllSchemas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionReadSchema) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
-	// For non-admin users, filter results to only their own schemas
+	// Unless the caller reads across organization units, filter results to only their own schemas
 	var filteredMemberId *string
-	if !user.IsAdmin() {
+	if !user.HasScope(auth.ScopeSchemaReadAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberId, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -274,7 +250,7 @@ func (h *Handler) GetAllSchemas(w http.ResponseWriter, r *http.Request) {
 		}
 		filteredMemberId = &userMemberId
 	} else {
-		// Admin can specify memberId or see all
+		// Callers reading across organization units can specify memberId or see all
 		filteredMemberId = &memberId
 	}
 
@@ -302,20 +278,14 @@ func (h *Handler) GetSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionReadSchema) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	schema, err := h.service.GetSchema(schemaId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	// For non-admin users, check ownership
-	if !user.IsAdmin() {
+	// Unless the caller reads across organization units, check ownership
+	if !user.HasScope(auth.ScopeSchemaReadAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -342,20 +312,14 @@ func (h *Handler) CreateSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionCreateSchema) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	var req CreateSchemaRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// For non-admin users, ensure they can only create schemas for themselves
-	if !user.IsAdmin() {
+	// Unless the caller writes across organization units, ensure they can only create schemas for themselves
+	if !user.HasScope(auth.ScopeSchemaWriteAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -397,12 +361,6 @@ func (h *Handler) UpdateSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionUpdateSchema) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	// Get existing schema to check ownership
 	existingSchema, err := h.service.GetSchema(schemaId)
 	if err != nil {
@@ -410,8 +368,8 @@ func (h *Handler) UpdateSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For non-admin users, check ownership
-	if !user.IsAdmin() {
+	// Unless the caller writes across organization units, check ownership
+	if !user.HasScope(auth.ScopeSchemaWriteAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -449,20 +407,14 @@ func (h *Handler) UpdateSchema(w http.ResponseWriter, r *http.Request) {
 
 // Schema policy metadata handlers
 
-// authorizeSchemaAccess checks that the authenticated user has the permission and,
-// for non-admin users, owns the schema. It writes the error response and returns
-// false when access is denied.
-func (h *Handler) authorizeSchemaAccess(w http.ResponseWriter, r *http.Request, schemaId string, permission auth.Permission) bool {
+// authorizeSchemaAccess checks that the authenticated user owns the schema,
+// unless they hold allScope, which covers every organization unit. It writes
+// the error response and returns false when access is denied.
+func (h *Handler) authorizeSchemaAccess(w http.ResponseWriter, r *http.Request, schemaId string, allScope string) bool {
 	// Get authenticated user
 	user, err := auth.GetUserFromRequest(r)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "Authentication required")
-		return false
-	}
-
-	// Check permission
-	if !user.HasPermission(permission) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
 		return false
 	}
 
@@ -472,8 +424,8 @@ func (h *Handler) authorizeSchemaAccess(w http.ResponseWriter, r *http.Request, 
 		return false
 	}
 
-	// For non-admin users, check ownership
-	if !user.IsAdmin() {
+	// Unless the caller holds allScope, check ownership
+	if !user.HasScope(allScope) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -494,7 +446,7 @@ func (h *Handler) authorizeSchemaAccess(w http.ResponseWriter, r *http.Request, 
 // ListSchemaPolicyMetadata handles GET /api/v1/schemas/{schemaId}/policy-metadata
 func (h *Handler) ListSchemaPolicyMetadata(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
-	if !h.authorizeSchemaAccess(w, r, schemaId, auth.PermissionReadSchema) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, auth.ScopeSchemaReadAll) {
 		return
 	}
 
@@ -515,7 +467,7 @@ func (h *Handler) ListSchemaPolicyMetadata(w http.ResponseWriter, r *http.Reques
 func (h *Handler) PatchSchemaPolicyMetadata(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
 	id := r.PathValue("id")
-	if !h.authorizeSchemaAccess(w, r, schemaId, auth.PermissionUpdateSchema) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, auth.ScopeSchemaWriteAll) {
 		return
 	}
 
@@ -551,7 +503,7 @@ func (h *Handler) PatchSchemaPolicyMetadata(w http.ResponseWriter, r *http.Reque
 func (h *Handler) DeleteSchemaPolicyMetadata(w http.ResponseWriter, r *http.Request) {
 	schemaId := r.PathValue("schemaId")
 	id := r.PathValue("id")
-	if !h.authorizeSchemaAccess(w, r, schemaId, auth.PermissionUpdateSchema) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, auth.ScopeSchemaWriteAll) {
 		return
 	}
 
@@ -574,7 +526,7 @@ func (h *Handler) RevokeSchemaPolicyAllowListEntry(w http.ResponseWriter, r *htt
 	schemaId := r.PathValue("schemaId")
 	id := r.PathValue("id")
 	applicationId := r.PathValue("applicationId")
-	if !h.authorizeSchemaAccess(w, r, schemaId, auth.PermissionUpdateSchema) {
+	if !h.authorizeSchemaAccess(w, r, schemaId, auth.ScopeSchemaWriteAll) {
 		return
 	}
 
