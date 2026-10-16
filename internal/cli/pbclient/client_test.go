@@ -138,6 +138,118 @@ func TestCreateMember_ErrorResponse(t *testing.T) {
 	assert.ErrorContains(t, err, "status 403")
 }
 
+func TestGetMember_Success(t *testing.T) {
+	var capturedAuth, capturedPath, capturedMethod string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedAuth = r.Header.Get("Authorization")
+		capturedPath = r.URL.Path
+		capturedMethod = r.Method
+
+		resp := member.MemberResponse{
+			MemberID: "mem_123",
+			Name:     "Test Member",
+			OuID:     "thunder-ou-1",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token")
+	resp, err := client.GetMember(context.Background(), "mem_123")
+
+	assert.NoError(t, err)
+	if assert.NotNil(t, resp) {
+		assert.Equal(t, "mem_123", resp.MemberID)
+		assert.Equal(t, "thunder-ou-1", resp.OuID)
+	}
+
+	assert.Equal(t, "Bearer test-token", capturedAuth)
+	assert.Equal(t, "/api/v1/members/mem_123", capturedPath)
+	assert.Equal(t, http.MethodGet, capturedMethod)
+}
+
+func TestGetMember_Forbidden(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "Access denied to this resource"})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	resp, err := client.GetMember(context.Background(), "mem_other")
+
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+	assert.ErrorContains(t, err, "status 403")
+}
+
+func TestListMembers_Success(t *testing.T) {
+	var capturedPath, capturedMethod string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.String()
+		capturedMethod = r.Method
+		resp := map[string]any{
+			"items": []member.MemberResponse{
+				{MemberID: "mem_1", Name: "Member One", OuID: "ou-1"},
+				{MemberID: "mem_2", Name: "Member Two", OuID: "ou-2"},
+			},
+			"count": 2,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	members, err := client.ListMembers(context.Background(), nil)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "/api/v1/members", capturedPath)
+	assert.Equal(t, http.MethodGet, capturedMethod)
+	assert.Equal(t, 2, members.Count)
+	if assert.Len(t, members.Items, 2) {
+		assert.Equal(t, "mem_1", members.Items[0].MemberID)
+		assert.Equal(t, "ou-2", members.Items[1].OuID)
+	}
+}
+
+func TestListMembers_WithOUFilter(t *testing.T) {
+	var capturedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.String()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": []member.MemberResponse{}, "count": 0})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	ouID := "ou-42"
+	members, err := client.ListMembers(context.Background(), &ouID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "/api/v1/members?ouId=ou-42", capturedPath)
+	assert.Empty(t, members.Items)
+}
+
+func TestListMembers_ErrorResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "User has no organization unit"})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	members, err := client.ListMembers(context.Background(), nil)
+
+	assert.Error(t, err)
+	assert.Nil(t, members)
+	assert.ErrorContains(t, err, "status 403")
+	assert.ErrorContains(t, err, "User has no organization unit")
+}
+
 func TestCreateApplication_Success(t *testing.T) {
 	var capturedMethod, capturedPath string
 	var capturedBody application.CreateApplicationRequest
