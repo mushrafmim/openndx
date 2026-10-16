@@ -189,6 +189,14 @@ var goldenCases = []goldenCase{
 		},
 	},
 	{
+		// A consent the owner revoked must not be served, even though it was approved before.
+		name:        "consent_revoked",
+		request:     graphql.Request{Query: `query { personInfo(nic: "199012345678") { fullName address } }`},
+		pdpResponse: consentRequired(),
+		// The consent engine sends a portal URL only for pending consents.
+		ceResponse: &consent.ConsentResponseInternalView{ConsentID: "consent-3", Status: consent.StatusRevoked},
+	},
+	{
 		name:    "missing_data_owner_id",
 		request: graphql.Request{Query: `query { personInfo { fullName } }`},
 	},
