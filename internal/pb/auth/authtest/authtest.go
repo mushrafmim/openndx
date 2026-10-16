@@ -3,92 +3,88 @@
 package authtest
 
 import (
-	"fmt"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 
+	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/openndx/openndx-core/internal/pb/auth"
 )
 
-// TestUser represents different test user personas for testing authorization scenarios.
-// These users represent successfully authenticated users with different role assignments.
-// For testing authentication failures (no user in context), use NewUnauthenticatedRequest instead.
+// TestUser is an authenticated caller with the scopes its token was granted.
+// For testing authentication failures (no caller in context), use
+// NewUnauthenticatedRequest instead.
 type TestUser struct {
 	IdpUserID string
 	OuID      string
 	Email     string
-	Roles     []auth.Role
-	User      *auth.AuthenticatedUser
+	Scopes    []string
 }
 
-// Predefined test users with different roles for testing authorization scenarios
+// MemberScopes are the scopes the OpenNDX_Member role grants: read and write
+// within the member's own organization unit.
+var MemberScopes = []string{
+	auth.ScopeMemberRead, auth.ScopeMemberWrite,
+	auth.ScopeSchemaRead, auth.ScopeSchemaWrite,
+	auth.ScopeSchemaSubmissionRead, auth.ScopeSchemaSubmissionWrite,
+	auth.ScopeApplicationRead, auth.ScopeApplicationWrite,
+	auth.ScopeApplicationSubmissionRead, auth.ScopeApplicationSubmissionWrite,
+}
+
+// ReadAllScopes are read access across every organization unit and nothing
+// else. Each -all scope comes with its base scope, because -all alone never
+// opens a route.
+var ReadAllScopes = []string{
+	auth.ScopeMemberRead, auth.ScopeMemberReadAll,
+	auth.ScopeSchemaRead, auth.ScopeSchemaReadAll,
+	auth.ScopeSchemaSubmissionRead, auth.ScopeSchemaSubmissionReadAll,
+	auth.ScopeApplicationRead, auth.ScopeApplicationReadAll,
+	auth.ScopeApplicationSubmissionRead, auth.ScopeApplicationSubmissionReadAll,
+}
+
+// AdminScopes are the scopes the OpenNDX_Admin role grants: every PB scope.
+var AdminScopes = auth.AllScopes
+
+// Predefined test users for testing authorization scenarios
 var (
-	// AdminUser has full admin privileges
+	// AdminUser holds every PB scope
 	AdminUser = TestUser{
 		IdpUserID: "admin-test-user-123",
 		OuID:      "admin-test-ou-123",
 		Email:     "admin@test.com",
-		Roles:     []auth.Role{auth.RoleAdmin},
+		Scopes:    AdminScopes,
 	}
 
-	// MemberUser has standard member privileges
+	// MemberUser holds the own-organization-unit scopes
 	MemberUser = TestUser{
 		IdpUserID: "member-test-user-456",
 		OuID:      "member-test-ou-456",
 		Email:     "member@test.com",
-		Roles:     []auth.Role{auth.RoleMember},
+		Scopes:    MemberScopes,
 	}
 
-	// SystemUser has system-level read access
-	SystemUser = TestUser{
-		IdpUserID: "system-test-user-789",
-		OuID:      "system-test-ou-789",
-		Email:     "system@test.com",
-		Roles:     []auth.Role{auth.RoleSystem},
+	// ReadOnlyUser can read across organization units but write nothing
+	ReadOnlyUser = TestUser{
+		IdpUserID: "readonly-test-user-789",
+		OuID:      "readonly-test-ou-789",
+		Email:     "readonly@test.com",
+		Scopes:    ReadAllScopes,
 	}
 )
 
-// init initializes the test users with their AuthenticatedUser instances
-func init() {
-	AdminUser.User = createTestUser(AdminUser.IdpUserID, AdminUser.Email, AdminUser.OuID, AdminUser.Roles)
-	MemberUser.User = createTestUser(MemberUser.IdpUserID, MemberUser.Email, MemberUser.OuID, MemberUser.Roles)
-	SystemUser.User = createTestUser(SystemUser.IdpUserID, SystemUser.Email, SystemUser.OuID, SystemUser.Roles)
-}
-
-// createTestUser creates an AuthenticatedUser from test data
-func createTestUser(idpUserID, email, ouID string, roles []auth.Role) *auth.AuthenticatedUser {
-	roleStrings := make([]string, len(roles))
-	for i, role := range roles {
-		roleStrings[i] = string(role)
-	}
-
-	user, err := auth.NewAuthenticatedUser(idpUserID, ouID, email, roleStrings)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create test user: %v", err))
-	}
-	return user
-}
-
-// WithAuth creates a new HTTP request with the specified user authentication context
+// WithAuth returns req carrying testUser as the principal internal/authn
+// would have validated.
 func WithAuth(req *http.Request, testUser TestUser) *http.Request {
-	ctx := auth.SetAuthenticatedUser(req.Context(), testUser.User)
+	ctx := context.WithValue(req.Context(), authn.AuthContextKey, &authn.AuthContext{
+		Principal: authn.Principal{
+			Subject: testUser.IdpUserID,
+			OUID:    testUser.OuID,
+			Email:   testUser.Email,
+			Scopes:  testUser.Scopes,
+		},
+	})
 	return req.WithContext(ctx)
-}
-
-// WithAdminAuth is a convenience function to add admin authentication to a request
-func WithAdminAuth(req *http.Request) *http.Request {
-	return WithAuth(req, AdminUser)
-}
-
-// WithMemberAuth is a convenience function to add member authentication to a request
-func WithMemberAuth(req *http.Request) *http.Request {
-	return WithAuth(req, MemberUser)
-}
-
-// WithSystemAuth is a convenience function to add system authentication to a request
-func WithSystemAuth(req *http.Request) *http.Request {
-	return WithAuth(req, SystemUser)
 }
 
 // NewAuthenticatedRequest creates a new HTTP request with authentication context
@@ -97,19 +93,19 @@ func NewAuthenticatedRequest(method, url string, body io.Reader, testUser TestUs
 	return WithAuth(req, testUser)
 }
 
-// NewAdminRequest creates a new HTTP request with admin authentication
+// NewAdminRequest creates a new HTTP request authenticated as AdminUser
 func NewAdminRequest(method, url string, body io.Reader) *http.Request {
 	return NewAuthenticatedRequest(method, url, body, AdminUser)
 }
 
-// NewMemberRequest creates a new HTTP request with member authentication
+// NewMemberRequest creates a new HTTP request authenticated as MemberUser
 func NewMemberRequest(method, url string, body io.Reader) *http.Request {
 	return NewAuthenticatedRequest(method, url, body, MemberUser)
 }
 
-// NewSystemRequest creates a new HTTP request with system authentication
-func NewSystemRequest(method, url string, body io.Reader) *http.Request {
-	return NewAuthenticatedRequest(method, url, body, SystemUser)
+// NewReadOnlyRequest creates a new HTTP request authenticated as ReadOnlyUser
+func NewReadOnlyRequest(method, url string, body io.Reader) *http.Request {
+	return NewAuthenticatedRequest(method, url, body, ReadOnlyUser)
 }
 
 // NewUnauthenticatedRequest creates a new HTTP request without authentication context.
@@ -121,15 +117,13 @@ func NewUnauthenticatedRequest(method, url string, body io.Reader) *http.Request
 	return req
 }
 
-// CreateCustomTestUser creates a test user in the given organization unit with
-// custom roles and permissions
-func CreateCustomTestUser(idpUserID, email, ouID string, roles []auth.Role) TestUser {
-	user := createTestUser(idpUserID, email, ouID, roles)
+// CreateCustomTestUser creates a test user in the given organization unit
+// with the given scopes
+func CreateCustomTestUser(idpUserID, email, ouID string, scopes []string) TestUser {
 	return TestUser{
 		IdpUserID: idpUserID,
 		OuID:      ouID,
 		Email:     email,
-		Roles:     roles,
-		User:      user,
+		Scopes:    scopes,
 	}
 }

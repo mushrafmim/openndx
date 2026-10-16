@@ -308,9 +308,6 @@ services:
       - IDP_SCOPE=system
       - IDP_TOKEN_RESOURCE=https://localhost:8090/mcp
       - IDP_DATA_CONSUMER_ROLE_ID=01900000-0000-7000-8000-000000000092
-      # Authorization
-      - AUTHORIZATION_MODE=${AUTHORIZATION_MODE:-fail_open_admin_system}
-      - AUTHORIZATION_STRICT_MODE=${AUTHORIZATION_STRICT_MODE:-false}
       # Audit (optional, degrades gracefully if unreachable)
       - AUDIT_SERVICE_URL=${AUDIT_SERVICE_URL:-http://audit-service:3001}
       - ARGUS_API_KEY=${ARGUS_API_KEY:-1234}

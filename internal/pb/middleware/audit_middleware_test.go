@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/LSFLK/argus/pkg/audit"
-	"github.com/openndx/openndx-core/internal/pb/auth"
+	"github.com/openndx/openndx-core/internal/pb/auth/authtest"
 )
 
 // mockAuditClient implements audit.Auditor interface for testing
@@ -218,17 +218,7 @@ func TestLogAudit_SendsRequest(t *testing.T) {
 	})
 
 	// Create request with authenticated user in context
-	req := httptest.NewRequest(http.MethodPost, "/api/test", nil)
-
-	// Create an authenticated user to put in context
-	user, err := auth.NewAuthenticatedUser("test-user-id", "", "test@example.com", []string{"OpenNDX_Member"})
-	if err != nil {
-		t.Fatalf("Failed to create authenticated user: %v", err)
-	}
-
-	// Set user in request context using the proper utility function
-	ctx := auth.SetAuthenticatedUser(req.Context(), user)
-	req = req.WithContext(ctx)
+	req := authtest.NewMemberRequest(http.MethodPost, "/api/test", nil)
 
 	resourceID := "test-resource-id"
 	LogAudit(sharedClient, req, "TEST_RESOURCE", &resourceID, string(AuditStatusSuccess))
@@ -264,5 +254,29 @@ func TestLogAudit_SendsRequest(t *testing.T) {
 	// We can unmarshal and check fields if needed, but checking it's not empty is a good start
 	if len(receivedBody) == 0 {
 		t.Error("Expected non-empty body")
+	}
+}
+
+func TestExtractActorInfoFromRequest_ClassifiesByScope(t *testing.T) {
+	service := authtest.CreateCustomTestUser("service-client", "", "", authtest.ReadAllScopes)
+
+	tests := []struct {
+		name string
+		req  *http.Request
+		want ActorType
+	}{
+		{"cross-OU member writer is an admin", authtest.NewAdminRequest(http.MethodPost, "/api/v1/members", nil), ActorTypeAdmin},
+		{"caller in an organization unit is a member", authtest.NewMemberRequest(http.MethodPost, "/api/v1/schemas", nil), ActorTypeMember},
+		{"caller without an organization unit is a service", authtest.NewAuthenticatedRequest(http.MethodGet, "/api/v1/schemas", nil, service), ActorTypeSystem},
+		{"unauthenticated caller is a service", authtest.NewUnauthenticatedRequest(http.MethodPost, "/api/v1/schemas", nil), ActorTypeSystem},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actorType, _, actorRole := extractActorInfoFromRequest(tt.req)
+			if actorType != string(tt.want) || *actorRole != string(tt.want) {
+				t.Errorf("actor = %s/%s, want %s", actorType, *actorRole, tt.want)
+			}
+		})
 	}
 }

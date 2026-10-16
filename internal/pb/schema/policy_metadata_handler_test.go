@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openndx/openndx-core/internal/pb/auth"
 	"github.com/openndx/openndx-core/internal/pb/auth/authtest"
 	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/policy"
@@ -124,10 +123,10 @@ func newPolicyMetadataTestEnv(t *testing.T) *policyMetadataTestEnv {
 }
 
 // makeMemberOwner reassigns the schema to a new member and returns that member's
-// test user. A fresh user is created per test because AuthenticatedUser caches
-// its member ID, which would otherwise leak between test databases.
+// test user. A fresh user is created per test so its organization unit is
+// unique to this test database.
 func (e *policyMetadataTestEnv) makeMemberOwner(t *testing.T) authtest.TestUser {
-	owner := authtest.CreateCustomTestUser(fmt.Sprintf("owner-%d", time.Now().UnixNano()), "owner@test.com", fmt.Sprintf("owner-ou-%d", time.Now().UnixNano()), []auth.Role{auth.RoleMember})
+	owner := authtest.CreateCustomTestUser(fmt.Sprintf("owner-%d", time.Now().UnixNano()), "owner@test.com", fmt.Sprintf("owner-ou-%d", time.Now().UnixNano()), authtest.MemberScopes)
 	m := member.Member{
 		MemberID:    "mem_owner_" + fmt.Sprintf("%d", time.Now().UnixNano()),
 		Name:        "Owner Member",
@@ -294,10 +293,10 @@ func TestSchemaPolicyMetadataEndpoints_Patch(t *testing.T) {
 		assert.Equal(t, http.StatusBadGateway, w.Code)
 	})
 
-	t.Run("System user cannot patch", func(t *testing.T) {
+	t.Run("Read-only user cannot patch", func(t *testing.T) {
 		env := newPolicyMetadataTestEnv(t)
 
-		w := env.serve(authtest.NewSystemRequest(http.MethodPatch, env.url("/pm-1"), strings.NewReader(`{"displayName":"x"}`)))
+		w := env.serve(authtest.NewReadOnlyRequest(http.MethodPatch, env.url("/pm-1"), strings.NewReader(`{"displayName":"x"}`)))
 
 		assert.Equal(t, http.StatusForbidden, w.Code)
 		assert.Empty(t, env.pdp.calls)

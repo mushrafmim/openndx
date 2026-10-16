@@ -47,6 +47,8 @@ Every flag below can still be passed explicitly, which overrides whatever the ac
 ./ondx login --issuer http://localhost:8090 --client-id NDX_CLI --callback-port 8765 --scopes "openid roles email"
 ```
 
+Portal Backend checks an OAuth2 scope on every route (see [Authorization](../pb/README.md#authorization)), so an explicit `--scopes` must also list the PB scopes the commands you run need, e.g. `"openid roles email member:read member:write member:read-all member:write-all"` to manage every organization unit's members. The `local` profile requests every PB scope; ThunderID grants only the ones your roles hold.
+
 `--issuer` fetches `authorization_endpoint`/`token_endpoint` from the identity provider's `{issuer}/.well-known/openid-configuration` (OIDC Discovery), so most standards-compliant IDPs only need a base URL. If an IDP doesn't serve that document at the standard root path, fall back to `--auth-url`/`--token-url` (which take precedence over discovery when set):
 
 ```bash

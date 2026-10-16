@@ -48,16 +48,10 @@ func (h *Handler) GetAllApplicationSubmissions(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionReadApplicationSubmission) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	var finalMemberId *string = &memberId
 
-	// For non-admin users, force filtering to their own submissions only
-	if !user.IsAdmin() {
+	// Unless the caller reads across organization units, force filtering to their own submissions only
+	if !user.HasScope(auth.ScopeApplicationSubmissionReadAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -93,20 +87,14 @@ func (h *Handler) GetApplicationSubmission(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionReadApplicationSubmission) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	submission, err := h.service.GetApplicationSubmission(r.Context(), submissionId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	// For non-admin users, check ownership
-	if !user.IsAdmin() {
+	// Unless the caller reads across organization units, check ownership
+	if !user.HasScope(auth.ScopeApplicationSubmissionReadAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -133,20 +121,14 @@ func (h *Handler) CreateApplicationSubmission(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionCreateApplicationSubmission) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	var req CreateApplicationSubmissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// For non-admin users, ensure they can only create submissions for themselves
-	if !user.IsAdmin() {
+	// Unless the caller writes across organization units, ensure they can only create submissions for themselves
+	if !user.HasScope(auth.ScopeApplicationSubmissionWriteAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -193,12 +175,6 @@ func (h *Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionUpdateApplicationSubmission) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	// Get existing submission to check ownership
 	existingSubmission, err := h.service.GetApplicationSubmission(r.Context(), submissionId)
 	if err != nil {
@@ -206,8 +182,8 @@ func (h *Handler) UpdateApplicationSubmission(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// For non-admin users, check ownership before updating
-	if !user.IsAdmin() {
+	// Unless the caller writes across organization units, check ownership before updating
+	if !user.HasScope(auth.ScopeApplicationSubmissionWriteAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -258,10 +234,10 @@ func (h *Handler) GetAllApplications(w http.ResponseWriter, r *http.Request) {
 
 	// Check permission
 	var filteredMemberId *string
-	if user.HasPermission(auth.PermissionReadAllApplications) {
-		// Admin/System can use provided filters or see all
+	if user.HasScope(auth.ScopeApplicationReadAll) {
+		// Callers reading across organization units can use provided filters or see all
 		filteredMemberId = &memberId
-	} else if user.HasPermission(auth.PermissionReadApplication) {
+	} else if user.HasScope(auth.ScopeApplicationRead) {
 		// Regular users can only see their own applications
 		// Get member ID for the authenticated user (cached)
 		userMemberId, err := h.getUserMemberID(r, user)
@@ -299,20 +275,14 @@ func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionReadApplication) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	application, err := h.service.GetApplication(r.Context(), applicationId)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	// For non-admin users, check ownership
-	if !user.IsAdmin() {
+	// Unless the caller reads across organization units, check ownership
+	if !user.HasScope(auth.ScopeApplicationReadAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -355,20 +325,14 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionCreateApplication) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	var req CreateApplicationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// For non-admin users, ensure they can only create applications for themselves
-	if !user.IsAdmin() {
+	// Unless the caller writes across organization units, ensure they can only create applications for themselves
+	if !user.HasScope(auth.ScopeApplicationWriteAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -406,12 +370,6 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check permission
-	if !user.HasPermission(auth.PermissionUpdateApplication) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	// Get existing application to check ownership
 	existingApplication, err := h.service.GetApplication(r.Context(), applicationId)
 	if err != nil {
@@ -419,8 +377,8 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For non-admin users, check ownership
-	if !user.IsAdmin() {
+	// Unless the caller writes across organization units, check ownership
+	if !user.HasScope(auth.ScopeApplicationWriteAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
@@ -467,12 +425,6 @@ func (h *Handler) UpdateApplicationPolicy(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Check permission - policy updates share the application:update permission
-	if !user.HasPermission(auth.PermissionUpdateApplication) {
-		utils.RespondWithError(w, http.StatusForbidden, "Insufficient permissions")
-		return
-	}
-
 	// Get existing application to check ownership
 	existingApplication, err := h.service.GetApplication(r.Context(), applicationId)
 	if err != nil {
@@ -480,8 +432,8 @@ func (h *Handler) UpdateApplicationPolicy(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// For non-admin users, check ownership
-	if !user.IsAdmin() {
+	// Unless the caller writes across organization units, check ownership
+	if !user.HasScope(auth.ScopeApplicationWriteAll) {
 		// Get member ID for the authenticated user (cached)
 		userMemberID, err := h.getUserMemberID(r, user)
 		if err != nil {
