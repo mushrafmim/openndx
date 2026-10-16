@@ -32,13 +32,15 @@ var MemberScopes = []string{
 	auth.ScopeApplicationSubmissionRead, auth.ScopeApplicationSubmissionWrite,
 }
 
-// ReadAllScopes are read access across every organization unit and nothing else.
+// ReadAllScopes are read access across every organization unit and nothing
+// else. Each -all scope comes with its base scope, because -all alone never
+// opens a route.
 var ReadAllScopes = []string{
-	auth.ScopeMemberReadAll,
-	auth.ScopeSchemaReadAll,
-	auth.ScopeSchemaSubmissionReadAll,
-	auth.ScopeApplicationReadAll,
-	auth.ScopeApplicationSubmissionReadAll,
+	auth.ScopeMemberRead, auth.ScopeMemberReadAll,
+	auth.ScopeSchemaRead, auth.ScopeSchemaReadAll,
+	auth.ScopeSchemaSubmissionRead, auth.ScopeSchemaSubmissionReadAll,
+	auth.ScopeApplicationRead, auth.ScopeApplicationReadAll,
+	auth.ScopeApplicationSubmissionRead, auth.ScopeApplicationSubmissionReadAll,
 }
 
 // AdminScopes are the scopes the OpenNDX_Admin role grants: every PB scope.
