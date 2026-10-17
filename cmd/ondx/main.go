@@ -851,7 +851,12 @@ func runSchemasGet(ctx context.Context, args []string) error {
 	if *jsonOutput {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(schemaDetails{SchemaResponse: s, Fields: fields.Items})
+		// Keep "fields" an array even when Portal Backend sends null items.
+		fieldItems := fields.Items
+		if fieldItems == nil {
+			fieldItems = []policy.PolicyMetadataResponse{}
+		}
+		return enc.Encode(schemaDetails{SchemaResponse: s, Fields: fieldItems})
 	}
 
 	fmt.Printf("Schema:      %s (%s)\n", s.SchemaName, s.SchemaID)
