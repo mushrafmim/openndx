@@ -512,7 +512,6 @@ func PushArgumentValue(arg *ast.Argument, val interface{}) {
 			}
 		}
 	case float64:
-		// inside your case float64:
 		arg.Value = &ast.FloatValue{
 			Kind:  kinds.FloatValue,
 			Value: strconv.FormatFloat(v, 'f', -1, 64),
