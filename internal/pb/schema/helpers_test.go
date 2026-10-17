@@ -33,7 +33,7 @@ func setupSQLiteTestDB(t *testing.T) *gorm.DB {
 // unreachable address, so PDP-dependent operations fail.
 func newTestHandler(db *gorm.DB) *Handler {
 	pdpClient := policy.NewClient("http://localhost:8082")
-	return NewHandler(NewService(db, pdpClient), member.NewService(db))
+	return NewHandler(NewService(db, pdpClient))
 }
 
 // testHandlerEnv bundles a schema Handler with its test database

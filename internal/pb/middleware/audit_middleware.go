@@ -5,7 +5,8 @@ import (
 	"net/http"
 
 	"github.com/LSFLK/argus/pkg/audit"
-	"github.com/openndx/openndx-core/internal/pb/auth"
+	"github.com/openndx/openndx-core/internal/authn"
+	"github.com/openndx/openndx-core/internal/pb/caller"
 )
 
 // LogAudit logs an audit event for portal-backend operations by extracting request info and creating an audit log
@@ -56,6 +57,8 @@ func LogAudit(client audit.Auditor, r *http.Request, resource string, resourceID
 		TargetID:   resourceID,
 		Metadata: map[string]interface{}{
 			"resource": resource,
+			// The OAuth2 client the actor's token was issued to; "" when unauthenticated
+			"clientId": authn.GetAuthContext(r.Context()).ClientID(),
 		},
 	}
 
@@ -69,9 +72,9 @@ func LogAudit(client audit.Auditor, r *http.Request, resource string, resourceID
 // Returns actorType, actorID, and actorRole for audit logging
 // Security: Uses SYSTEM as default for unauthenticated/unknown roles to prevent privilege escalation
 func extractActorInfoFromRequest(r *http.Request) (actorType string, actorID *string, actorRole *string) {
-	// Try to get authenticated user first
-	user, err := auth.GetUserFromRequest(r)
-	if err != nil || user == nil {
+	// Try to get the principal internal/authn validated first
+	authCtx := authn.GetAuthContext(r.Context())
+	if authCtx == nil {
 		// Unauthenticated request: use SYSTEM actor type with request identifier
 		// This prevents misclassification and ensures unauthenticated actions are clearly marked
 		systemActorID := "unauthenticated-request"
@@ -83,18 +86,18 @@ func extractActorInfoFromRequest(r *http.Request) (actorType string, actorID *st
 		return systemActorType, &systemActorID, &systemActorType
 	}
 
-	// Authenticated user found - extract actor information
-	userID := user.IdpUserID
-	actorID = &userID
+	// Authenticated caller found - the token's subject is the actor
+	subject := authCtx.Subject()
+	actorID = &subject
 
 	// Classify the actor by what its token may do rather than by role name:
 	// onboarding members is an administrator's job, a caller in an
 	// organization unit acts for that member, and anything else is a service.
 	var actorTypeConst ActorType
 	switch {
-	case user.HasScope(auth.ScopeMemberWriteAll):
+	case caller.HasScope(r.Context(), caller.ScopeMemberWriteAll):
 		actorTypeConst = ActorTypeAdmin
-	case user.OuID != "":
+	case authCtx.OUID() != "":
 		actorTypeConst = ActorTypeMember
 	default:
 		actorTypeConst = ActorTypeSystem

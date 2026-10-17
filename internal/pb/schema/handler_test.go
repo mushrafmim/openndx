@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openndx/openndx-core/internal/pb/auth/authtest"
+	"github.com/openndx/openndx-core/internal/pb/caller/callertest"
 	"github.com/openndx/openndx-core/internal/pb/kernel"
 	"github.com/stretchr/testify/assert"
 )
@@ -32,7 +32,7 @@ func TestSchemaEndpoints(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/schemas", bytes.NewBuffer(reqBody))
+		httpReq := callertest.NewAdminRequest(http.MethodPost, "/api/v1/schemas", bytes.NewBuffer(reqBody))
 		httpReq.Header.Set("Content-Type", "application/json")
 
 		w := httptest.NewRecorder()
@@ -49,7 +49,7 @@ func TestSchemaEndpoints(t *testing.T) {
 	})
 
 	t.Run("POST /api/v1/schemas - Invalid JSON", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/schemas", bytes.NewBufferString("invalid"))
+		httpReq := callertest.NewAdminRequest(http.MethodPost, "/api/v1/schemas", bytes.NewBufferString("invalid"))
 		httpReq.Header.Set("Content-Type", "application/json")
 
 		w := httptest.NewRecorder()
@@ -59,7 +59,7 @@ func TestSchemaEndpoints(t *testing.T) {
 	})
 
 	t.Run("GET /api/v1/schemas - GetAllSchemas", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/schemas", nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, "/api/v1/schemas", nil)
 		w := httptest.NewRecorder()
 		testHandler.handler.GetAllSchemas(w, httpReq)
 
@@ -73,7 +73,7 @@ func TestSchemaEndpoints(t *testing.T) {
 	})
 
 	t.Run("GET /api/v1/schemas - WithQueryParams", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/schemas?memberId=test-member", nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, "/api/v1/schemas?memberId=test-member", nil)
 		w := httptest.NewRecorder()
 		testHandler.handler.GetAllSchemas(w, httpReq)
 
@@ -92,7 +92,7 @@ func TestSchemaEndpoints(t *testing.T) {
 		err := testHandler.db.Create(&schema).Error
 		assert.NoError(t, err)
 
-		httpReq := authtest.NewAdminRequest(http.MethodGet, fmt.Sprintf("/api/v1/schemas/%s", schema.SchemaID), nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, fmt.Sprintf("/api/v1/schemas/%s", schema.SchemaID), nil)
 		httpReq.SetPathValue("schemaId", schema.SchemaID)
 		w := httptest.NewRecorder()
 		testHandler.handler.GetSchema(w, httpReq)
@@ -105,7 +105,7 @@ func TestSchemaEndpoints(t *testing.T) {
 	})
 
 	t.Run("GET /api/v1/schemas/:schemaId - NotFound", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/schemas/non-existent", nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, "/api/v1/schemas/non-existent", nil)
 		httpReq.SetPathValue("schemaId", "non-existent")
 		w := httptest.NewRecorder()
 		testHandler.handler.GetSchema(w, httpReq)
@@ -133,7 +133,7 @@ func TestSchemaEndpoints(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		httpReq := authtest.NewAdminRequest(http.MethodPut, fmt.Sprintf("/api/v1/schemas/%s", schema.SchemaID), bytes.NewBuffer(reqBody))
+		httpReq := callertest.NewAdminRequest(http.MethodPut, fmt.Sprintf("/api/v1/schemas/%s", schema.SchemaID), bytes.NewBuffer(reqBody))
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.SetPathValue("schemaId", schema.SchemaID)
 
@@ -156,7 +156,7 @@ func TestSchemaSubmissionEndpoints(t *testing.T) {
 	testMemberID := "test-member-id"
 
 	t.Run("GET /api/v1/schema-submissions/:id - GetSchemaSubmission_NotFound", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/schema-submissions/non-existent-id", nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, "/api/v1/schema-submissions/non-existent-id", nil)
 		httpReq.SetPathValue("submissionId", "non-existent-id")
 		w := httptest.NewRecorder()
 		testHandler.handler.GetSchemaSubmission(w, httpReq)
@@ -174,7 +174,7 @@ func TestSchemaSubmissionEndpoints(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/schema-submissions", bytes.NewBuffer(reqBody))
+		httpReq := callertest.NewAdminRequest(http.MethodPost, "/api/v1/schema-submissions", bytes.NewBuffer(reqBody))
 		httpReq.Header.Set("Content-Type", "application/json")
 
 		w := httptest.NewRecorder()
@@ -190,7 +190,7 @@ func TestSchemaSubmissionEndpoints(t *testing.T) {
 	})
 
 	t.Run("GET /api/v1/schema-submissions - GetAllSchemaSubmissions", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/schema-submissions", nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, "/api/v1/schema-submissions", nil)
 		w := httptest.NewRecorder()
 		testHandler.handler.GetAllSchemaSubmissions(w, httpReq)
 
@@ -203,7 +203,7 @@ func TestSchemaSubmissionEndpoints(t *testing.T) {
 	})
 
 	t.Run("GET /api/v1/schema-submissions - WithQueryParams", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/schema-submissions?memberId=test&status=pending", nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, "/api/v1/schema-submissions?memberId=test&status=pending", nil)
 		w := httptest.NewRecorder()
 		testHandler.handler.GetAllSchemaSubmissions(w, httpReq)
 
@@ -226,7 +226,7 @@ func TestSchemaSubmissionEndpoints(t *testing.T) {
 		err := testHandler.db.Create(&submission).Error
 		assert.NoError(t, err)
 
-		httpReq := authtest.NewAdminRequest(http.MethodGet, fmt.Sprintf("/api/v1/schema-submissions/%s", submission.SubmissionID), nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, fmt.Sprintf("/api/v1/schema-submissions/%s", submission.SubmissionID), nil)
 		httpReq.SetPathValue("submissionId", submission.SubmissionID)
 		w := httptest.NewRecorder()
 		testHandler.handler.GetSchemaSubmission(w, httpReq)
@@ -263,7 +263,7 @@ func TestSchemaSubmissionEndpoints(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		httpReq := authtest.NewAdminRequest(http.MethodPut, fmt.Sprintf("/api/v1/schema-submissions/%s", submission.SubmissionID), bytes.NewBuffer(reqBody))
+		httpReq := callertest.NewAdminRequest(http.MethodPut, fmt.Sprintf("/api/v1/schema-submissions/%s", submission.SubmissionID), bytes.NewBuffer(reqBody))
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.SetPathValue("submissionId", submission.SubmissionID)
 
@@ -283,7 +283,7 @@ func TestSchemaEndpoints_EdgeCases(t *testing.T) {
 	testHandler := newTestHandlerEnv(t)
 
 	t.Run("POST /api/v1/schemas - Invalid JSON", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/schemas", bytes.NewBufferString("invalid json"))
+		httpReq := callertest.NewAdminRequest(http.MethodPost, "/api/v1/schemas", bytes.NewBufferString("invalid json"))
 		httpReq.Header.Set("Content-Type", "application/json")
 
 		w := httptest.NewRecorder()
@@ -293,7 +293,7 @@ func TestSchemaEndpoints_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("PUT /api/v1/schemas/:id - Invalid JSON", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodPut, "/api/v1/schemas/test-id", bytes.NewBufferString("invalid json"))
+		httpReq := callertest.NewAdminRequest(http.MethodPut, "/api/v1/schemas/test-id", bytes.NewBufferString("invalid json"))
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.SetPathValue("schemaId", "test-id")
 
@@ -305,7 +305,7 @@ func TestSchemaEndpoints_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("GET /api/v1/schemas/:id - NotFound", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodGet, "/api/v1/schemas/non-existent-id", nil)
+		httpReq := callertest.NewAdminRequest(http.MethodGet, "/api/v1/schemas/non-existent-id", nil)
 		httpReq.SetPathValue("schemaId", "non-existent-id")
 		w := httptest.NewRecorder()
 		testHandler.handler.GetSchema(w, httpReq)
@@ -319,7 +319,7 @@ func TestSchemaEndpoints_EdgeCases(t *testing.T) {
 			SchemaName: &schemaName,
 		}
 		reqBody, _ := json.Marshal(req)
-		httpReq := authtest.NewAdminRequest(http.MethodPut, "/api/v1/schemas/non-existent-id", bytes.NewBuffer(reqBody))
+		httpReq := callertest.NewAdminRequest(http.MethodPut, "/api/v1/schemas/non-existent-id", bytes.NewBuffer(reqBody))
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.SetPathValue("schemaId", "non-existent-id")
 
@@ -336,7 +336,7 @@ func TestSchemaSubmissionEndpoints_EdgeCases(t *testing.T) {
 	testHandler := newTestHandlerEnv(t)
 
 	t.Run("POST /api/v1/schema-submissions - Invalid JSON", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodPost, "/api/v1/schema-submissions", bytes.NewBufferString("invalid json"))
+		httpReq := callertest.NewAdminRequest(http.MethodPost, "/api/v1/schema-submissions", bytes.NewBufferString("invalid json"))
 		httpReq.Header.Set("Content-Type", "application/json")
 
 		w := httptest.NewRecorder()
@@ -346,7 +346,7 @@ func TestSchemaSubmissionEndpoints_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("PUT /api/v1/schema-submissions/:id - Invalid JSON", func(t *testing.T) {
-		httpReq := authtest.NewAdminRequest(http.MethodPut, "/api/v1/schema-submissions/test-id", bytes.NewBufferString("invalid json"))
+		httpReq := callertest.NewAdminRequest(http.MethodPut, "/api/v1/schema-submissions/test-id", bytes.NewBufferString("invalid json"))
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.SetPathValue("submissionId", "test-id")
 
@@ -362,7 +362,7 @@ func TestSchemaSubmissionEndpoints_EdgeCases(t *testing.T) {
 			Status: &status,
 		}
 		reqBody, _ := json.Marshal(req)
-		httpReq := authtest.NewAdminRequest(http.MethodPut, "/api/v1/schema-submissions/non-existent-id", bytes.NewBuffer(reqBody))
+		httpReq := callertest.NewAdminRequest(http.MethodPut, "/api/v1/schema-submissions/non-existent-id", bytes.NewBuffer(reqBody))
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.SetPathValue("submissionId", "non-existent-id")
 

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/LSFLK/argus/pkg/audit"
-	"github.com/openndx/openndx-core/internal/pb/auth/authtest"
+	"github.com/openndx/openndx-core/internal/pb/caller/callertest"
 )
 
 // mockAuditClient implements audit.Auditor interface for testing
@@ -218,7 +218,7 @@ func TestLogAudit_SendsRequest(t *testing.T) {
 	})
 
 	// Create request with authenticated user in context
-	req := authtest.NewMemberRequest(http.MethodPost, "/api/test", nil)
+	req := callertest.NewMemberRequest(http.MethodPost, "/api/test", nil)
 
 	resourceID := "test-resource-id"
 	LogAudit(sharedClient, req, "TEST_RESOURCE", &resourceID, string(AuditStatusSuccess))
@@ -257,18 +257,35 @@ func TestLogAudit_SendsRequest(t *testing.T) {
 	}
 }
 
+func TestLogAudit_RecordsSubjectAndClientID(t *testing.T) {
+	client := newMockAuditClient(true)
+
+	LogAudit(client, callertest.NewMemberRequest(http.MethodPost, "/api/v1/schemas", nil), "SCHEMAS", nil, string(AuditStatusSuccess))
+
+	if len(client.receivedEvents) != 1 {
+		t.Fatalf("got %d audit events, want 1", len(client.receivedEvents))
+	}
+	event := client.receivedEvents[0]
+	if event.ActorID != callertest.MemberUser.Subject {
+		t.Errorf("ActorID = %q, want the token's sub %q", event.ActorID, callertest.MemberUser.Subject)
+	}
+	if got := event.Metadata["clientId"]; got != callertest.MemberUser.ClientID {
+		t.Errorf("Metadata[clientId] = %v, want %q", got, callertest.MemberUser.ClientID)
+	}
+}
+
 func TestExtractActorInfoFromRequest_ClassifiesByScope(t *testing.T) {
-	service := authtest.CreateCustomTestUser("service-client", "", "", authtest.ReadAllScopes)
+	service := callertest.CreateCustomTestUser("service-client", "", "", callertest.ReadAllScopes)
 
 	tests := []struct {
 		name string
 		req  *http.Request
 		want ActorType
 	}{
-		{"cross-OU member writer is an admin", authtest.NewAdminRequest(http.MethodPost, "/api/v1/members", nil), ActorTypeAdmin},
-		{"caller in an organization unit is a member", authtest.NewMemberRequest(http.MethodPost, "/api/v1/schemas", nil), ActorTypeMember},
-		{"caller without an organization unit is a service", authtest.NewAuthenticatedRequest(http.MethodGet, "/api/v1/schemas", nil, service), ActorTypeSystem},
-		{"unauthenticated caller is a service", authtest.NewUnauthenticatedRequest(http.MethodPost, "/api/v1/schemas", nil), ActorTypeSystem},
+		{"cross-OU member writer is an admin", callertest.NewAdminRequest(http.MethodPost, "/api/v1/members", nil), ActorTypeAdmin},
+		{"caller in an organization unit is a member", callertest.NewMemberRequest(http.MethodPost, "/api/v1/schemas", nil), ActorTypeMember},
+		{"caller without an organization unit is a service", callertest.NewAuthenticatedRequest(http.MethodGet, "/api/v1/schemas", nil, service), ActorTypeSystem},
+		{"unauthenticated caller is a service", callertest.NewUnauthenticatedRequest(http.MethodPost, "/api/v1/schemas", nil), ActorTypeSystem},
 	}
 
 	for _, tt := range tests {

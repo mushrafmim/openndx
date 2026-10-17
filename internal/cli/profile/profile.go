@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	pbauth "github.com/openndx/openndx-core/internal/pb/auth"
+	pbcaller "github.com/openndx/openndx-core/internal/pb/caller"
 )
 
 // DefaultName is the profile ondx falls back to when no config file exists
@@ -44,7 +44,7 @@ const LocalPBResource = "http://pb.openndx.local"
 // localScopes asks for the caller's roles, email and organization unit claims
 // and every Portal Backend scope; ThunderID grants only the PB scopes the
 // user's roles hold.
-var localScopes = "openid roles email " + strings.Join(pbauth.AllScopes, " ")
+var localScopes = "openid roles email " + strings.Join(pbcaller.AllScopes, " ")
 
 var defaultLocalProfile = Profile{
 	Issuer:       "http://localhost:8090",
