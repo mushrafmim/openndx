@@ -57,11 +57,10 @@ CONFIG_PATH=cmd/oe/config.example.json go run ./cmd/oe
 curl http://localhost:4000/health
 ```
 
-OE's GraphQL endpoint requires a consumer access token — even with `trustUpstream: true`
-(`cmd/oe/config.docker.json`), OE still requires *a* bearer token with a `client_id`
-claim, it just skips verifying its signature itself (`internal/oe/auth/token.go`,
-`GetConsumerJwtFromTokenWithValidator`). Get one for the seeded M2M data-consumer
-client (`thunderid/bootstrap/application.yaml`, `DATA_CONSUMER`; secret is
+OE's GraphQL endpoint requires a consumer access token issued by ThunderID for OE's
+audience. OE verifies its signature, issuer and audience with `internal/authn`
+(`IDP_*` in `compose.yml`; see `cmd/oe/AUTHENTICATION.md`). Get one for the seeded M2M
+data-consumer client (`thunderid/bootstrap/application.yaml`, `DATA_CONSUMER`; secret is
 `DATA_CONSUMER_CLIENT_SECRET`, default `1234`):
 
 ```bash

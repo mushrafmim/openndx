@@ -69,6 +69,11 @@ const (
 	testEmail     = "test@example.com"
 	testOwnerID   = "test-owner-123"
 	testRequestID = "test-req-123"
+
+	// The issuer and audience the Orchestration Engine is started with
+	// (IDP_ISSUER and IDP_AUDIENCE in the workflow and docker-compose.test.yml).
+	testTokenIssuer   = "http://mock-idp.test"
+	testTokenAudience = "http://api.openndx.local"
 )
 
 // Timeout constants for test operations
@@ -90,6 +95,9 @@ var (
 	orchestrationEngineURL = getEnvOrDefault("ORCHESTRATION_ENGINE_URL", "http://127.0.0.1:4000/public/graphql")
 	pdpURL                 = getEnvOrDefault("PDP_URL", "http://127.0.0.1:8082/api/v1/policy")
 	portalBackendURL       = getEnvOrDefault("PORTAL_BACKEND_URL", "http://127.0.0.1:3000")
+	// mockIdPURL is the mock provider, which also signs consumer tokens and serves
+	// the JWKS the Orchestration Engine verifies them against.
+	mockIdPURL = getEnvOrDefault("MOCK_IDP_URL", "http://127.0.0.1:8083")
 	// Note: consentEngineURL removed - use CONSENT_ENGINE_BASE_URL env var with V1 API paths:
 	// - Internal API: /internal/api/v1/consents
 	// - Portal API: /api/v1/consents/{consentId}
@@ -201,6 +209,7 @@ func TestMain(m *testing.M) {
 		{"Orchestration Engine", "http://127.0.0.1:4000/health"},
 		{"Policy Decision Point", "http://127.0.0.1:8082/health"},
 		{"Consent Engine", "http://127.0.0.1:8081/health"},
+		{"Mock provider and token issuer", mockIdPURL + "/jwks"},
 	}
 
 	// Portal Backend is currently not part of the test infrastructure
@@ -237,36 +246,47 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// createTestJWT creates a JWT token for testing with the specified app ID.
-//
-// SECURITY WARNING: This function creates UNSIGNED JWT tokens (SigningMethodNone)
-// which bypasses cryptographic validation. This is ONLY acceptable for integration
-// tests where the Orchestration Engine is configured to accept unsigned tokens
-// in test environments.
-//
-// NEVER use unsigned tokens in production code. In production, tokens must be
-// properly signed and validated using RS256 or other secure signing methods.
-//
-// The Orchestration Engine's auth package accepts unsigned tokens when running
-// in "local" environment mode for testing purposes only.
-func createTestJWT(appID string) (string, error) {
+// consumerClaims returns the claims of a consumer token for appID that the
+// Orchestration Engine accepts: its IDP_ISSUER and IDP_AUDIENCE, with a client_id.
+func consumerClaims(appID string) jwt.MapClaims {
 	now := time.Now().Unix()
-	claims := jwt.MapClaims{
-		// Standard M2M token claims expected by ConsumerAssertion
-		"application_id": appID,
-		"client_id":      appID,
-		"sub":            appID, // Subscriber - can also be 'azp'
-		"iss":            "https://test-issuer.example.com",
-		"aud":            []string{"test-audience"},
-		"exp":            now + 3600, // Expires in 1 hour
-		"iat":            now,
+	return jwt.MapClaims{
+		"client_id": appID,
+		"sub":       appID,
+		"iss":       testTokenIssuer,
+		"aud":       testTokenAudience,
+		"exp":       now + 3600, // Expires in 1 hour
+		"iat":       now,
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodNone, claims)
-	tokenString, err := token.SignedString(jwt.UnsafeAllowNoneSignatureType)
+}
+
+// createTestJWT returns a signed consumer token for appID. The mock provider signs
+// it with the key the Orchestration Engine verifies tokens against (its /jwks).
+func createTestJWT(appID string) (string, error) {
+	return signTestToken(consumerClaims(appID))
+}
+
+// signTestToken asks the mock provider's token endpoint to sign claims.
+func signTestToken(claims jwt.MapClaims) (string, error) {
+	body, err := json.Marshal(claims)
 	if err != nil {
-		return "", fmt.Errorf("failed to sign JWT token: %w", err)
+		return "", err
 	}
-	return tokenString, nil
+	resp, err := testHTTPClient.Post(mockIdPURL+"/token", "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return "", fmt.Errorf("failed to request a signed token: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("token endpoint returned status %d", resp.StatusCode)
+	}
+	var result struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode token response: %w", err)
+	}
+	return result.AccessToken, nil
 }
 
 // makeGraphQLRequest performs a GraphQL request to the Orchestration Engine with the given query and JWT token.
@@ -928,13 +948,49 @@ func TestGraphQLFlow_MissingToken(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	t.Logf("Response status without token: %d", resp.StatusCode)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "Should return 401 when token is missing")
+}
 
-	if resp.StatusCode == http.StatusUnauthorized {
-		t.Logf("Correctly returned 401 Unauthorized for missing token")
-		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "Should return 401 when token is missing")
-	} else {
-		result := parseGraphQLResponse(t, resp)
-		t.Logf("Response (may be local env): %+v", result)
+// TestGraphQLFlow_RejectedTokens tests that the Orchestration Engine verifies consumer
+// tokens: each token below carries a valid client_id but fails one check.
+func TestGraphQLFlow_RejectedTokens(t *testing.T) {
+	const appID = "rejected-token-app"
+	query := `
+		query TestQuery($nic: String!) {
+			personInfo(nic: $nic) {
+				fullName
+			}
+		}
+	`
+
+	unsigned, err := jwt.NewWithClaims(jwt.SigningMethodNone, consumerClaims(appID)).SignedString(jwt.UnsafeAllowNoneSignatureType)
+	require.NoError(t, err)
+
+	wrongAudience := consumerClaims(appID)
+	wrongAudience["aud"] = "http://pb.openndx.local"
+	wrongIssuer := consumerClaims(appID)
+	wrongIssuer["iss"] = "http://other-idp.test"
+	expired := consumerClaims(appID)
+	expired["exp"] = time.Now().Add(-time.Hour).Unix()
+
+	tokens := map[string]string{"unsigned token": unsigned}
+	for name, claims := range map[string]jwt.MapClaims{
+		"token for another audience": wrongAudience,
+		"token from another issuer":  wrongIssuer,
+		"expired token":              expired,
+	} {
+		token, err := signTestToken(claims)
+		require.NoError(t, err)
+		tokens[name] = token
+	}
+
+	for name, token := range tokens {
+		t.Run(name, func(t *testing.T) {
+			resp, err := makeGraphQLRequest(t, query, map[string]interface{}{"nic": testNIC}, token)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+		})
 	}
 }

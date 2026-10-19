@@ -57,7 +57,7 @@ Activating a version takes effect on the next query. Remember to activate a sche
 
 | Situation | Response |
 |---|---|
-| No or bad token | HTTP `401`, `Unauthorized: invalid or expired token` |
+| No or bad token | HTTP `401`, `{"error":"unauthorized",...}` |
 | Application has no grant for a field | `errors[0].extensions.code` is `PDP_NOT_ALLOWED`, with `unauthorizedFields` |
 | Field has no policy metadata | `PDP_ERROR` |
 | No `nic` argument in the query | `MISSING_IDENTIFIER` |

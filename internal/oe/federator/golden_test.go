@@ -309,7 +309,6 @@ func newGoldenEnv(t *testing.T, tc goldenCase) *goldenEnv {
 
 	schema := goldenSchemaSDL
 	env.config = &configs.Config{
-		TrustUpstream:         true,
 		FoundationalIdArgName: "nic",
 		Schema:                &schema,
 		ArgMapping:            goldenArgMappings,

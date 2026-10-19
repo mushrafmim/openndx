@@ -85,7 +85,11 @@ services:
       PDP_URL: http://policy-decision-point:8082
       CONSENT_ENGINE_URL: http://consent-engine:8081
       CONFIG_PATH: /app/config/config.json
-      TRUST_UPSTREAM_AUTH: "true"
+      # The mock provider signs the tests' consumer tokens and serves the JWKS
+      # the OE verifies them against.
+      IDP_JWKS_URL: http://mock-provider:8083/jwks
+      IDP_ISSUER: http://mock-idp.test
+      IDP_AUDIENCE: http://api.openndx.local
     volumes:
       - ./config.json:/app/config/config.json:ro
       - ./schema.graphql:/app/schema.graphql:ro
@@ -96,6 +100,8 @@ services:
         condition: service_healthy
       consent-engine:
         condition: service_healthy
+      mock-provider:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -110,3 +116,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # Mock data provider, which also signs the tests' consumer tokens (POST /token)
+  # and serves the JWKS the Orchestration Engine verifies them against (GET /jwks)
+  mock-provider:
+    build:
+      context: ./mock-provider
+    ports:
+      - "8083:8083"

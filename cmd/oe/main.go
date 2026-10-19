@@ -11,8 +11,8 @@ import (
 
 	"github.com/LSFLK/argus/pkg/audit"
 	coredb "github.com/OpenNSW/core/database"
+	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/openndx/openndx-core/internal/database"
-	"github.com/openndx/openndx-core/internal/oe/auth"
 	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	oedatabase "github.com/openndx/openndx-core/internal/oe/database"
@@ -25,13 +25,13 @@ import (
 	"github.com/openndx/openndx-core/internal/oe/provider"
 	"github.com/openndx/openndx-core/internal/oe/server"
 	"github.com/openndx/openndx-core/internal/oe/services"
+	"github.com/openndx/openndx-core/internal/utils"
 )
 
 func main() {
 	logger.Init()
 
 	// Create context with signal handling for graceful shutdown
-	// This ensures background goroutines (like JWKS refresh) are properly cancelled
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -78,10 +78,22 @@ func main() {
 		configSDL = *config.Schema
 	}
 
-	// Validate JWT configuration based on trustUpstream setting
-	tokenValidator, err := auth.NewTokenValidatorFromConfig(ctx, config)
+	// Authenticate consumers: accept tokens the IdP issued for OE's audience, whichever
+	// client requested them. IDP_JWKS_URL and IDP_ISSUER default to IDP_BASE_URL's
+	// endpoints when unset.
+	idpBaseURL := os.Getenv("IDP_BASE_URL")
+	authnConfig := authn.Config{
+		JWKSURL:               utils.GetEnvOrDefault("IDP_JWKS_URL", idpBaseURL+"/oauth2/jwks"),
+		Issuer:                utils.GetEnvOrDefault("IDP_ISSUER", utils.GetEnvOrDefault("IDP_TOKEN_URL", idpBaseURL+"/oauth2/token")),
+		Audience:              os.Getenv("IDP_AUDIENCE"),
+		InsecureSkipTLSVerify: utils.GetEnvOrDefault("IDP_JWKS_INSECURE_SKIP_VERIFY", "false") == "true",
+	}
+	if err := authnConfig.Validate(); err != nil {
+		log.Fatalf("Invalid authentication configuration (check IDP_JWKS_URL, IDP_ISSUER and IDP_AUDIENCE): %v", err)
+	}
+	authnManager, err := authn.NewManager(authnConfig)
 	if err != nil {
-		log.Fatalf("Failed to initialize token validator: %v", err)
+		log.Fatalf("Failed to initialize authentication: %v", err)
 	}
 
 	deps := federator.Deps{
@@ -104,10 +116,9 @@ func main() {
 	// Run server with graceful shutdown support
 	// Server will stop when ctx is cancelled (on SIGINT/SIGTERM)
 	server.RunServer(ctx, server.Deps{
-		Config:         config,
-		Federator:      federationObject,
-		SchemaService:  schemaService,
-		TokenValidator: tokenValidator,
+		Federator:     federationObject,
+		SchemaService: schemaService,
+		Authenticate:  authnManager.RequireAuthMiddleware(),
 	})
 }
 

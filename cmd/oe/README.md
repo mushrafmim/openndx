@@ -32,6 +32,8 @@ Native, from the repo root:
 ```bash
 cp cmd/oe/config.example.json cmd/oe/config.json     # git-ignored
 export DB_HOST=localhost DB_PASSWORD=<password>      # optional: see Configuration
+# Consumer tokens: ThunderID from `docker compose up thunderid`
+export IDP_BASE_URL=http://localhost:8090 IDP_AUDIENCE=http://api.openndx.local
 make run orchestration-engine
 ```
 
@@ -50,7 +52,6 @@ The OE reads a JSON file (`CONFIG_PATH`, default `./config.json`) plus a few env
 | `ceUrl` | Consent Engine URL **including** `/internal/api/v1`. |
 | `providers[]` | Data providers: `providerKey`, `providerUrl`, `schemaId`, optional `auth`. See [PROVIDER_CONFIGURATION.md](PROVIDER_CONFIGURATION.md). |
 | `argMappings[]` | How consumer arguments map to each provider's arguments. |
-| `trustUpstream`, `jwt`, `environment` | Token validation. See [AUTHENTICATION.md](AUTHENTICATION.md). |
 | `auditConfig` | Argus audit service URL and actor identity. |
 
 | Environment variable | Default |
@@ -58,6 +59,7 @@ The OE reads a JSON file (`CONFIG_PATH`, default `./config.json`) plus a few env
 | `PORT` | `4000` |
 | `CONFIG_PATH` | `./config.json` |
 | `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE` | `localhost`, `5432`, `postgres`, empty, `orchestration_engine`, `disable` |
+| `IDP_JWKS_URL`, `IDP_ISSUER`, `IDP_AUDIENCE` | Consumer token validation; `IDP_AUDIENCE` is required. See [AUTHENTICATION.md](AUTHENTICATION.md). |
 | `AUDIT_SERVICE_URL`, `ARGUS_API_KEY` | override `auditConfig.serviceUrl`; audit API key |
 
 Every key and variable, with the error codes: [CONFIGURATION.md](CONFIGURATION.md). No `.env` file is loaded; export variables or use Docker `--env-file`.
@@ -102,14 +104,14 @@ sequenceDiagram
 - The consumer's identity is the token's `client_id`. It is sent to the PDP as `applicationId`.
 - Each field's `providerField` and `schemaId` become the `(schemaId, fieldName)` the PDP looks up, so every field must have policy metadata registered.
 - If consent is not yet approved, the response is HTTP 200 with `errors[0].extensions.code = CE_NOT_APPROVED`, plus `consentPortalUrl` and `consentStatus`. The citizen approves in the Consent Portal and the consumer repeats the query.
-- Federation errors come back as HTTP 200 with `errors[].extensions.code` (`PDP_NOT_ALLOWED`, `CE_NOT_APPROVED`, `MISSING_IDENTIFIER`, and others; see [CONFIGURATION.md](CONFIGURATION.md#error-codes)). Only an unreadable body (`400`) or a bad token (`401`, plain text) use HTTP error statuses.
+- Federation errors come back as HTTP 200 with `errors[].extensions.code` (`PDP_NOT_ALLOWED`, `CE_NOT_APPROVED`, `MISSING_IDENTIFIER`, and others; see [CONFIGURATION.md](CONFIGURATION.md#error-codes)). Only an unreadable body (`400`) or a missing or invalid token (`401`, JSON) use HTTP error statuses.
 - A provider that fails is left out of the result, and the failure is audited. The response is still HTTP 200.
 
 ## Security and deployment
 
 > **Deployment security: network isolation.** The `/sdl` routes and `/health` are not authenticated. Anyone who can reach them can create and activate schemas. Expose only `/public/graphql` to consumers.
 
-- The sample configs set `trustUpstream: true`, which reads the token **without verifying its signature**. That is for local development only. Production must set `trustUpstream: false` and configure `jwt.jwksUrl` ([AUTHENTICATION.md](AUTHENTICATION.md)).
+- Consumer tokens are always verified against the IdP's keys (`IDP_JWKS_URL`), issuer and audience ([AUTHENTICATION.md](AUTHENTICATION.md)).
 - With `pdpUrl` empty, the OE returns provider data without any authorization or consent check. Always set it.
 - CORS allows every origin.
 - Audit events (`DATA_REQUEST`, `POLICY_CHECK`, `CONSENT_CHECK`, `PROVIDER_FETCH`) go to Argus. If Argus is down, batches are lost.
@@ -127,7 +129,7 @@ make quality-check orchestration-engine
 ## More docs
 
 - [CONFIGURATION.md](CONFIGURATION.md): all `config.json` keys, environment variables, error codes, schema resolution
-- [AUTHENTICATION.md](AUTHENTICATION.md): token validation, `trustUpstream`, JWKS handling
+- [AUTHENTICATION.md](AUTHENTICATION.md): token validation, `IDP_*` settings, JWKS handling
 - [PROVIDER_CONFIGURATION.md](PROVIDER_CONFIGURATION.md): adding a data provider
 - [HOW_TO_TEST.md](HOW_TO_TEST.md): testing and manual checks
 - [Policy Decision Point](../pdp/README.md) and [Consent Engine](../ce/README.md): the services the OE calls

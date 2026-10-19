@@ -18,16 +18,11 @@ Every setting the Orchestration Engine reads. The overview and the short version
 | `ceUrl` | string | Consent Engine URL, which must end in `/internal/api/v1` because the OE appends `/consents`. `ceConfig.clientUrl` overrides it. If the PDP requires consent and this is empty, the request fails with `CE_ERROR`. |
 | `providers` | array | Data providers; see below and [PROVIDER_CONFIGURATION.md](PROVIDER_CONFIGURATION.md). Loaded once at startup, so changes need a restart. |
 | `argMappings` | array | Argument mappings; see below. |
-| `trustUpstream` | bool | `true` reads the token without verifying its signature. See [AUTHENTICATION.md](AUTHENTICATION.md). |
-| `jwt.jwksUrl` | string | Signing keys. Required when `trustUpstream` is `false`. |
-| `jwt.expectedIssuer` | string | The token's `iss` must equal this when set. |
-| `jwt.validAudiences` | string array | The token's `aud` must contain one of these when set. |
-| `environment` | string | `production` or `staging` enables the JWKS URL checks in [AUTHENTICATION.md](AUTHENTICATION.md#jwks-url-checks). Any other value disables them. |
 | `schema` | string | Inline GraphQL SDL, used if there is no active schema in the database. |
 | `auditConfig.serviceUrl` | string | Argus audit service URL. Overridden by `AUDIT_SERVICE_URL`. Auditing is off when this is empty. |
 | `auditConfig.actorType`, `auditConfig.actorId` | string | Default `SERVICE` and `orchestration-engine`. |
 
-Keys that are accepted but ignored: `server.port`, `log.level`, `services.pdp_url`, `sdl`.
+Keys that are accepted but ignored: `server.port`, `log.level`, `services.pdp_url`, `sdl`, and the removed token settings `trustUpstream`, `jwt` and `environment`. Consumer tokens are configured with the `IDP_*` environment variables below.
 
 ### providers[]
 
@@ -59,9 +54,13 @@ Each entry maps an argument in the consumer's query to an argument of one provid
 | `CONFIG_PATH` | `./config.json` | |
 | `DB_HOST`, `DB_PORT` | `localhost`, `5432` | |
 | `DB_USERNAME` | `postgres` | |
-| `DB_PASSWORD` | empty | A warning is logged when empty. |
+| `DB_PASSWORD` | empty | Required to use the schema database. When empty, the OE runs without it. |
 | `DB_NAME` | `orchestration_engine` | |
 | `DB_SSLMODE` | `disable` | |
+| `IDP_JWKS_URL` | `$IDP_BASE_URL/oauth2/jwks` | Consumer token signing keys. See [AUTHENTICATION.md](AUTHENTICATION.md#configuration). |
+| `IDP_ISSUER` | `IDP_TOKEN_URL`, else `$IDP_BASE_URL/oauth2/token` | Expected token `iss`. |
+| `IDP_AUDIENCE` | | **Required.** Expected token `aud`. |
+| `IDP_JWKS_INSECURE_SKIP_VERIFY` | `false` | Skips TLS checks on the JWKS fetch. Local development only. |
 | `AUDIT_SERVICE_URL` | | Overrides `auditConfig.serviceUrl`. |
 | `ARGUS_API_KEY` | | Sent as `X-API-Key` to Argus. Falls back to `ARGUS_AUTH_TOKEN`. |
 | `ENABLE_AUDIT` | on | Read by the audit client library. Audit is on when a URL is set and this is not `false`. |
@@ -100,4 +99,4 @@ GraphQL errors carry the code in `errors[].extensions.code`. Federation errors u
 
 Some errors carry only a `message` and no code, for example `Only query operation is supported` (mutations and subscriptions are rejected) and `No active schema found`.
 
-HTTP-level errors: `400` for an unreadable request body, `401` with the plain-text body `Unauthorized: invalid or expired token`.
+HTTP-level errors: `400` for an unreadable request body, `401` with a JSON body such as `{"error":"unauthorized","message":"invalid authentication token"}` for a missing or invalid token.

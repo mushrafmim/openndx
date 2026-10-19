@@ -72,7 +72,7 @@ tests/integration/
 │   └── http.go                 # HTTP client helpers
 ├── bin/                        # Compiled binaries (not committed)
 │   └── consent-engine
-└── mock-provider/              # Mock provider service
+└── mock-provider/              # Mock provider service and consumer token issuer
     ├── Dockerfile
     └── main.go
 ```
@@ -102,6 +102,10 @@ the same file used by the root development stack.
 **`TestGraphQLFlow_InvalidQuery`** - Tests malformed GraphQL query handling
 
 **`TestGraphQLFlow_MissingToken`** - Tests authentication failure (missing JWT)
+
+**`TestGraphQLFlow_RejectedTokens`** - Tests that the Orchestration Engine rejects unsigned, expired, wrong-issuer and wrong-audience tokens with `401`
+
+Consumer tokens are signed by the mock provider (`POST /token`), which also serves the JWKS the Orchestration Engine verifies them against (`GET /jwks`). The Orchestration Engine runs with `IDP_JWKS_URL` pointing at it, `IDP_ISSUER=http://mock-idp.test` and `IDP_AUDIENCE=http://api.openndx.local`.
 
 ### Service Health Tests
 

@@ -27,7 +27,6 @@ func TestLoadConfigFromBytes_ValidJSON(t *testing.T) {
 				"targetArg": "target1"
 			}
 		],
-		"environment": "production",
 		"server": {
 			"port": "8080"
 		},
@@ -48,9 +47,6 @@ func TestLoadConfigFromBytes_ValidJSON(t *testing.T) {
 	}
 	if config.PdpURL != "http://pdp.example.com" {
 		t.Errorf("Expected PdpURL to be 'http://pdp.example.com', got '%s'", config.PdpURL)
-	}
-	if config.Environment != "production" {
-		t.Errorf("Expected Environment to be 'production', got '%s'", config.Environment)
 	}
 	if config.Server.Port != "8080" {
 		t.Errorf("Expected Server.Port to be '8080', got '%s'", config.Server.Port)
@@ -516,7 +512,6 @@ func TestConfig_AllFieldsUnmarshal(t *testing.T) {
 			}
 		],
 		"argMappings": [],
-		"environment": "staging",
 		"server": {
 			"port": "9000"
 		},
@@ -549,9 +544,6 @@ func TestConfig_AllFieldsUnmarshal(t *testing.T) {
 	}
 	if len(config.Providers) != 1 {
 		t.Errorf("Expected 1 provider, got %d", len(config.Providers))
-	}
-	if config.Environment != "staging" {
-		t.Errorf("Expected Environment to be 'staging', got '%s'", config.Environment)
 	}
 	if config.Server.Port != "9000" {
 		t.Errorf("Expected Server.Port to be '9000', got '%s'", config.Server.Port)

@@ -2,43 +2,42 @@
 
 How the Orchestration Engine authenticates data consumers on `POST /public/graphql`. The other routes (`/health`, `/sdl*`) are not authenticated. The overview is in the [README](README.md).
 
+The OE uses the shared [`internal/authn`](../../internal/authn) package, like Portal Backend. Every token's signature is verified; there is no setting that skips verification.
+
 ## What a consumer must present
 
-An access token in the `Authorization: Bearer <token>` header, issued by the identity provider to a machine client. In the bundled stack that is a ThunderID `client_credentials` token; see the example in [dev/README.md](../../dev/README.md).
+An access token in the `Authorization: Bearer <token>` header, issued by the identity provider to a machine client for the OE's audience. In the bundled stack that is a ThunderID `client_credentials` token requested with `resource=http://api.openndx.local`; see the example in [dev/README.md](../../dev/README.md).
 
-The token must carry:
+The token must:
 
-| Claim | Requirement |
+| Check | Requirement |
 |---|---|
-| `exp` | Present and in the future. If `nbf` is present it must not be in the future; `iat`, if present, must be a number. |
+| Signature | `RS256`, `RS384` or `RS512`, signed by a key in the JWKS at `IDP_JWKS_URL`, with a `kid` header that names the key. |
+| `iss` | Equals `IDP_ISSUER`. |
+| `aud` | Contains `IDP_AUDIENCE`. |
+| `exp` | Present and in the future, with 30 seconds of leeway. `nbf`, when present, must not be in the future, with the same leeway. |
+| `sub` | Present. |
 | `client_id` | Present. It becomes the application's identity (`applicationId`) for the PDP and Consent Engine. |
-| `sub` or `azp` | At least one present. |
-| `iss` | Must equal `jwt.expectedIssuer`, when that is configured. |
-| `aud` | Must contain one of `jwt.validAudiences`, when that is configured. |
 
-A token that fails any check gets `401 Unauthorized: invalid or expired token`. The reason is logged, not returned.
+A request without a valid token gets `401` with a JSON body, for example `{"error":"unauthorized","message":"invalid authentication token"}`. The reason is logged at debug level, not returned.
 
-## Signature verification: `trustUpstream`
+## Configuration
 
-| `trustUpstream` | Behavior |
-|---|---|
-| `false` | The signature is verified against the keys at `jwt.jwksUrl`. `jwt.jwksUrl` is required and the service exits at startup if it is missing or the first fetch fails. **Use this in production.** |
-| `true` | The token is parsed **without verifying its signature**. The claims above are still required and checked. Use only when something in front of the OE has already verified the token, or for local development. |
+| Variable | Default | Notes |
+|---|---|---|
+| `IDP_JWKS_URL` | `$IDP_BASE_URL/oauth2/jwks` | Where the signing keys are fetched. Must be an `http` or `https` URL. |
+| `IDP_ISSUER` | `IDP_TOKEN_URL`, else `$IDP_BASE_URL/oauth2/token` | The expected `iss`. Must be an `http` or `https` URL. |
+| `IDP_AUDIENCE` | | **Required.** The expected `aud`, the OE's resource server identifier. |
+| `IDP_JWKS_INSECURE_SKIP_VERIFY` | `false` | `true` skips TLS certificate checks when fetching the JWKS. Local development only. |
 
-The sample configs ([config.example.json](config.example.json), [config.docker.json](config.docker.json)) set `trustUpstream: true`. With `true` and a `jwt.jwksUrl`, the OE still loads the keys, but a failure to load them is only a warning.
-
-There is no `environment`-based bypass. Setting `environment` to `development` does not skip any token check.
+The service exits at startup if `IDP_JWKS_URL`, `IDP_ISSUER` or `IDP_AUDIENCE` is missing or invalid. In Docker Compose, `IDP_ISSUER` is ThunderID's public URL (the `iss` it stamps into tokens) and `IDP_JWKS_URL` its compose-network address.
 
 ## JWKS handling
 
-With a JWKS URL configured, the OE fetches the key set at startup and refreshes it in the background, so key rotation needs no restart. Keys that carry `x5c` certificate chains are dropped before parsing. The response is capped at 1 MB.
-
-## JWKS URL checks
-
-The URL must be `http` or `https` and have a host. A non-HTTPS URL logs a warning. When `environment` is `production` or `staging`, the OE also refuses a URL whose host is a private, loopback or link-local IP address, or contains `169.254.169.254`. These checks apply only to this one fetch, and only to IP literals: a hostname such as `localhost` is not resolved or blocked. With any other `environment` value the checks are off and a warning is logged.
+The keys are fetched on the first request, not at startup, so the OE starts even when the IdP is not yet up. They are cached for 5 minutes. A token whose `kid` is not in the cached set triggers one refresh, so key rotation needs no restart.
 
 ## Production checklist
 
-- `trustUpstream: false`, with `jwt.jwksUrl`, `jwt.expectedIssuer` and `jwt.validAudiences` set.
-- `environment: "production"`.
+- Set `IDP_JWKS_URL` and `IDP_ISSUER` to the production IdP over `https`, and `IDP_AUDIENCE` to the OE's resource server.
+- Leave `IDP_JWKS_INSECURE_SKIP_VERIFY` unset.
 - Terminate TLS in front of the OE, and expose only `POST /public/graphql`.
