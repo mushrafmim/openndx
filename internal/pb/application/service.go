@@ -306,21 +306,6 @@ func (s *Service) GetApplication(ctx context.Context, applicationID string) (*Ap
 	return response, nil
 }
 
-// GetApplicationIdByIdpClientId retrieves applicationId by idpClientId
-func (s *Service) GetApplicationIdByIdpClientId(ctx context.Context, idpClientId string) (*ApplicationIDResponse, error) {
-	var application Application
-	err := s.db.WithContext(ctx).First(&application, "idp_client_id = ?", idpClientId).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("application not found for idpClientId: %s", idpClientId)
-		}
-		return nil, fmt.Errorf("failed to retrieve application: %w", err)
-	}
-	return &ApplicationIDResponse{
-		ApplicationID: application.ApplicationID,
-	}, nil
-}
-
 // GetApplications retrieves all applications and filters by member ID if provided
 func (s *Service) GetApplications(ctx context.Context, MemberID *string) ([]ApplicationResponse, error) {
 	var applications []Application

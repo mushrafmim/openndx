@@ -186,13 +186,6 @@ func main() {
 
 	mux.Handle("/api/v1/", middleware.NewCORSMiddleware()(authnManager.RequireAuthMiddleware()(caller.Middleware(memberService.MemberIDByOuID)(apiMux))))
 
-	// Register internal API routes (no authentication required for internal services)
-	// SECURITY WARNING: These endpoints are exposed WITHOUT authentication!
-	// MUST be protected at network level (VPC, firewall, service mesh, etc.)
-	// See README.md "Deployment Security" section for required security measures.
-	// DO NOT expose this service directly to public internet without proper network isolation.
-	mux.HandleFunc("GET /internal/api/v1/applications", applicationHandler.GetApplicationIdByClientId)
-
 	// Start server
 	port := os.Getenv("PORT")
 	if port == "" {

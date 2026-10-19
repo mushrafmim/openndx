@@ -70,10 +70,6 @@ type ApplicationResponse struct {
 	UpdatedAt       string  `json:"updatedAt"`
 }
 
-type ApplicationIDResponse struct {
-	ApplicationID string `json:"applicationId"`
-}
-
 type ApplicationSubmissionResponse struct {
 	SubmissionID           string                       `json:"submissionId"`
 	PreviousApplicationID  *string                      `json:"previousApplicationId,omitempty"`

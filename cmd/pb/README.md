@@ -74,7 +74,7 @@ All routes are under `/api/v1` and need `Authorization: Bearer <token>`. Full sc
 | Applications | `GET /applications`, `GET /applications/{applicationId}`<br>`POST /applications`, `PUT /applications/{applicationId}`<br>`PUT /applications/{applicationId}/policy` | `application:read`<br>`application:write` |
 | Application submissions | `GET /application-submissions`, `GET .../{submissionId}`<br>`POST /application-submissions`, `PUT .../{submissionId}` | `application-submission:read`<br>`application-submission:write` |
 
-Outside `/api/v1`, with no authentication: `GET /health` (`503` if the database is down), `GET /debug`, `GET /debug/db`, and `GET /internal/api/v1/applications?idpClientId=` (looks up an application by its IdP client ID). The authorization model, including the `-all` scopes and what each ThunderID role may do, is in [AUTHORIZATION.md](AUTHORIZATION.md).
+Outside `/api/v1`, with no authentication: `GET /health` (`503` if the database is down), `GET /debug` and `GET /debug/db`. The authorization model, including the `-all` scopes and what each ThunderID role may do, is in [AUTHORIZATION.md](AUTHORIZATION.md).
 
 ## How it works
 
@@ -102,7 +102,7 @@ sequenceDiagram
 
 ## Security and deployment
 
-> **Deployment security: network isolation.** `GET /internal/api/v1/applications`, `/health`, `/debug` and `/debug/db` are not authenticated. Expose only `/api/v1/*` beyond the internal network. PB also calls the PDP without authentication, so the PDP must be reachable only from PB and the Orchestration Engine.
+> **Deployment security: network isolation.** `/health`, `/debug` and `/debug/db` are not authenticated. Expose only `/api/v1/*` beyond the internal network. PB also calls the PDP without authentication, so the PDP must be reachable only from PB and the Orchestration Engine.
 
 - CORS defaults to `http://localhost:5173`. Compose sets `*`; set explicit origins for any shared deployment.
 - PB serves no `/metrics` endpoint and no `/openapi.yaml`; the spec is the file in this directory.
