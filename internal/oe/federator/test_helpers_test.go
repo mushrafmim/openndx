@@ -1,13 +1,53 @@
 package federator
 
 import (
+	"context"
 	"testing"
 
 	"github.com/graphql-go/graphql/language/ast"
 	"github.com/graphql-go/graphql/language/parser"
 	"github.com/graphql-go/graphql/language/source"
+	"github.com/openndx/openndx-core/internal/oe/configs"
+	"github.com/openndx/openndx-core/internal/oe/consent"
+	"github.com/openndx/openndx-core/internal/oe/federator/schema"
+	"github.com/openndx/openndx-core/internal/oe/policy"
+	"github.com/openndx/openndx-core/internal/oe/provider"
 	"github.com/stretchr/testify/require"
 )
+
+// newTestFederator builds a Federator from cfg with the real PDP, consent and
+// provider clients, the way cmd/oe/main.go does. A nil schemas serves cfg's schema.
+func newTestFederator(t *testing.T, cfg *configs.Config, schemas SchemaSource) *Federator {
+	t.Helper()
+
+	if schemas == nil {
+		var configSDL string
+		if cfg.Schema != nil {
+			configSDL = *cfg.Schema
+		}
+		schemas = schema.NewSource(nil, configSDL)
+	}
+	deps := Deps{
+		Providers: ProviderLookup(provider.NewProviderHandler(cfg.GetProviders()).GetProvider),
+		Schemas:   schemas,
+	}
+	if cfg.PdpConfig.ClientURL != "" {
+		deps.Policy = policy.NewPdpClient(cfg.PdpConfig.ClientURL)
+	}
+	if cfg.CeConfig.ClientURL != "" {
+		deps.Consent = consent.NewCEServiceClient(cfg.CeConfig.ClientURL)
+	}
+	f, err := New(deps, OptionsFromConfig(cfg))
+	require.NoError(t, err)
+	return f
+}
+
+// staticSchema is a SchemaSource that always serves the same SDL.
+type staticSchema string
+
+func (s staticSchema) Active(context.Context) (*ast.Document, error) {
+	return schema.Parse(string(s), "TestSchema")
+}
 
 const defaultTestSchemaSDL = `
 directive @sourceInfo(

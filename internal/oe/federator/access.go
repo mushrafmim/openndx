@@ -1,0 +1,210 @@
+package federator
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/openndx/openndx-core/internal/oe/consent"
+	"github.com/openndx/openndx-core/internal/oe/internals/errors"
+	"github.com/openndx/openndx-core/internal/oe/logger"
+	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
+	"github.com/openndx/openndx-core/internal/oe/policy"
+)
+
+// authorizeAccess decides whether appID may run a query that reads fields with the
+// arguments args. It asks the PDP, identifies the data owner, and asks the owner's
+// consent when the PDP requires it. It returns a non-nil response when the query
+// must be rejected.
+func (f *Federator) authorizeAccess(ctx context.Context, appID string, fields []ProviderLevelFieldRecord, args []*ArgSource) (context.Context, *graphql.Response) {
+	ctx, pdpResponse, denied := f.checkPolicy(ctx, appID, fields)
+	if denied != nil {
+		return ctx, denied
+	}
+
+	dataOwnerID, denied := f.dataOwnerID(args)
+	if denied != nil {
+		return ctx, denied
+	}
+
+	if pdpResponse != nil && pdpResponse.AppRequiresOwnerConsent {
+		return f.checkConsent(ctx, appID, dataOwnerID, pdpResponse)
+	}
+	return ctx, nil
+}
+
+// reject returns the error response for a rejected query.
+func reject(message string, extensions map[string]interface{}) *graphql.Response {
+	resp := createErrorResponse(message, extensions)
+	return &resp
+}
+
+// rejectWithCode returns the error response for a query rejected with an error code.
+func rejectWithCode(message, code string) *graphql.Response {
+	resp := createErrorResponseWithCode(message, code)
+	return &resp
+}
+
+// checkPolicy asks the PDP whether appID may read fields. Without a PDP the check is
+// skipped and the returned PDP response is nil.
+func (f *Federator) checkPolicy(ctx context.Context, appID string, fields []ProviderLevelFieldRecord) (context.Context, *policy.PdpResponse, *graphql.Response) {
+	if f.deps.Policy == nil {
+		logger.Log.Warn("PDP client not available, skipping policy check")
+		// Continue without PDP check - this allows the system to work without PDP
+		return ctx, nil, nil
+	}
+
+	requiredFields := make([]policy.RequiredField, 0, len(fields))
+	for _, field := range fields {
+		requiredFields = append(requiredFields, policy.RequiredField{
+			SchemaID:  field.SchemaId,
+			FieldName: field.FieldPath,
+		})
+	}
+	pdpRequest := &policy.PdpRequest{
+		AppId:          appID,
+		RequiredFields: requiredFields,
+	}
+
+	pdpResponse, err := f.deps.Policy.MakePdpRequest(ctx, pdpRequest)
+	ctx = f.deps.Auditor.PolicyCheck(ctx, appID, pdpRequest, pdpResponse, err)
+
+	if err != nil {
+		logger.Log.Error("PDP request failed", "error", err)
+		return ctx, nil, rejectWithCode(fmt.Sprintf("Authorization check failed: %v", err), errors.CodePDPError)
+	}
+
+	if pdpResponse == nil {
+		logger.Log.Error("Failed to get response from PDP")
+		return ctx, nil, rejectWithCode("No response from authorization service", errors.CodePDPNoResponse)
+	}
+
+	// Log PDP decision for audit trail
+	logger.Log.Info("PDP decision received",
+		"authorized", pdpResponse.AppAuthorized,
+		"consentRequired", pdpResponse.AppRequiresOwnerConsent,
+		"unauthorizedFieldsCount", len(pdpResponse.UnauthorizedFields),
+		"expiredFieldsCount", len(pdpResponse.ExpiredFields))
+
+	if !pdpResponse.AppAuthorized {
+		logger.Log.Info("Request not authorized by PDP",
+			"unauthorizedFields", pdpResponse.UnauthorizedFields)
+		return ctx, nil, reject("Access denied", map[string]interface{}{
+			"code":               errors.CodePDPNotAllowed,
+			"unauthorizedFields": pdpResponse.UnauthorizedFields,
+		})
+	}
+
+	if pdpResponse.AppAccessExpired {
+		logger.Log.Info("Application access expired",
+			"expiredFields", pdpResponse.ExpiredFields)
+		return ctx, nil, reject("Access expired", map[string]interface{}{
+			"code":          errors.CodePDPNotAllowed,
+			"expiredFields": pdpResponse.ExpiredFields,
+		})
+	}
+
+	return ctx, pdpResponse, nil
+}
+
+// dataOwnerID returns the Data Owner ID, identified among args by the configured
+// foundational identifier argument name (e.g. "nic") — not by position.
+func (f *Federator) dataOwnerID(args []*ArgSource) (string, *graphql.Response) {
+	var values []string
+	for _, arg := range args {
+		if arg == nil || arg.Argument == nil || arg.Name == nil {
+			continue
+		}
+		if arg.Name.Value != f.opts.FoundationalIdArgName {
+			continue
+		}
+		if s, ok := arg.Value.GetValue().(string); ok && s != "" {
+			values = append(values, s)
+		}
+	}
+
+	if len(values) == 0 {
+		logger.Log.Info("Data Owner ID argument is missing or invalid",
+			"foundationalIdArgName", f.opts.FoundationalIdArgName)
+		return "", rejectWithCode("Data Owner ID argument is missing or invalid", errors.CodeMissingEntityIdentifier)
+	}
+	for _, v := range values[1:] {
+		if v != values[0] {
+			logger.Log.Info("Conflicting Data Owner ID values found in query",
+				"foundationalIdArgName", f.opts.FoundationalIdArgName, "valueCount", len(values))
+			return "", rejectWithCode("Conflicting Data Owner ID values in query", errors.CodeAmbiguousEntityIdentifier)
+		}
+	}
+	return values[0], nil
+}
+
+// checkConsent asks the Consent Engine for dataOwnerID's consent to the fields the
+// PDP marked as requiring it, and rejects the query unless consent is approved.
+func (f *Federator) checkConsent(ctx context.Context, appID, dataOwnerID string, pdpResponse *policy.PdpResponse) (context.Context, *graphql.Response) {
+	logger.Log.Info("Consent required for fields",
+		"fieldsCount", len(pdpResponse.ConsentRequiredFields),
+		"fields", pdpResponse.ConsentRequiredFields)
+
+	if len(pdpResponse.ConsentRequiredFields) == 0 {
+		logger.Log.Error("PDP indicates consent required but no fields specified")
+		return ctx, rejectWithCode("Invalid PDP response: consent required but no fields specified", errors.CodePDPError)
+	}
+
+	if f.deps.Consent == nil {
+		logger.Log.Warn("CE client not available, skipping consent check")
+		return ctx, rejectWithCode("Consent required but consent engine not available", errors.CodeCEError)
+	}
+
+	// Map PDP response fields to Consent Engine request with all metadata
+	fields := make([]consent.ConsentField, len(pdpResponse.ConsentRequiredFields))
+	for i, field := range pdpResponse.ConsentRequiredFields {
+		fields[i].FieldName = field.FieldName
+		fields[i].SchemaID = field.SchemaID
+		fields[i].DisplayName = field.DisplayName
+		fields[i].Description = field.Description
+
+		// Map Owner from PDP response, default to citizen if not provided
+		if field.Owner != nil {
+			fields[i].Owner = consent.OwnerType(*field.Owner)
+		} else {
+			fields[i].Owner = consent.OwnerCitizen
+		}
+	}
+
+	typeRealTime := consent.TypeRealtime
+	ceRequest := &consent.CreateConsentRequest{
+		AppID: appID,
+		ConsentRequirement: consent.ConsentRequirement{
+			Owner:   consent.OwnerCitizen,
+			OwnerID: dataOwnerID,
+			Fields:  fields,
+		},
+		ConsentType: &typeRealTime,
+	}
+
+	ceResp, err := f.deps.Consent.CreateConsent(ctx, ceRequest)
+	ctx = f.deps.Auditor.ConsentCheck(ctx, appID, dataOwnerID, ceRequest, ceResp, err)
+
+	if err != nil {
+		logger.Log.Info("CE request failed", "error", err)
+		return ctx, rejectWithCode("CE request failed", errors.CodeCEError)
+	}
+	if ceResp == nil {
+		logger.Log.Error("Failed to get response from CE")
+		return ctx, rejectWithCode("Failed to get response from CE", errors.CodeCENoResponse)
+	}
+
+	logger.Log.Info("Consent Response", "response", ceResp)
+
+	if ceResp.Status != consent.StatusApproved {
+		// Status is pending or any other non-approved status
+		logger.Log.Info("Consent not approved", "status", ceResp.Status)
+		return ctx, reject("Consent not approved", map[string]interface{}{
+			"code":             errors.CodeCENotApproved,
+			"consentPortalUrl": ceResp.ConsentPortalURL,
+			"consentStatus":    ceResp.Status,
+		})
+	}
+
+	logger.Log.Info("Consent approved, proceeding with query execution")
+	return ctx, nil
+}

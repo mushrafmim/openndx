@@ -3,12 +3,15 @@ package provider
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 
 	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/pkg/auth"
+	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -73,4 +76,29 @@ func (p *Provider) PerformRequest(ctx context.Context, reqBody []byte) (*http.Re
 
 	// Default client execution (for API Key or no auth)
 	return p.Client.Do(req)
+}
+
+// Execute sends request to the provider and decodes its GraphQL response.
+func (p *Provider) Execute(ctx context.Context, request graphql.Request) (graphql.Response, error) {
+	reqBody, err := json.Marshal(request)
+	if err != nil {
+		return graphql.Response{}, err
+	}
+
+	response, err := p.PerformRequest(ctx, reqBody)
+	if err != nil {
+		return graphql.Response{}, err
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return graphql.Response{}, err
+	}
+
+	var result graphql.Response
+	if err := json.Unmarshal(body, &result); err != nil {
+		return graphql.Response{}, err
+	}
+	return result, nil
 }

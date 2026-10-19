@@ -827,6 +827,52 @@ func TestNewTokenValidator_ValidJWKS(t *testing.T) {
 	}
 }
 
+func TestNewTokenValidatorFromConfig(t *testing.T) {
+	t.Run("fails when trustUpstream=false and JWKS URL is empty", func(t *testing.T) {
+		cfg := &configs.Config{Environment: "production", TrustUpstream: false}
+
+		_, err := NewTokenValidatorFromConfig(context.Background(), cfg)
+		if err == nil || !strings.Contains(err.Error(), "trustUpstream is false") || !strings.Contains(err.Error(), "JwksUrl is not configured") {
+			t.Errorf("Expected missing JWKS URL error, got: %v", err)
+		}
+	})
+
+	t.Run("fails when trustUpstream=false and JWKS URL is invalid", func(t *testing.T) {
+		cfg := &configs.Config{
+			Environment:   "production",
+			TrustUpstream: false,
+			JWT:           configs.JWTConfig{JwksUrl: "http://invalid-url:99999/jwks"},
+		}
+
+		_, err := NewTokenValidatorFromConfig(context.Background(), cfg)
+		if err == nil || !strings.Contains(err.Error(), "failed to initialize TokenValidator") {
+			t.Errorf("Expected TokenValidator initialization error, got: %v", err)
+		}
+	})
+
+	t.Run("returns no validator when trustUpstream=true without JWKS URL", func(t *testing.T) {
+		cfg := &configs.Config{Environment: "production", TrustUpstream: true}
+
+		validator, err := NewTokenValidatorFromConfig(context.Background(), cfg)
+		if err != nil || validator != nil {
+			t.Errorf("Expected nil validator and no error, got %v, %v", validator, err)
+		}
+	})
+
+	t.Run("returns no validator when trustUpstream=true with invalid JWKS URL", func(t *testing.T) {
+		cfg := &configs.Config{
+			Environment:   "production",
+			TrustUpstream: true,
+			JWT:           configs.JWTConfig{JwksUrl: "http://invalid-url:99999/jwks"},
+		}
+
+		validator, err := NewTokenValidatorFromConfig(context.Background(), cfg)
+		if err != nil || validator != nil {
+			t.Errorf("Expected nil validator and no error, got %v, %v", validator, err)
+		}
+	})
+}
+
 // Tests for parseAndValidateToken function
 func TestParseAndValidateToken_TrustUpstream(t *testing.T) {
 	claims := jwt.MapClaims{

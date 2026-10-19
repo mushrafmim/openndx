@@ -310,6 +310,44 @@ func NewTokenValidator(ctx context.Context, jwksURL string, environment string) 
 	}, nil
 }
 
+// NewTokenValidatorFromConfig creates the TokenValidator for consumer tokens as configured.
+// Returns error if trustUpstream is false and signatures can't be verified (fail-fast approach).
+// With trustUpstream true the validator is optional, so it returns nil when there is no
+// JWKS URL or the JWKS can't be loaded.
+// The provided context controls the lifecycle of the JWKS auto-refresh.
+func NewTokenValidatorFromConfig(ctx context.Context, cfg *configs.Config) (*TokenValidator, error) {
+	// If trustUpstream is false, we MUST have a valid TokenValidator
+	if !cfg.TrustUpstream {
+		// When not trusting upstream, JWT signature verification is required
+		if cfg.JWT.JwksUrl == "" {
+			return nil, fmt.Errorf("fatal configuration error: trustUpstream is false but JWT.JwksUrl is not configured - cannot verify token signatures")
+		}
+
+		validator, err := NewTokenValidator(ctx, cfg.JWT.JwksUrl, cfg.Environment)
+		if err != nil {
+			return nil, fmt.Errorf("fatal configuration error: failed to initialize TokenValidator with JWKS URL %s: %w", cfg.JWT.JwksUrl, err)
+		}
+
+		logger.Log.Info("TokenValidator initialized successfully with auto-refresh", "jwksUrl", cfg.JWT.JwksUrl, "trustUpstream", false)
+		return validator, nil
+	}
+
+	// When trusting upstream, TokenValidator is optional (may still be used for additional validation)
+	if cfg.JWT.JwksUrl == "" {
+		logger.Log.Info("TokenValidator not configured (trustUpstream=true, no JWKS URL provided)")
+		return nil, nil
+	}
+
+	validator, err := NewTokenValidator(ctx, cfg.JWT.JwksUrl, cfg.Environment)
+	if err != nil {
+		logger.Log.Warn("Failed to initialize TokenValidator (non-fatal with trustUpstream=true)", "error", err, "jwksUrl", cfg.JWT.JwksUrl)
+		return nil, nil
+	}
+
+	logger.Log.Info("TokenValidator initialized successfully with auto-refresh", "jwksUrl", cfg.JWT.JwksUrl, "trustUpstream", true)
+	return validator, nil
+}
+
 // validateSignature validates the token signature using cached JWKS
 func (v *TokenValidator) validateSignature(tokenString string) (*jwt.Token, error) {
 	token, err := jwt.Parse(tokenString, v.jwks.Keyfunc)

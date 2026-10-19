@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
-
-	_ "github.com/lib/pq"
 )
 
 // SchemaDB handles database operations for schemas
@@ -13,15 +11,11 @@ type SchemaDB struct {
 	db *sql.DB
 }
 
-// NewSchemaDB creates a new schema database connection
-func NewSchemaDB(connectionString string) (*SchemaDB, error) {
-	db, err := sql.Open("postgres", connectionString)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+// NewSchemaDB stores schemas in db, an open pool from internal/database.Open.
+// The caller owns db and closes it on shutdown.
+func NewSchemaDB(db *sql.DB) (*SchemaDB, error) {
+	if db == nil {
+		return nil, fmt.Errorf("SQL database is required")
 	}
 
 	schemaDB := &SchemaDB{db: db}
@@ -32,11 +26,6 @@ func NewSchemaDB(connectionString string) (*SchemaDB, error) {
 	}
 
 	return schemaDB, nil
-}
-
-// Close closes the database connection
-func (s *SchemaDB) Close() error {
-	return s.db.Close()
 }
 
 // createTables creates the necessary tables

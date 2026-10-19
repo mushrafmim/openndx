@@ -12,7 +12,6 @@ import (
 	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/policy"
-	"github.com/openndx/openndx-core/internal/oe/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -100,8 +99,7 @@ func TestDevelopmentConfigArgumentMappings(t *testing.T) {
 					p.ProviderURL = server.URL
 					p.Auth = nil
 				}
-				f, err := Initialize(context.Background(), cfg, provider.NewProviderHandler(nil), nil)
-				require.NoError(t, err)
+				f := newTestFederator(t, cfg, nil)
 				response := f.FederateQuery(context.Background(), tc.request, &auth.ConsumerAssertion{ApplicationID: "demo-client"})
 				require.Empty(t, response.Errors)
 				require.Equal(t, tc.want, response.Data["personInfo"])

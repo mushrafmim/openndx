@@ -3,45 +3,22 @@ package federator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
+	"github.com/graphql-go/graphql/language/ast"
 	"github.com/openndx/openndx-core/internal/oe/auth"
 	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	"github.com/openndx/openndx-core/internal/oe/internals/errors"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/policy"
-	"github.com/openndx/openndx-core/internal/oe/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// MockSchemaService is a mock implementation of the schema service
-type MockSchemaService struct {
-	GetActiveSchemaFunc func() interface{}
-}
-
-func (m *MockSchemaService) GetActiveSchema() interface{} {
-	if m.GetActiveSchemaFunc != nil {
-		return m.GetActiveSchemaFunc()
-	}
-	return nil
-}
-
-// MockSchemaServiceWithSignature is a mock implementation of the schema service with correct signature for reflection
-type MockSchemaServiceWithSignature struct {
-	SDL string
-}
-
-type MockSchemaRecord struct {
-	SDL string
-}
-
-func (m *MockSchemaServiceWithSignature) GetActiveSchema() (*MockSchemaRecord, error) {
-	return &MockSchemaRecord{SDL: m.SDL}, nil
-}
 
 func TestFederateQuery_WithMockSchema(t *testing.T) {
 	// 1. Mock Provider
@@ -94,8 +71,6 @@ func TestFederateQuery_WithMockSchema(t *testing.T) {
 	}
 
 	// 4. Setup Federator
-	providerHandler := provider.NewProviderHandler(nil)
-
 	schemaSDL := `
 		directive @sourceInfo(providerKey: String!, providerField: String!, schemaId: String) on FIELD_DEFINITION
 		type Query {
@@ -106,11 +81,7 @@ func TestFederateQuery_WithMockSchema(t *testing.T) {
 		}
 	`
 
-	mockService := &MockSchemaServiceWithSignature{SDL: schemaSDL}
-	f, err := Initialize(context.Background(), cfg, providerHandler, mockService)
-	if err != nil {
-		t.Fatalf("Failed to initialize federator: %v", err)
-	}
+	f := newTestFederator(t, cfg, staticSchema(schemaSDL))
 
 	// 5. Execute Query
 	req := graphql.Request{
@@ -216,11 +187,7 @@ func TestFederateQuery_DataOwnerIdentification(t *testing.T) {
 			ArgMapping:            argMapping,
 		}
 
-		providerHandler := provider.NewProviderHandler(nil)
-		mockService := &MockSchemaServiceWithSignature{SDL: schemaSDL}
-
-		f, err := Initialize(context.Background(), cfg, providerHandler, mockService)
-		require.NoError(t, err)
+		f := newTestFederator(t, cfg, staticSchema(schemaSDL))
 
 		return f, &capturedOwnerID
 	}
@@ -293,8 +260,6 @@ func TestFederateQuery_PDPDeny(t *testing.T) {
 		},
 	}
 
-	providerHandler := provider.NewProviderHandler(nil)
-
 	schemaSDL := `
 		directive @sourceInfo(providerKey: String!, providerField: String!, schemaId: String) on FIELD_DEFINITION
 		type Query {
@@ -304,11 +269,7 @@ func TestFederateQuery_PDPDeny(t *testing.T) {
 			fullName: String @sourceInfo(providerKey: "drp", providerField: "person.fullName", schemaId: "drp-schema")
 		}
 	`
-	mockService := &MockSchemaServiceWithSignature{SDL: schemaSDL}
-	f, err := Initialize(context.Background(), cfg, providerHandler, mockService)
-	if err != nil {
-		t.Fatalf("Failed to initialize federator: %v", err)
-	}
+	f := newTestFederator(t, cfg, staticSchema(schemaSDL))
 
 	req := graphql.Request{
 		Query: `query { personInfo(nic: "123") { fullName } }`,
@@ -326,76 +287,245 @@ func TestFederateQuery_PDPDeny(t *testing.T) {
 	assert.Contains(t, resp.Errors[0].(map[string]interface{})["message"], "Access denied")
 }
 
-// TestInitialize_FailsWithInvalidConfig tests that Initialize fails fast when
-// trustUpstream is false but JWT configuration is invalid
-func TestInitialize_FailsWithInvalidConfig(t *testing.T) {
-	providerHandler := provider.NewProviderHandler(nil)
+// TestNew tests that New fails fast on configuration that would reject every request.
+func TestNew(t *testing.T) {
+	providers := fakeRegistry{}
+	schemas := staticSchema("type Query { a: String }")
 
-	t.Run("fails when trustUpstream=false and JWKS URL is empty", func(t *testing.T) {
-		cfg := &configs.Config{
-			Environment:   "production",
-			TrustUpstream: false,
-			JWT: configs.JWTConfig{
-				JwksUrl: "", // Missing JWKS URL
-			},
-		}
-
-		_, err := Initialize(context.Background(), cfg, providerHandler, nil)
+	t.Run("fails without a provider registry", func(t *testing.T) {
+		_, err := New(Deps{Schemas: schemas}, Options{FoundationalIdArgName: "nic"})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "trustUpstream is false")
-		assert.Contains(t, err.Error(), "JwksUrl is not configured")
+		assert.Contains(t, err.Error(), "provider registry is required")
 	})
 
-	t.Run("fails when trustUpstream=false and JWKS URL is invalid", func(t *testing.T) {
-		cfg := &configs.Config{
-			Environment:   "production",
-			TrustUpstream: false,
-			JWT: configs.JWTConfig{
-				JwksUrl: "http://invalid-url:99999/jwks", // Invalid URL
-			},
-		}
-
-		_, err := Initialize(context.Background(), cfg, providerHandler, nil)
+	t.Run("fails without a schema source", func(t *testing.T) {
+		_, err := New(Deps{Providers: providers}, Options{FoundationalIdArgName: "nic"})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to initialize TokenValidator")
-	})
-
-	t.Run("succeeds when trustUpstream=true even without JWKS URL", func(t *testing.T) {
-		cfg := &configs.Config{
-			Environment:           "production",
-			TrustUpstream:         true,
-			FoundationalIdArgName: "nic",
-			JWT: configs.JWTConfig{
-				JwksUrl: "", // Missing JWKS URL is OK when trusting upstream
-			},
-		}
-
-		_, err := Initialize(context.Background(), cfg, providerHandler, nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("succeeds when trustUpstream=true even with invalid JWKS URL", func(t *testing.T) {
-		cfg := &configs.Config{
-			Environment:           "production",
-			TrustUpstream:         true,
-			FoundationalIdArgName: "nic",
-			JWT: configs.JWTConfig{
-				JwksUrl: "http://invalid-url:99999/jwks", // Invalid URL is logged but not fatal
-			},
-		}
-
-		_, err := Initialize(context.Background(), cfg, providerHandler, nil)
-		require.NoError(t, err) // Should not fail, just log warning
+		assert.Contains(t, err.Error(), "schema source is required")
 	})
 
 	t.Run("fails when foundationalIdArgName is not configured", func(t *testing.T) {
-		cfg := &configs.Config{
-			Environment:   "production",
-			TrustUpstream: true,
-		}
-
-		_, err := Initialize(context.Background(), cfg, providerHandler, nil)
+		_, err := New(Deps{Providers: providers, Schemas: schemas}, Options{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "foundationalIdArgName is not configured")
 	})
+
+	t.Run("succeeds without optional dependencies", func(t *testing.T) {
+		f, err := New(Deps{Providers: providers, Schemas: schemas}, Options{FoundationalIdArgName: "nic"})
+		require.NoError(t, err)
+		assert.NotNil(t, f.deps.Auditor, "a nil Auditor should default to one that records nothing")
+	})
+}
+
+// fakePolicy is an in-memory PolicyDecider that records the request it receives.
+type fakePolicy struct {
+	resp *policy.PdpResponse
+	got  *policy.PdpRequest
+}
+
+func (p *fakePolicy) MakePdpRequest(_ context.Context, req *policy.PdpRequest) (*policy.PdpResponse, error) {
+	p.got = req
+	return p.resp, nil
+}
+
+// fakeConsent is an in-memory ConsentRequester that records the request it receives.
+type fakeConsent struct {
+	resp *consent.ConsentResponseInternalView
+	got  *consent.CreateConsentRequest
+}
+
+func (c *fakeConsent) CreateConsent(_ context.Context, req *consent.CreateConsentRequest) (*consent.ConsentResponseInternalView, error) {
+	c.got = req
+	return c.resp, nil
+}
+
+// failingSchemaSource is a SchemaSource whose lookup always fails.
+type failingSchemaSource struct{}
+
+func (failingSchemaSource) Active(context.Context) (*ast.Document, error) {
+	return nil, fmt.Errorf("could not find schema.graphql file in any expected location")
+}
+
+// fakeProvider is an in-memory ProviderClient that records the request it receives.
+type fakeProvider struct {
+	resp graphql.Response
+	err  error
+
+	mu  sync.Mutex
+	got []graphql.Request
+}
+
+func (p *fakeProvider) Execute(_ context.Context, req graphql.Request) (graphql.Response, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.got = append(p.got, req)
+	return p.resp, p.err
+}
+
+// fakeRegistry is a ProviderRegistry keyed by service key.
+type fakeRegistry map[string]*fakeProvider
+
+func (r fakeRegistry) Get(serviceKey, _ string) (ProviderClient, bool) {
+	p, ok := r[serviceKey]
+	if !ok {
+		return nil, false
+	}
+	return p, true
+}
+
+// recordingAuditor is an Auditor that records provider fetches.
+type recordingAuditor struct {
+	noopAuditor
+
+	mu      sync.Mutex
+	fetches []ProviderFetch
+	errs    []error
+}
+
+func (a *recordingAuditor) ProviderFetch(_ context.Context, fetch ProviderFetch, _ *graphql.Response, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.fetches = append(a.fetches, fetch)
+	a.errs = append(a.errs, err)
+}
+
+func TestFederateQuery_InjectedDeps(t *testing.T) {
+	schemaSDL := `
+		directive @sourceInfo(providerKey: String!, providerField: String!, schemaId: String) on FIELD_DEFINITION
+		type Query {
+			personInfo(nic: String!): PersonInfo @sourceInfo(providerKey: "drp", providerField: "person", schemaId: "drp-schema")
+		}
+		type PersonInfo {
+			fullName: String @sourceInfo(providerKey: "drp", providerField: "person.fullName", schemaId: "drp-schema")
+		}
+	`
+	opts := Options{
+		FoundationalIdArgName: "nic",
+		ArgMapping: []*graphql.ArgMapping{
+			{ProviderKey: "drp", SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "personInfo-nic", TargetArgPath: "person"},
+		},
+	}
+	req := graphql.Request{Query: `query { personInfo(nic: "123") { fullName } }`}
+	assertion := &auth.ConsumerAssertion{ApplicationID: "app-123"}
+	consentRequired := &policy.PdpResponse{
+		AppAuthorized:           true,
+		AppRequiresOwnerConsent: true,
+		ConsentRequiredFields:   []policy.ConsentRequiredField{{FieldName: "person.fullName", SchemaID: "drp-schema"}},
+	}
+
+	t.Run("calls the injected policy decider and consent requester", func(t *testing.T) {
+		pdp := &fakePolicy{resp: consentRequired}
+		ce := &fakeConsent{resp: &consent.ConsentResponseInternalView{ConsentID: "consent-1", Status: "pending"}}
+		f, err := New(Deps{
+			Providers: fakeRegistry{},
+			Schemas:   staticSchema(schemaSDL),
+			Policy:    pdp,
+			Consent:   ce,
+		}, opts)
+		require.NoError(t, err)
+
+		resp := f.FederateQuery(context.Background(), req, assertion)
+
+		require.NotEmpty(t, resp.Errors)
+		extensions := resp.Errors[0].(map[string]interface{})["extensions"].(map[string]interface{})
+		assert.Equal(t, errors.CodeCENotApproved, extensions["code"])
+		require.NotNil(t, pdp.got)
+		assert.Equal(t, "app-123", pdp.got.AppId)
+		require.NotNil(t, ce.got)
+		assert.Equal(t, "123", ce.got.ConsentRequirement.OwnerID)
+	})
+
+	t.Run("rejects consent-required queries without a consent requester", func(t *testing.T) {
+		f, err := New(Deps{
+			Providers: fakeRegistry{},
+			Schemas:   staticSchema(schemaSDL),
+			Policy:    &fakePolicy{resp: consentRequired},
+		}, opts)
+		require.NoError(t, err)
+
+		resp := f.FederateQuery(context.Background(), req, assertion)
+
+		require.NotEmpty(t, resp.Errors)
+		extensions := resp.Errors[0].(map[string]interface{})["extensions"].(map[string]interface{})
+		assert.Equal(t, errors.CodeCEError, extensions["code"])
+	})
+
+	t.Run("rejects the query when no schema is available", func(t *testing.T) {
+		pdp := &fakePolicy{resp: &policy.PdpResponse{AppAuthorized: true}}
+		f, err := New(Deps{
+			Providers: fakeRegistry{},
+			Schemas:   failingSchemaSource{},
+			Policy:    pdp,
+		}, opts)
+		require.NoError(t, err)
+
+		resp := f.FederateQuery(context.Background(), req, assertion)
+
+		assert.Nil(t, pdp.got, "the query should not reach the PDP without a schema")
+		require.NotEmpty(t, resp.Errors)
+		assert.Contains(t, resp.Errors[0].(*graphql.JSONError).Message, "No active schema found")
+	})
+
+	t.Run("sends sub-queries through the injected provider client and audits them", func(t *testing.T) {
+		drp := &fakeProvider{resp: graphql.Response{Data: map[string]interface{}{
+			"person": map[string]interface{}{"fullName": "Jane Doe"},
+		}}}
+		auditor := &recordingAuditor{}
+		f, err := New(Deps{
+			Providers: fakeRegistry{"drp": drp},
+			Schemas:   staticSchema(schemaSDL),
+			Auditor:   auditor,
+		}, opts)
+		require.NoError(t, err)
+
+		resp := f.FederateQuery(context.Background(), req, assertion)
+
+		require.Empty(t, resp.Errors)
+		assert.Equal(t, map[string]interface{}{"fullName": "Jane Doe"}, resp.Data["personInfo"])
+		require.Len(t, drp.got, 1)
+		assert.Contains(t, drp.got[0].Query, `nic: "123"`)
+		require.Len(t, auditor.fetches, 1)
+		assert.Equal(t, ProviderFetch{
+			ApplicationID:   "app-123",
+			ServiceKey:      "drp",
+			SchemaID:        "drp-schema",
+			Query:           drp.got[0].Query,
+			RequestedFields: []string{"person", "person.fullName"},
+		}, auditor.fetches[0])
+		assert.NoError(t, auditor.errs[0])
+	})
+
+	t.Run("audits a failed provider fetch and omits its data", func(t *testing.T) {
+		auditor := &recordingAuditor{}
+		f, err := New(Deps{
+			Providers: fakeRegistry{"drp": &fakeProvider{err: fmt.Errorf("connection refused")}},
+			Schemas:   staticSchema(schemaSDL),
+			Auditor:   auditor,
+		}, opts)
+		require.NoError(t, err)
+
+		resp := f.FederateQuery(context.Background(), req, assertion)
+
+		assert.Nil(t, resp.Data["personInfo"])
+		require.Len(t, auditor.errs, 1)
+		assert.EqualError(t, auditor.errs[0], "connection refused")
+	})
+}
+
+func TestProviderLookup(t *testing.T) {
+	p := &fakeProvider{}
+	registry := ProviderLookup(func(serviceKey, _ string) (*fakeProvider, bool) {
+		if serviceKey == "drp" {
+			return p, true
+		}
+		return nil, false
+	})
+
+	got, ok := registry.Get("drp", "drp-schema")
+	require.True(t, ok)
+	assert.Same(t, p, got)
+
+	got, ok = registry.Get("unknown", "schema")
+	assert.False(t, ok)
+	assert.Nil(t, got, "a missing provider must be an untyped nil ProviderClient")
 }

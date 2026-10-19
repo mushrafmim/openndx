@@ -3,11 +3,15 @@ package middleware
 import (
 	"context"
 	"crypto"
+	"errors"
 	"sync"
 	"testing"
-	"time"
 
 	auditpkg "github.com/LSFLK/argus/pkg/audit"
+	"github.com/openndx/openndx-core/internal/oe/consent"
+	"github.com/openndx/openndx-core/internal/oe/federator"
+	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
+	"github.com/openndx/openndx-core/internal/oe/policy"
 )
 
 // mockAuditClient implements auditpkg.AuditClient interface for testing
@@ -59,112 +63,148 @@ func (m *mockAuditClient) IsEnabled() bool {
 	return m.enabled
 }
 
-func TestLogAuditEvent(t *testing.T) {
-	// Reset global middleware before test
-	auditpkg.ResetGlobalAuditMiddleware()
+// onlyEvent returns the single event the client received.
+func (m *mockAuditClient) onlyEvent(t *testing.T) *auditpkg.AuditLogRequest {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.receivedEvents) != 1 {
+		t.Fatalf("Expected 1 event, got %d", len(m.receivedEvents))
+	}
+	return m.receivedEvents[0]
+}
 
-	// Create a mock audit client
+// responseMetadata returns the event's response metadata.
+func responseMetadata(t *testing.T, event *auditpkg.AuditLogRequest) map[string]interface{} {
+	t.Helper()
+	meta, ok := event.Metadata["responseMetadata"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected response metadata, got %v", event.Metadata)
+	}
+	return meta
+}
+
+func TestAuditor_RequestReceived(t *testing.T) {
 	mockClient := newMockAuditClient(true)
+	auditor := NewAuditor(mockClient, "SERVICE", "orchestration-engine")
 
-	// Initialize audit middleware with mock client
-	auditpkg.InitializeGlobalAudit(mockClient)
+	ctx := auditor.RequestReceived(context.Background(), "app-1", "query { a }")
 
-	// Create test audit request using shared audit DTO
-	traceID := "550e8400-e29b-41d4-a716-446655440000"
-	eventType := "POLICY_CHECK"
-	testRequest := &auditpkg.AuditLogRequest{
-		TraceID:    &traceID,
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
-		EventType:  eventType,
-		Status:     auditpkg.StatusSuccess,
-		ActorType:  "SERVICE",
-		ActorID:    "orchestration-engine",
-		TargetType: "SERVICE",
-		Metadata: map[string]interface{}{
-			"appId": "test-app-123",
-		},
+	event := mockClient.onlyEvent(t)
+	if event.EventType != "DATA_REQUEST" || event.ActorType != "APPLICATION" || event.ActorID != "app-1" {
+		t.Errorf("Expected DATA_REQUEST by APPLICATION/app-1, got %s by %s/%s", event.EventType, event.ActorType, event.ActorID)
 	}
-
-	// Call LogAuditEvent from shared package
-	auditpkg.LogAuditEvent(context.Background(), testRequest)
-
-	// Wait for the async operation to complete with timeout
-	select {
-	case <-mockClient.requestReceived:
-		// Request received successfully
-	case <-time.After(5 * time.Second):
-		t.Fatal("Timeout waiting for audit request")
+	if event.TraceID == nil || *event.TraceID == "" {
+		t.Error("Expected a trace ID on the event")
 	}
-
-	// Verify the request was received
-	mockClient.mu.Lock()
-	defer mockClient.mu.Unlock()
-
-	if len(mockClient.receivedEvents) == 0 {
-		t.Fatal("No request received by mock client")
-	}
-
-	receivedRequest := mockClient.receivedEvents[0]
-	expectedActorID := "orchestration-engine"
-	if receivedRequest.ActorID != expectedActorID {
-		t.Errorf("Expected ActorID %s, got %s", expectedActorID, receivedRequest.ActorID)
-	}
-
-	expectedStatus := auditpkg.StatusSuccess
-	if receivedRequest.Status != expectedStatus {
-		t.Errorf("Expected Status %s, got %s", expectedStatus, receivedRequest.Status)
+	if ctx == context.Background() {
+		t.Error("Expected the returned context to carry the generated trace ID")
 	}
 }
 
-func TestLogAuditEventWhenNotConfigured(t *testing.T) {
-	// Reset global middleware before test
-	auditpkg.ResetGlobalAuditMiddleware()
+func TestAuditor_PolicyCheck(t *testing.T) {
+	t.Run("denied", func(t *testing.T) {
+		mockClient := newMockAuditClient(true)
+		auditor := NewAuditor(mockClient, "SERVICE", "orchestration-engine")
 
-	// Initialize audit middleware with disabled mock client
-	mockClient := newMockAuditClient(false)
-	auditpkg.InitializeGlobalAudit(mockClient)
+		auditor.PolicyCheck(context.Background(), "app-1", &policy.PdpRequest{AppId: "app-1"},
+			&policy.PdpResponse{AppAuthorized: false, UnauthorizedFields: []policy.ConsentRequiredField{{FieldName: "person.name"}}}, nil)
 
-	// Create test audit request using shared audit DTO
-	traceID := "550e8400-e29b-41d4-a716-446655440000"
-	eventType := "POLICY_CHECK"
-	testRequest := &auditpkg.AuditLogRequest{
-		TraceID:    &traceID,
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
-		EventType:  eventType,
-		Status:     auditpkg.StatusSuccess,
-		ActorType:  "SERVICE",
-		ActorID:    "orchestration-engine",
-		TargetType: "SERVICE",
-	}
+		event := mockClient.onlyEvent(t)
+		if event.EventType != "POLICY_CHECK" || event.Status != auditpkg.StatusFailure {
+			t.Errorf("Expected a failed POLICY_CHECK, got %s %s", event.Status, event.EventType)
+		}
+		if event.ActorType != "SERVICE" || event.ActorID != "orchestration-engine" {
+			t.Errorf("Expected configured actor SERVICE/orchestration-engine, got %s/%s", event.ActorType, event.ActorID)
+		}
+		if event.TargetID == nil || *event.TargetID != "policy-decision-point" {
+			t.Errorf("Expected target policy-decision-point, got %v", event.TargetID)
+		}
+		if _, ok := responseMetadata(t, event)["unauthorizedFields"]; !ok {
+			t.Error("Expected unauthorized fields in the response metadata")
+		}
+	})
 
-	// This should not panic or cause errors
-	auditpkg.LogAuditEvent(context.Background(), testRequest)
+	t.Run("request failed", func(t *testing.T) {
+		mockClient := newMockAuditClient(true)
+		auditor := NewAuditor(mockClient, "SERVICE", "orchestration-engine")
 
-	// Give some time for any potential async operation
-	time.Sleep(50 * time.Millisecond)
+		auditor.PolicyCheck(context.Background(), "app-1", nil, nil, errors.New("pdp unavailable"))
 
-	// Test passes if no panic occurs
+		event := mockClient.onlyEvent(t)
+		if event.Status != auditpkg.StatusFailure || responseMetadata(t, event)["error"] != "pdp unavailable" {
+			t.Errorf("Expected a failure with the PDP error, got %s %v", event.Status, event.Metadata)
+		}
+	})
 }
 
-func TestLogAuditEventWhenGlobalMiddlewareNotInitialized(t *testing.T) {
-	// Reset global middleware to simulate uninitialized state
-	auditpkg.ResetGlobalAuditMiddleware()
+func TestAuditor_ConsentCheck(t *testing.T) {
+	mockClient := newMockAuditClient(true)
+	auditor := NewAuditor(mockClient, "SERVICE", "orchestration-engine")
 
-	// Create test audit request using shared audit DTO
-	traceID := "550e8400-e29b-41d4-a716-446655440000"
-	eventType := "POLICY_CHECK"
-	testRequest := &auditpkg.AuditLogRequest{
-		TraceID:    &traceID,
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
-		EventType:  eventType,
-		Status:     auditpkg.StatusSuccess,
-		ActorType:  "SERVICE",
-		ActorID:    "orchestration-engine",
-		TargetType: "SERVICE",
+	auditor.ConsentCheck(context.Background(), "app-1", "owner-1", &consent.CreateConsentRequest{},
+		&consent.ConsentResponseInternalView{ConsentID: "consent-1", Status: consent.StatusApproved}, nil)
+
+	event := mockClient.onlyEvent(t)
+	if event.EventType != "CONSENT_CHECK" || event.Status != auditpkg.StatusSuccess {
+		t.Errorf("Expected a successful CONSENT_CHECK, got %s %s", event.Status, event.EventType)
+	}
+	if responseMetadata(t, event)["consentId"] != "consent-1" {
+		t.Errorf("Expected consent-1 in the response metadata, got %v", event.Metadata)
+	}
+}
+
+func TestAuditor_ProviderFetch(t *testing.T) {
+	fetch := federator.ProviderFetch{
+		ApplicationID:   "app-1",
+		ServiceKey:      "drp",
+		SchemaID:        "drp-schema",
+		Query:           "query { person { name } }",
+		RequestedFields: []string{"person.name"},
 	}
 
-	// This should not panic or cause errors
-	auditpkg.LogAuditEvent(context.Background(), testRequest)
+	t.Run("success", func(t *testing.T) {
+		mockClient := newMockAuditClient(true)
+		auditor := NewAuditor(mockClient, "SERVICE", "orchestration-engine")
 
-	// Test passes if no panic occurs
+		auditor.ProviderFetch(context.Background(), fetch, &graphql.Response{Data: map[string]interface{}{"person": nil}}, nil)
+
+		event := mockClient.onlyEvent(t)
+		if event.EventType != "PROVIDER_FETCH" || event.Status != auditpkg.StatusSuccess {
+			t.Errorf("Expected a successful PROVIDER_FETCH, got %s %s", event.Status, event.EventType)
+		}
+		if event.TargetID == nil || *event.TargetID != "drp" {
+			t.Errorf("Expected target drp, got %v", event.TargetID)
+		}
+		meta := responseMetadata(t, event)
+		if meta["applicationId"] != "app-1" || meta["schemaId"] != "drp-schema" {
+			t.Errorf("Expected app-1 and drp-schema in the response metadata, got %v", meta)
+		}
+		if fields, _ := meta["requestedFields"].([]string); len(fields) != 1 || fields[0] != "person.name" {
+			t.Errorf("Expected requested field person.name, got %v", meta["requestedFields"])
+		}
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		mockClient := newMockAuditClient(true)
+		auditor := NewAuditor(mockClient, "SERVICE", "orchestration-engine")
+
+		auditor.ProviderFetch(context.Background(), fetch, nil, errors.New("connection refused"))
+
+		event := mockClient.onlyEvent(t)
+		if event.Status != auditpkg.StatusFailure || responseMetadata(t, event)["error"] != "connection refused" {
+			t.Errorf("Expected a failure with the provider error, got %s %v", event.Status, event.Metadata)
+		}
+	})
+}
+
+func TestAuditor_NilClient(t *testing.T) {
+	auditor := NewAuditor(nil, "SERVICE", "orchestration-engine")
+
+	// This should not panic or cause errors
+	ctx := context.Background()
+	auditor.RequestReceived(ctx, "app-1", "query { a }")
+	auditor.PolicyCheck(ctx, "app-1", nil, nil, nil)
+	auditor.ConsentCheck(ctx, "app-1", "", nil, nil, nil)
+	auditor.ProviderFetch(ctx, federator.ProviderFetch{}, nil, nil)
 }

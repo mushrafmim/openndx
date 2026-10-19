@@ -10,12 +10,10 @@ import (
 	"time"
 
 	"github.com/openndx/openndx-core/internal/oe/auth"
-	"github.com/openndx/openndx-core/internal/oe/database"
-	"github.com/openndx/openndx-core/internal/oe/federator"
+	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/handlers"
 	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
-	"github.com/openndx/openndx-core/internal/oe/services"
 )
 
 type Response struct {
@@ -26,8 +24,8 @@ const DefaultPort = "4000"
 
 // RunServer starts an HTTP server with graceful shutdown support.
 // The server will shut down gracefully when the context is cancelled (e.g., on SIGINT/SIGTERM).
-func RunServer(ctx context.Context, f *federator.Federator) {
-	mux := SetupRouter(f)
+func RunServer(ctx context.Context, deps Deps) {
+	mux := SetupRouter(deps)
 
 	// Get port configuration
 	port := os.Getenv("PORT")
@@ -81,33 +79,28 @@ func RunServer(ctx context.Context, f *federator.Federator) {
 	}
 }
 
+// QueryFederator federates consumer GraphQL queries across providers.
+type QueryFederator interface {
+	FederateQuery(ctx context.Context, request graphql.Request, consumerInfo *auth.ConsumerAssertion) graphql.Response
+}
+
+// Deps are what the HTTP server serves. cmd/oe/main.go builds them.
+type Deps struct {
+	// Config supplies the JWT settings and trustUpstream for consumer tokens.
+	Config    *configs.Config
+	Federator QueryFederator
+	// SchemaService backs the /sdl routes; nil when the schema database is unavailable.
+	SchemaService handlers.SchemaService
+	// TokenValidator verifies consumer token signatures; nil when not configured.
+	TokenValidator *auth.TokenValidator
+}
+
 // SetupRouter initializes the router and registers all endpoints
-func SetupRouter(f *federator.Federator) *http.ServeMux {
+func SetupRouter(deps Deps) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	// Initialize database connection
-	dbConnectionString := getDatabaseConnectionString()
-	schemaDB, err := database.NewSchemaDB(dbConnectionString)
-	if err != nil {
-		logger.Log.Error("Failed to connect to database", "error", err)
-		// Continue without database for now
-		schemaDB = nil
-	}
+	schemaHandler := handlers.NewSchemaHandler(deps.SchemaService)
 
-	// Initialize schema service and handler
-	var schemaService handlers.SchemaService
-	if schemaDB != nil {
-		schemaService = services.NewSchemaService(schemaDB)
-	} else {
-		// Fallback to in-memory service if database is not available
-		schemaService = nil
-		logger.Log.Warn("Running without database - schema management disabled")
-	}
-
-	schemaHandler := handlers.NewSchemaHandler(schemaService)
-
-	// Set the schema service in the federator
-	f.SchemaService = schemaService
 	// /health route
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		resp := Response{Message: "OpenNDX Server is Healthy!"}
@@ -139,7 +132,7 @@ func SetupRouter(f *federator.Federator) *http.ServeMux {
 		}
 
 		// decode the token using the cached TokenValidator
-		consumerAssertion, err := auth.GetConsumerJwtFromTokenWithValidator(&f.Configs.JWT, f.Configs.TrustUpstream, r, f.TokenValidator)
+		consumerAssertion, err := auth.GetConsumerJwtFromTokenWithValidator(&deps.Config.JWT, deps.Config.TrustUpstream, r, deps.TokenValidator)
 		if err != nil {
 			logger.Log.Error("Failed to get consumer JWT from token", "error", err)
 			// Return generic error to client to avoid exposing internal details
@@ -163,7 +156,7 @@ func SetupRouter(f *federator.Federator) *http.ServeMux {
 					}
 				}
 			}()
-			response = f.FederateQuery(r.Context(), req, consumerAssertion)
+			response = deps.Federator.FederateQuery(r.Context(), req, consumerAssertion)
 		}()
 
 		w.WriteHeader(http.StatusOK)
@@ -201,30 +194,4 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
-}
-
-// getDatabaseConnectionString returns the database connection string from environment variables
-func getDatabaseConnectionString() string {
-	host := getEnv("DB_HOST", "localhost")
-	port := getEnv("DB_PORT", "5432")
-	user := getEnv("DB_USERNAME", "postgres")
-	password := getEnv("DB_PASSWORD", "")
-	dbname := getEnv("DB_NAME", "orchestration_engine")
-	sslmode := getEnv("DB_SSLMODE", "disable")
-
-	// Require password from environment - no default
-	if password == "" {
-		logger.Log.Warn("DB_PASSWORD not set - database connection may fail")
-	}
-
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		host, port, user, password, dbname, sslmode)
-}
-
-// getEnv gets an environment variable with a default value
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }
