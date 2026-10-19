@@ -46,8 +46,6 @@ func TestFederateQuery_WithMockSchema(t *testing.T) {
 
 	// 3. Setup Config
 	cfg := &configs.Config{
-		Environment:           "test",
-		TrustUpstream:         true, // Trust upstream to avoid JWT validation requirements
 		FoundationalIdArgName: "nic",
 		Providers: []*configs.ProviderConfig{
 			{
@@ -179,8 +177,6 @@ func TestFederateQuery_DataOwnerIdentification(t *testing.T) {
 		t.Cleanup(ceServer.Close)
 
 		cfg := &configs.Config{
-			Environment:           "test",
-			TrustUpstream:         true,
 			FoundationalIdArgName: "nic",
 			PdpConfig:             configs.PdpConfig{ClientURL: pdpServer.URL},
 			CeConfig:              configs.CeConfig{ClientURL: ceServer.URL},
@@ -243,8 +239,6 @@ func TestFederateQuery_PDPDeny(t *testing.T) {
 	defer pdpServer.Close()
 
 	cfg := &configs.Config{
-		Environment:           "test",
-		TrustUpstream:         true, // Trust upstream to avoid JWT validation requirements
 		FoundationalIdArgName: "nic",
 		PdpConfig: configs.PdpConfig{
 			ClientURL: pdpServer.URL,

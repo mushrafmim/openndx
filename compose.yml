@@ -242,6 +242,12 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-1234}
       - DB_NAME=${DB_NAME_OE:-orchestration_engine}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
+      # IDP configuration for validating consumer tokens on /public/graphql.
+      # IDP_AUDIENCE is OE's resource server (thunderid/bootstrap/resource.yaml):
+      # consumers request `resource=http://api.openndx.local` with client_credentials.
+      - IDP_ISSUER=${IDP_PUBLIC_URL:-http://localhost:8090}
+      - IDP_JWKS_URL=${IDP_JWKS_URL:-http://thunderid:8090/oauth2/jwks}
+      - IDP_AUDIENCE=${IDP_AUDIENCE:-http://api.openndx.local}
       # Audit (optional, degrades gracefully if unreachable)
       - AUDIT_SERVICE_URL=${AUDIT_SERVICE_URL:-http://audit-service:3001}
       - ARGUS_API_KEY=${ARGUS_API_KEY:-1234}
