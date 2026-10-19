@@ -191,22 +191,6 @@ func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 	utils.RespondWithSuccess(w, http.StatusOK, application)
 }
 
-// GetApplicationIdByClientId handles GET /internal/api/v1/applications
-func (h *Handler) GetApplicationIdByClientId(w http.ResponseWriter, r *http.Request) {
-	idpClientId := r.URL.Query().Get("idpClientId")
-	if idpClientId == "" {
-		utils.RespondWithError(w, http.StatusBadRequest, "idpClientId query parameter is required")
-		return
-	}
-
-	applicationId, err := h.service.GetApplicationIdByIdpClientId(r.Context(), idpClientId)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusNotFound, err.Error())
-		return
-	}
-	utils.RespondWithSuccess(w, http.StatusOK, applicationId)
-}
-
 // CreateApplication handles POST /api/v1/applications
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	var req CreateApplicationRequest

@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/openndx/openndx-core/internal/pb/database/dbtest"
@@ -1233,117 +1231,6 @@ func TestApplicationService_CreateApplicationSubmission_EdgeCases(t *testing.T) 
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
 
-		assert.NoError(t, mock.ExpectationsWereMet())
-	})
-}
-
-func TestApplicationService_GetApplicationIdByIdpClientId(t *testing.T) {
-	t.Run("Success_ValidClientId", func(t *testing.T) {
-		db, mock, cleanup := dbtest.SetupMockDB(t)
-		defer cleanup()
-
-		pdpService := policy.NewClient("http://mock-pdp")
-		mockIDP := &idptest.Mock{}
-		service := NewService(db, pdpService, mockIDP)
-
-		expectedAppID := "app-123"
-		clientID := "client-456"
-
-		// Mock DB expectations
-		mock.ExpectQuery(`SELECT \* FROM "applications" WHERE idp_client_id`).
-			WithArgs(clientID, 1).
-			WillReturnRows(sqlmock.NewRows([]string{
-				"application_id", "application_name", "application_description",
-				"selected_fields", "member_id", "version", "idp_application_id",
-				"idp_client_id", "created_at", "updated_at",
-			}).AddRow(
-				expectedAppID, "Test App", "Description",
-				`[{"fieldName":"field1","schemaId":"schema-123"}]`, "member-123",
-				"active", "idp-app-123", clientID,
-				time.Now(), time.Now(),
-			))
-
-		// Act
-		result, err := service.GetApplicationIdByIdpClientId(context.Background(), clientID)
-
-		// Assert
-		assert.NoError(t, err)
-		assert.NotNil(t, result)
-		assert.Equal(t, expectedAppID, result.ApplicationID)
-		assert.NoError(t, mock.ExpectationsWereMet())
-	})
-
-	t.Run("Error_ClientIdNotFound", func(t *testing.T) {
-		db, mock, cleanup := dbtest.SetupMockDB(t)
-		defer cleanup()
-
-		pdpService := policy.NewClient("http://mock-pdp")
-		mockIDP := &idptest.Mock{}
-		service := NewService(db, pdpService, mockIDP)
-
-		clientID := "non-existent-client"
-
-		// Mock DB expectations - return no rows
-		mock.ExpectQuery(`SELECT \* FROM "applications" WHERE idp_client_id`).
-			WithArgs(clientID, 1).
-			WillReturnError(gorm.ErrRecordNotFound)
-
-		// Act
-		result, err := service.GetApplicationIdByIdpClientId(context.Background(), clientID)
-
-		// Assert
-		assert.Error(t, err)
-		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "application not found for idpClientId")
-		assert.Contains(t, err.Error(), clientID)
-		assert.NoError(t, mock.ExpectationsWereMet())
-	})
-
-	t.Run("Error_DatabaseError", func(t *testing.T) {
-		db, mock, cleanup := dbtest.SetupMockDB(t)
-		defer cleanup()
-
-		pdpService := policy.NewClient("http://mock-pdp")
-		mockIDP := &idptest.Mock{}
-		service := NewService(db, pdpService, mockIDP)
-
-		clientID := "client-789"
-		dbError := fmt.Errorf("database connection error")
-
-		// Mock DB expectations - return database error
-		mock.ExpectQuery(`SELECT \* FROM "applications" WHERE idp_client_id`).
-			WithArgs(clientID, 1).
-			WillReturnError(dbError)
-
-		// Act
-		result, err := service.GetApplicationIdByIdpClientId(context.Background(), clientID)
-
-		// Assert
-		assert.Error(t, err)
-		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "failed to retrieve application")
-		assert.NoError(t, mock.ExpectationsWereMet())
-	})
-
-	t.Run("Error_EmptyClientId", func(t *testing.T) {
-		db, mock, cleanup := dbtest.SetupMockDB(t)
-		defer cleanup()
-
-		pdpService := policy.NewClient("http://mock-pdp")
-		mockIDP := &idptest.Mock{}
-		service := NewService(db, pdpService, mockIDP)
-
-		// Mock DB expectations
-		mock.ExpectQuery(`SELECT \* FROM "applications" WHERE idp_client_id`).
-			WithArgs("", 1).
-			WillReturnError(gorm.ErrRecordNotFound)
-
-		// Act
-		result, err := service.GetApplicationIdByIdpClientId(context.Background(), "")
-
-		// Assert
-		assert.Error(t, err)
-		assert.Nil(t, result)
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }
