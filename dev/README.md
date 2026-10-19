@@ -48,8 +48,14 @@ every change, run it natively against the same providers instead of the
 containerized `orchestration-engine` service:
 
 ```bash
-CONFIG_PATH=cmd/oe/config.example.json go run ./cmd/oe
+CONFIG_PATH=cmd/oe/config.example.json \
+  IDP_JWKS_URL=http://localhost:8090/oauth2/jwks IDP_ISSUER=http://localhost:8090 \
+  IDP_AUDIENCE=http://api.openndx.local \
+  go run ./cmd/oe
 ```
+
+OE exits at startup without the `IDP_*` settings, which it uses to verify consumer
+tokens; `IDP_ISSUER` must match the `iss` ThunderID stamps, its public URL.
 
 ## Trying it
 

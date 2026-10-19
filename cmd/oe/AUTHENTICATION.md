@@ -30,7 +30,7 @@ A request without a valid token gets `401` with a JSON body, for example `{"erro
 | `IDP_AUDIENCE` | | **Required.** The expected `aud`, the OE's resource server identifier. |
 | `IDP_JWKS_INSECURE_SKIP_VERIFY` | `false` | `true` skips TLS certificate checks when fetching the JWKS. Local development only. |
 
-The service exits at startup if `IDP_JWKS_URL`, `IDP_ISSUER` or `IDP_AUDIENCE` is missing or invalid. In Docker Compose, `IDP_ISSUER` is ThunderID's public URL (the `iss` it stamps into tokens) and `IDP_JWKS_URL` its compose-network address.
+The service exits at startup if `IDP_JWKS_URL`, `IDP_ISSUER` or `IDP_AUDIENCE` is missing or invalid. `IDP_ISSUER` must equal the `iss` the IdP stamps into tokens. ThunderID's is its public URL (`http://localhost:8090` locally), not `/oauth2/token`, so set `IDP_ISSUER` explicitly rather than relying on the `IDP_BASE_URL` default. In Docker Compose, `IDP_ISSUER` is ThunderID's public URL (the `iss` it stamps into tokens) and `IDP_JWKS_URL` its compose-network address.
 
 ## JWKS handling
 

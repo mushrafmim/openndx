@@ -32,8 +32,9 @@ Native, from the repo root:
 ```bash
 cp cmd/oe/config.example.json cmd/oe/config.json     # git-ignored
 export DB_HOST=localhost DB_PASSWORD=<password>      # optional: see Configuration
-# Consumer tokens: ThunderID from `docker compose up thunderid`
-export IDP_BASE_URL=http://localhost:8090 IDP_AUDIENCE=http://api.openndx.local
+# Consumer tokens: ThunderID from `docker compose up thunderid`, whose `iss` is its base URL
+export IDP_JWKS_URL=http://localhost:8090/oauth2/jwks IDP_ISSUER=http://localhost:8090 \
+  IDP_AUDIENCE=http://api.openndx.local
 make run orchestration-engine
 ```
 
