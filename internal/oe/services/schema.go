@@ -110,6 +110,15 @@ func (s *SchemaService) GetActiveSchema() (*Schema, error) {
 	return serviceSchema, nil
 }
 
+// ActiveSchemaSDL returns the SDL of the currently active schema, or "" when none is active
+func (s *SchemaService) ActiveSchemaSDL() (string, error) {
+	schema, err := s.GetActiveSchema()
+	if err != nil || schema == nil {
+		return "", err
+	}
+	return schema.SDL, nil
+}
+
 // ActivateSchema activates a specific schema version
 func (s *SchemaService) ActivateSchema(version string) error {
 	if s.db == nil {

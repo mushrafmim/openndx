@@ -11,6 +11,7 @@ import (
 
 	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/pkg/auth"
+	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 )
 
 func init() {
@@ -384,4 +385,50 @@ func TestProvider_PerformRequest_LargePayload(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
 	}
+}
+
+func TestProvider_Execute(t *testing.T) {
+	t.Run("sends the GraphQL request and decodes the response", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			expectedBody := `{"query":"query { person { name } }"}`
+			if string(body) != expectedBody {
+				t.Errorf("Expected body %s, got %s", expectedBody, string(body))
+			}
+			w.Write([]byte(`{"data":{"person":{"name":"Jane"}}}`))
+		}))
+		defer server.Close()
+
+		provider := NewProvider("test-provider", server.URL, "schema1", nil)
+
+		resp, err := provider.Execute(context.Background(), graphql.Request{Query: "query { person { name } }"})
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		person, _ := resp.Data["person"].(map[string]interface{})
+		if person["name"] != "Jane" {
+			t.Errorf("Expected name Jane, got %v", resp.Data)
+		}
+	})
+
+	t.Run("returns an error when the response is not JSON", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "provider unavailable", http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		provider := NewProvider("test-provider", server.URL, "schema1", nil)
+
+		if _, err := provider.Execute(context.Background(), graphql.Request{Query: "query { a }"}); err == nil {
+			t.Fatal("Expected an error for a non-JSON response")
+		}
+	})
+
+	t.Run("returns an error when the provider is unreachable", func(t *testing.T) {
+		provider := NewProvider("test-provider", "http://127.0.0.1:0", "schema1", nil)
+
+		if _, err := provider.Execute(context.Background(), graphql.Request{Query: "query { a }"}); err == nil {
+			t.Fatal("Expected an error for an unreachable provider")
+		}
+	})
 }

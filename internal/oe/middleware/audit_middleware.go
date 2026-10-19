@@ -2,167 +2,166 @@ package middleware
 
 import (
 	"context"
-	"sync"
 
 	auditpkg "github.com/LSFLK/argus/pkg/audit"
 	"github.com/google/uuid"
 	"github.com/openndx/openndx-core/internal/monitoring"
-	"github.com/openndx/openndx-core/internal/oe/logger"
+	"github.com/openndx/openndx-core/internal/oe/consent"
+	"github.com/openndx/openndx-core/internal/oe/federator"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
+	"github.com/openndx/openndx-core/internal/oe/policy"
 )
 
-// auditConfig holds the audit configuration values
-var (
-	auditConfig struct {
-		actorType string
-		actorID   string
-	}
-	auditConfigOnce sync.Once
-)
+// Auditor sends the orchestration engine's audit events to an argus audit client.
+// It implements federator.Auditor.
+type Auditor struct {
+	client    auditpkg.Auditor
+	actorType string
+	actorID   string
+}
 
-// InitializeAuditConfig initializes the audit configuration from config values
-// This should be called once during application startup from main.go
-// Values are read from config.json via config.AuditConfig
+var _ federator.Auditor = (*Auditor)(nil)
+
+// NewAuditor returns an Auditor that logs through client and attributes service-initiated
+// events to actorType and actorID (from config.AuditConfig). A nil client records nothing.
 // Note: targetType is not stored here as it varies per API call
-func InitializeAuditConfig(actorType, actorID string) {
-	auditConfigOnce.Do(func() {
-		// These values are expected to be pre-populated with defaults from the configs package.
-		auditConfig.actorType = actorType
-		auditConfig.actorID = actorID
-	})
+func NewAuditor(client auditpkg.Auditor, actorType, actorID string) *Auditor {
+	return &Auditor{
+		client:    client,
+		actorType: actorType,
+		actorID:   actorID,
+	}
 }
 
-// getAuditActorType returns the configured actor type
-// InitializeAuditConfig guarantees this is always set (with default if needed)
-func getAuditActorType() string {
-	return auditConfig.actorType
-}
-
-// getAuditActorID returns the configured actor ID
-// InitializeAuditConfig guarantees this is always set (with default if needed)
-func getAuditActorID() string {
-	return auditConfig.actorID
+// logEvent hands the event to the audit client, which sends it asynchronously.
+func (a *Auditor) logEvent(ctx context.Context, auditRequest *auditpkg.AuditLogRequest) {
+	if a.client == nil {
+		return
+	}
+	a.client.LogEvent(ctx, auditRequest)
 }
 
 // maxAuditErrorsToLog is the maximum number of errors to include in audit log metadata
 // This limit prevents audit logs from becoming too large when there are many errors
 const maxAuditErrorsToLog = 3
 
-// Context key for audit metadata
-type contextKey string
-
-const auditMetadataKey contextKey = "auditMetadata"
-
-// Metadata holds metadata needed for audit logging in orchestration-engine
-type Metadata struct {
-	ConsumerAppID    string
-	ProviderFieldMap *[]ProviderLevelFieldRecord
-}
-
-// ProviderLevelFieldRecord represents a field record for provider-level operations
-// This is imported from federator package context
-type ProviderLevelFieldRecord struct {
-	SchemaId   string
-	ServiceKey string
-	FieldPath  string
-}
-
-// NewContextWithMetadata creates a new context with audit metadata
-func NewContextWithMetadata(ctx context.Context, metadata *Metadata) context.Context {
-	return context.WithValue(ctx, auditMetadataKey, metadata)
-}
-
-// MetadataFromContext retrieves audit metadata from context
-func MetadataFromContext(ctx context.Context) *Metadata {
-	metadata, ok := ctx.Value(auditMetadataKey).(*Metadata)
-	if !ok {
-		return nil
-	}
-	return metadata
-}
-
-// LogAuditEvent is a shared helper function that handles common audit logging logic:
-// - Gets/ensures traceID in context
-// - Marshals metadata (request or response)
-// - Creates AuditLogRequest struct
-// - Logs the event asynchronously
-// Returns the updated context with traceID (if one was generated) to ensure trace correlation
-// targetType should be determined per API call (e.g., "SERVICE" for service-to-service calls, "RESOURCE" for resource operations)
-func LogAuditEvent(ctx context.Context, eventType string, targetID *string, targetType string, requestMetadata map[string]interface{}, responseMetadata map[string]interface{}, status string) context.Context {
-	// Get or generate traceID
+// withTraceID returns ctx and its trace ID, generating one when ctx has none.
+func withTraceID(ctx context.Context) (context.Context, string) {
 	traceID := monitoring.GetTraceIDFromContext(ctx)
 	if traceID == "" {
 		traceID = uuid.New().String()
 		ctx = monitoring.WithTraceID(ctx, traceID)
 	}
+	return ctx, traceID
+}
 
-	// Use configured audit fields from config.json (with fallback defaults for safety)
-	// These are initialized in main.go via InitializeAuditConfig() from config.AuditConfig
-	actorType := getAuditActorType()
-	actorID := getAuditActorID()
+// RequestReceived logs a DATA_REQUEST event for a consumer query entering the orchestration engine.
+// Returns the updated context with traceID to ensure trace correlation
+func (a *Auditor) RequestReceived(ctx context.Context, appID, query string) context.Context {
+	ctx, traceID := withTraceID(ctx)
 
-	meta := make(map[string]interface{})
-	if len(requestMetadata) > 0 {
-		meta["requestMetadata"] = requestMetadata
-	}
-	if len(responseMetadata) > 0 {
-		meta["responseMetadata"] = responseMetadata
-	}
-
-	// Create audit request
+	// The consumer application is the actor; there is no target for the entry point
+	targetID := "SERVICE"
 	auditRequest := &auditpkg.AuditLogRequest{
 		TraceID:    &traceID,
 		Timestamp:  auditpkg.CurrentTimestamp(),
-		EventType:  eventType,
-		Status:     status,
-		ActorType:  actorType,
-		ActorID:    actorID,
-		TargetType: targetType,
-		TargetID:   targetID,
-		Metadata:   meta,
+		EventType:  "DATA_REQUEST",
+		Status:     auditpkg.StatusSuccess,
+		ActorType:  "APPLICATION",
+		ActorID:    appID,
+		TargetType: "SERVICE",
+		TargetID:   &targetID,
+		Metadata: map[string]interface{}{
+			"requestMetadata": map[string]interface{}{
+				"applicationId": appID,
+				"query":         query,
+			},
+		},
 	}
 
-	// Log the audit event asynchronously using the global audit package
-	auditpkg.LogAuditEvent(ctx, auditRequest)
-
-	// Return the updated context to ensure traceID correlation across the request flow
+	a.logEvent(ctx, auditRequest)
 	return ctx
 }
 
-// FederationServiceRequest represents a service request for audit logging
-type FederationServiceRequest struct {
-	ServiceKey     string
-	SchemaID       string
-	GraphQLRequest graphql.Request
-}
+// PolicyCheck logs a POLICY_CHECK event after a request to the Policy Decision Point.
+// Returns the updated context with traceID to ensure trace correlation
+func (a *Auditor) PolicyCheck(ctx context.Context, appID string, req *policy.PdpRequest, resp *policy.PdpResponse, err error) context.Context {
+	status := auditpkg.StatusSuccess
+	requestMetadata := map[string]interface{}{"applicationId": appID}
+	responseMetadata := make(map[string]interface{})
 
-// LogProviderFetch logs a provider fetch event to the audit service asynchronously
-func LogProviderFetch(ctx context.Context, providerSchemaID string, req *FederationServiceRequest, response *graphql.Response, err error) {
-	// Retrieve metadata from context
-	metadata := MetadataFromContext(ctx)
-	if metadata == nil {
-		logger.Log.Warn("Audit metadata missing from context, skipping audit log")
-		return
+	if req != nil {
+		requestMetadata["requiredFields"] = req.RequiredFields
 	}
 
-	// Extract requested fields for this provider
-	requestedFields := make([]string, 0)
-	if metadata.ProviderFieldMap != nil {
-		for _, field := range *metadata.ProviderFieldMap {
-			if field.SchemaId == req.SchemaID && field.ServiceKey == req.ServiceKey {
-				requestedFields = append(requestedFields, field.FieldPath)
-			}
+	if err != nil {
+		status = auditpkg.StatusFailure
+		responseMetadata["error"] = err.Error()
+	} else if resp != nil {
+		responseMetadata["authorized"] = resp.AppAuthorized
+		responseMetadata["consentRequired"] = resp.AppRequiresOwnerConsent
+		responseMetadata["accessExpired"] = resp.AppAccessExpired
+		if !resp.AppAuthorized {
+			status = auditpkg.StatusFailure
+			responseMetadata["unauthorizedFields"] = resp.UnauthorizedFields
 		}
+		if resp.AppAccessExpired {
+			status = auditpkg.StatusFailure
+			responseMetadata["expiredFields"] = resp.ExpiredFields
+		}
+		if resp.AppRequiresOwnerConsent {
+			responseMetadata["consentRequiredFields"] = resp.ConsentRequiredFields
+		}
+	}
+
+	// Policy Decision Point is a service, so targetType is "SERVICE"
+	return a.logServiceEvent(ctx, "POLICY_CHECK", "policy-decision-point", requestMetadata, responseMetadata, status)
+}
+
+// ConsentCheck logs a CONSENT_CHECK event after a request to the Consent Engine.
+// Returns the updated context with traceID to ensure trace correlation
+func (a *Auditor) ConsentCheck(ctx context.Context, appID, ownerID string, req *consent.CreateConsentRequest, resp *consent.ConsentResponseInternalView, err error) context.Context {
+	status := auditpkg.StatusSuccess
+	requestMetadata := map[string]interface{}{"applicationId": appID}
+	responseMetadata := make(map[string]interface{})
+
+	if ownerID != "" {
+		requestMetadata["ownerId"] = ownerID
+	}
+	if req != nil {
+		requestMetadata["fieldsCount"] = len(req.ConsentRequirement.Fields)
+	}
+
+	if err != nil {
+		status = auditpkg.StatusFailure
+		responseMetadata["error"] = err.Error()
+	} else if resp != nil {
+		responseMetadata["consentId"] = resp.ConsentID
+		responseMetadata["status"] = resp.Status
+		if resp.ConsentPortalURL != nil {
+			responseMetadata["consentPortalUrl"] = *resp.ConsentPortalURL
+		}
+	}
+
+	// Consent Engine is a service, so targetType is "SERVICE"
+	return a.logServiceEvent(ctx, "CONSENT_CHECK", "consent-engine", requestMetadata, responseMetadata, status)
+}
+
+// ProviderFetch logs a PROVIDER_FETCH event after a sub-query to a provider.
+func (a *Auditor) ProviderFetch(ctx context.Context, fetch federator.ProviderFetch, response *graphql.Response, err error) {
+	requestedFields := fetch.RequestedFields
+	if requestedFields == nil {
+		requestedFields = []string{}
 	}
 
 	// Combine requested data and additional info into response metadata
 	// (since we're logging after receiving the response)
 	responseMetadata := map[string]interface{}{
-		"applicationId":   metadata.ConsumerAppID,
-		"schemaId":        providerSchemaID,
+		"applicationId":   fetch.ApplicationID,
+		"schemaId":        fetch.SchemaID,
 		"requestedFields": requestedFields,
-		"query":           req.GraphQLRequest.Query,
-		"serviceKey":      req.ServiceKey,
+		"query":           fetch.Query,
+		"serviceKey":      fetch.ServiceKey,
 	}
 	if err != nil {
 		responseMetadata["error"] = err.Error()
@@ -196,43 +195,37 @@ func LogProviderFetch(ctx context.Context, providerSchemaID string, req *Federat
 		auditStatus = auditpkg.StatusFailure
 	}
 
-	// Use shared helper function to log audit event
-	// Update context with traceID if one was generated
 	// Providers are services, so targetType is "SERVICE"
-	ctx = LogAuditEvent(ctx, "PROVIDER_FETCH", &req.ServiceKey, "SERVICE", nil, responseMetadata, auditStatus)
+	a.logServiceEvent(ctx, "PROVIDER_FETCH", fetch.ServiceKey, nil, responseMetadata, auditStatus)
 }
 
-// LogRequestReceived logs a request received event to the audit service asynchronously
-func LogRequestReceived(ctx context.Context, eventType string, actorType string, actorId string, requestMetadata map[string]interface{}) context.Context {
-	// Get or generate traceID
-	traceID := monitoring.GetTraceIDFromContext(ctx)
-	if traceID == "" {
-		traceID = uuid.New().String()
-		ctx = monitoring.WithTraceID(ctx, traceID)
-	}
-	status := auditpkg.StatusSuccess
+// logServiceEvent logs an event in which the orchestration engine (the configured actor)
+// calls the service targetID. Returns the updated context with traceID (if one was generated)
+// to ensure trace correlation.
+func (a *Auditor) logServiceEvent(ctx context.Context, eventType, targetID string, requestMetadata, responseMetadata map[string]interface{}, status string) context.Context {
+	ctx, traceID := withTraceID(ctx)
 
-	targetID := "SERVICE"
 	meta := make(map[string]interface{})
 	if len(requestMetadata) > 0 {
 		meta["requestMetadata"] = requestMetadata
 	}
+	if len(responseMetadata) > 0 {
+		meta["responseMetadata"] = responseMetadata
+	}
 
-	// Create audit request
 	auditRequest := &auditpkg.AuditLogRequest{
 		TraceID:    &traceID,
 		Timestamp:  auditpkg.CurrentTimestamp(),
 		EventType:  eventType,
 		Status:     status,
-		ActorType:  actorType,
-		ActorID:    actorId,
+		ActorType:  a.actorType,
+		ActorID:    a.actorID,
 		TargetType: "SERVICE",
 		TargetID:   &targetID,
 		Metadata:   meta,
 	}
 
-	// Log the audit event asynchronously using the global audit package
-	auditpkg.LogAuditEvent(ctx, auditRequest)
+	a.logEvent(ctx, auditRequest)
 
 	// Return the updated context to ensure traceID correlation across the request flow
 	return ctx

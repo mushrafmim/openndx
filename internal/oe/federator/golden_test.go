@@ -33,6 +33,7 @@ import (
 	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	"github.com/openndx/openndx-core/internal/oe/federator"
+	"github.com/openndx/openndx-core/internal/oe/federator/schema"
 	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/middleware"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
@@ -223,7 +224,6 @@ var goldenCases = []goldenCase{
 
 func TestFederateQueryGolden(t *testing.T) {
 	logger.Init()
-	middleware.InitializeAuditConfig("SERVICE", "orchestration-engine")
 
 	for _, tc := range goldenCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -246,10 +246,20 @@ func TestFederateQueryGolden(t *testing.T) {
 }
 
 // newGoldenFederator is the only place the golden suite constructs a Federator.
+// It wires the real PDP, consent and provider clients the way cmd/oe/main.go does.
 func newGoldenFederator(t *testing.T, env *goldenEnv) *federator.Federator {
 	t.Helper()
 
-	f, err := federator.Initialize(t.Context(), env.config, provider.NewProviderHandler(nil), nil)
+	deps := federator.Deps{
+		Providers: federator.ProviderLookup(provider.NewProviderHandler(env.config.GetProviders()).GetProvider),
+		Schemas:   schema.NewSource(nil, *env.config.Schema),
+		Auditor:   middleware.NewAuditor(env.audit, "SERVICE", "orchestration-engine"),
+		Consent:   consent.NewCEServiceClient(env.config.CeConfig.ClientURL),
+	}
+	if env.config.PdpConfig.ClientURL != "" {
+		deps.Policy = policy.NewPdpClient(env.config.PdpConfig.ClientURL)
+	}
+	f, err := federator.New(deps, federator.OptionsFromConfig(env.config))
 	require.NoError(t, err)
 	return f
 }
@@ -296,10 +306,6 @@ func newGoldenEnv(t *testing.T, tc goldenCase) *goldenEnv {
 			ProviderRequests: map[string][]providerCall{},
 		},
 	}
-
-	auditpkg.ResetGlobalAuditMiddleware()
-	auditpkg.InitializeGlobalAudit(env.audit)
-	t.Cleanup(auditpkg.ResetGlobalAuditMiddleware)
 
 	schema := goldenSchemaSDL
 	env.config = &configs.Config{
@@ -490,7 +496,7 @@ func canonicalQuery(q string) string {
 	return strings.Join(tokens, " ")
 }
 
-// recordingAuditor captures audit events emitted through the global argus middleware.
+// recordingAuditor is an argus audit client that captures the events it is given.
 type recordingAuditor struct {
 	mu     sync.Mutex
 	events []auditEvent
