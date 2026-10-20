@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/openndx/openndx-core/internal/oe/auth"
-	"github.com/openndx/openndx-core/internal/oe/handlers"
 	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 )
@@ -86,8 +85,6 @@ type QueryFederator interface {
 // Deps are what the HTTP server serves. cmd/oe/main.go builds them.
 type Deps struct {
 	Federator QueryFederator
-	// SchemaService backs the /sdl routes; nil when the schema database is unavailable.
-	SchemaService handlers.SchemaService
 	// Authenticate rejects requests without a valid consumer token and otherwise
 	// adds the consumer's identity to the request context (internal/authn's
 	// RequireAuthMiddleware). Required.
@@ -98,8 +95,6 @@ type Deps struct {
 func SetupRouter(deps Deps) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	schemaHandler := handlers.NewSchemaHandler(deps.SchemaService)
-
 	// /health route
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		resp := Response{Message: "OpenNDX Server is Healthy!"}
@@ -109,16 +104,6 @@ func SetupRouter(deps Deps) *http.ServeMux {
 			return
 		}
 	})
-
-	// Schema management routes
-	mux.HandleFunc("GET /sdl", schemaHandler.GetActiveSchema)
-	mux.HandleFunc("POST /sdl", schemaHandler.CreateSchema)
-	mux.HandleFunc("GET /sdl/versions", schemaHandler.GetSchemas)
-	mux.HandleFunc("POST /sdl/validate", schemaHandler.ValidateSDL)
-	mux.HandleFunc("POST /sdl/check-compatibility", schemaHandler.CheckCompatibility)
-
-	// Handle activation endpoint with proper path matching
-	mux.HandleFunc("POST /sdl/versions/{version}/activate", schemaHandler.ActivateSchema)
 
 	// Consumer endpoint: requires a token the IdP issued for OE's audience
 	mux.Handle("POST /public/graphql", deps.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

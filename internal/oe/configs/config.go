@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/graphql-go/graphql/language/ast"
-	"github.com/graphql-go/graphql/language/parser"
-	"github.com/graphql-go/graphql/language/source"
 	"github.com/openndx/openndx-core/internal/oe/pkg/auth"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/provider"
@@ -27,8 +24,6 @@ type Config struct {
 	PdpConfig   PdpConfig             `json:"pdpConfig,omitempty"`
 	CeConfig    CeConfig              `json:"ceConfig,omitempty"`
 	AuditConfig AuditConfig           `json:"auditConfig,omitempty"`
-	Schema      *string               `json:"schema,omitempty"`
-	Sdl         *string               `json:"sdl,omitempty"`
 	ArgMapping  []*graphql.ArgMapping `json:"argMapping,omitempty"`
 
 	// FoundationalIdArgName is the name of the query argument that identifies the
@@ -143,23 +138,4 @@ func (c *Config) GetProviders() []*provider.Provider {
 		)
 	}
 	return providers
-}
-
-// GetSchemaDocument parses the schema string and returns an AST document
-func (c *Config) GetSchemaDocument() (*ast.Document, error) {
-	if c.Schema == nil || *c.Schema == "" {
-		return nil, fmt.Errorf("no schema defined in configuration")
-	}
-
-	src := source.NewSource(&source.Source{
-		Body: []byte(*c.Schema),
-		Name: "ConfigSchema",
-	})
-
-	schema, err := parser.Parse(parser.ParseParams{Source: src})
-	if err != nil {
-		return nil, fmt.Errorf("error parsing schema: %w", err)
-	}
-
-	return schema, nil
 }

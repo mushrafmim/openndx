@@ -2,29 +2,22 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/LSFLK/argus/pkg/audit"
-	coredb "github.com/OpenNSW/core/database"
 	"github.com/openndx/openndx-core/internal/authn"
-	"github.com/openndx/openndx-core/internal/database"
 	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/consent"
-	oedatabase "github.com/openndx/openndx-core/internal/oe/database"
 	"github.com/openndx/openndx-core/internal/oe/federator"
 	"github.com/openndx/openndx-core/internal/oe/federator/schema"
-	"github.com/openndx/openndx-core/internal/oe/handlers"
 	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/middleware"
 	"github.com/openndx/openndx-core/internal/oe/policy"
 	"github.com/openndx/openndx-core/internal/oe/provider"
 	"github.com/openndx/openndx-core/internal/oe/server"
-	"github.com/openndx/openndx-core/internal/oe/services"
 	"github.com/openndx/openndx-core/internal/utils"
 )
 
@@ -56,27 +49,14 @@ func main() {
 		APIKey:  apiKey,
 	})
 
-	// The schema database is optional; without it the active schema comes from config
-	// and the schema management routes report the service as unavailable.
-	dbConfig, dbIdleTimeout, err := configs.DatabaseFromEnv()
+	// The consumer schema is read once at startup. To change it, deploy a new
+	// schema file and restart, so every OE instance serves the same schema.
+	schemaPath := utils.GetEnvOrDefault("SCHEMA_PATH", schema.DefaultPath)
+	consumerSchema, err := schema.Load(schemaPath)
 	if err != nil {
-		log.Fatalf("Invalid database configuration: %v", err)
+		log.Fatalf("Failed to load the consumer schema (check SCHEMA_PATH): %v", err)
 	}
-	var schemaStore schema.Store
-	var schemaService handlers.SchemaService
-	if schemaDB, sqlDB, err := openSchemaDB(ctx, dbConfig, dbIdleTimeout); err != nil {
-		logger.Log.Error("Failed to connect to database", "error", err)
-		logger.Log.Warn("Running without database - schema management disabled")
-	} else {
-		defer sqlDB.Close()
-		svc := services.NewSchemaService(schemaDB)
-		schemaStore = svc
-		schemaService = svc
-	}
-	var configSDL string
-	if config.Schema != nil {
-		configSDL = *config.Schema
-	}
+	logger.Log.Info("Loaded consumer schema", "path", schemaPath)
 
 	// Authenticate consumers: accept tokens the IdP issued for OE's audience, whichever
 	// client requested them. IDP_JWKS_URL and IDP_ISSUER default to IDP_BASE_URL's
@@ -98,7 +78,7 @@ func main() {
 
 	deps := federator.Deps{
 		Providers: federator.ProviderLookup(provider.NewProviderHandler(config.GetProviders()).GetProvider),
-		Schemas:   schema.NewSource(schemaStore, configSDL),
+		Schemas:   consumerSchema,
 		Auditor:   middleware.NewAuditor(auditClient, config.AuditConfig.ActorType, config.AuditConfig.ActorID),
 	}
 	if config.PdpConfig.ClientURL != "" {
@@ -116,23 +96,7 @@ func main() {
 	// Run server with graceful shutdown support
 	// Server will stop when ctx is cancelled (on SIGINT/SIGTERM)
 	server.RunServer(ctx, server.Deps{
-		Federator:     federationObject,
-		SchemaService: schemaService,
-		Authenticate:  authnManager.RequireAuthMiddleware(),
+		Federator:    federationObject,
+		Authenticate: authnManager.RequireAuthMiddleware(),
 	})
-}
-
-// openSchemaDB opens the shared PostgreSQL pool and the schema store on top of it.
-// The caller must close the returned pool on shutdown.
-func openSchemaDB(ctx context.Context, cfg coredb.Config, idleTimeout time.Duration) (*oedatabase.SchemaDB, *sql.DB, error) {
-	sqlDB, err := database.Open(ctx, cfg, idleTimeout)
-	if err != nil {
-		return nil, nil, err
-	}
-	schemaDB, err := oedatabase.NewSchemaDB(sqlDB)
-	if err != nil {
-		_ = sqlDB.Close()
-		return nil, nil, err
-	}
-	return schemaDB, sqlDB, nil
 }
