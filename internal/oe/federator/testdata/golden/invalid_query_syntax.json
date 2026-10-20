@@ -6,7 +6,13 @@
         "extensions": {
           "code": "BAD_REQUEST"
         },
-        "message": "Failed to parse query: Syntax Error Query (1:40) Expected Name, found {\n\n1: query { personInfo(nic: \"199012345678\" { fullName } }\n                                          ^\n"
+        "locations": [
+          {
+            "column": 40,
+            "line": 1
+          }
+        ],
+        "message": "Expected Name, found {"
       }
     ]
   },

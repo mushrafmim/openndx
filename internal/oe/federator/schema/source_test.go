@@ -6,22 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/graphql-go/graphql/language/ast"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// queryField returns the name of the first field on the schema's Query type.
-func queryField(t *testing.T, doc *ast.Document) string {
-	t.Helper()
-	for _, def := range doc.Definitions {
-		if obj, ok := def.(*ast.ObjectDefinition); ok && obj.Name.Value == "Query" {
-			return obj.Fields[0].Name.Value
-		}
-	}
-	t.Fatal("schema has no Query type")
-	return ""
-}
 
 func TestLoad(t *testing.T) {
 	t.Run("loads the schema file", func(t *testing.T) {
@@ -31,12 +18,13 @@ func TestLoad(t *testing.T) {
 		src, err := Load(path)
 		require.NoError(t, err)
 
-		doc, err := src.Active(context.Background())
+		compiled, err := src.Active(context.Background())
 		require.NoError(t, err)
-		assert.Equal(t, "fromFile", queryField(t, doc))
+		assert.NotNil(t, compiled.Schema.Query.Fields.ForName("fromFile"))
+		assert.NotNil(t, compiled.Document)
 	})
 
-	t.Run("serves the same document for every request", func(t *testing.T) {
+	t.Run("serves the same schema for every request", func(t *testing.T) {
 		src, err := FromSDL(`type Query { a: String }`)
 		require.NoError(t, err)
 
@@ -62,7 +50,17 @@ func TestLoad(t *testing.T) {
 
 		_, err := Load(path)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "parse schema file "+path)
+		assert.Contains(t, err.Error(), "compile schema file "+path)
+	})
+
+	t.Run("fails when the schema is invalid", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "invalid.graphql")
+		require.NoError(t, os.WriteFile(path, []byte(`type Query { person: Person }`), 0o600))
+
+		_, err := Load(path)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "compile schema file "+path)
+		assert.Contains(t, err.Error(), "Person")
 	})
 
 	t.Run("loads the repository's sample schemas", func(t *testing.T) {

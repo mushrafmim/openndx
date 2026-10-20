@@ -83,7 +83,7 @@ sequenceDiagram
     participant CE
     participant P as Providers
     C->>OE: POST /public/graphql
-    OE->>OE: validate token, split query by @sourceInfo
+    OE->>OE: validate token, validate query against the schema, split it by @sourceInfo
     OE->>PDP: POST /api/v1/policy/decide
     PDP-->>OE: authorized? consent needed?
     opt owner consent required

@@ -5,17 +5,17 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/graphql-go/graphql/language/ast"
 	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/consent"
+	"github.com/openndx/openndx-core/internal/oe/federator/schema"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/policy"
 )
 
 // SchemaSource supplies the active consumer schema.
 type SchemaSource interface {
-	// Active returns the schema consumer queries are federated against.
-	Active(ctx context.Context) (*ast.Document, error)
+	// Active returns the compiled schema consumer queries are validated and federated against.
+	Active(ctx context.Context) (*schema.CompiledSchema, error)
 }
 
 // PolicyDecider asks the Policy Decision Point whether a consumer may access the requested fields.
