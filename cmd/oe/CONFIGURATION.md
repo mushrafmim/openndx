@@ -66,7 +66,7 @@ Each entry maps an argument in the consumer's query to an argument of one provid
 
 The OE reads the consumer GraphQL schema from the file named by `schemaPath` in `config.json` once at startup. The default is `schema.graphql`, and a relative path is resolved against the directory that contains `config.json`, so by default the schema sits next to the config. An absolute path is used as is. The OE exits at startup if the file is missing or doesn't parse. In Compose both files are mounted in `/app`.
 
-To change the schema, deploy a new file and restart the OE: rebuild the image, or mount the file (for example from a Kubernetes ConfigMap) and roll out the pods. Every OE instance then serves the same schema. There is no API for changing the schema at runtime, and the OE uses no database.
+The image contains only the binary, so the schema, like `config.json`, is mounted into the container. To change the schema, mount the new file (for example from a Kubernetes ConfigMap) and restart the OE or roll out the pods. Every OE instance then serves the same schema. There is no API for changing the schema at runtime, and the OE uses no database.
 
 Leaf fields in the schema must carry `@sourceInfo(providerKey, schemaId, providerField)`. See [schema.graphql](schema.graphql) for a sample.
 
