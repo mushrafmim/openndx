@@ -78,7 +78,8 @@ func (p *Provider) PerformRequest(ctx context.Context, reqBody []byte) (*http.Re
 	return p.Client.Do(req)
 }
 
-// Execute sends request to the provider and decodes its GraphQL response.
+// Execute sends request to the provider and decodes its GraphQL response. A
+// response with a non-2xx HTTP status is an error, whatever its body.
 func (p *Provider) Execute(ctx context.Context, request graphql.Request) (graphql.Response, error) {
 	reqBody, err := json.Marshal(request)
 	if err != nil {
@@ -90,6 +91,10 @@ func (p *Provider) Execute(ctx context.Context, request graphql.Request) (graphq
 		return graphql.Response{}, err
 	}
 	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode > 299 {
+		return graphql.Response{}, fmt.Errorf("provider %s returned HTTP status %d", p.ServiceKey, response.StatusCode)
+	}
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {

@@ -23,10 +23,6 @@
       "applicationId": "app-golden",
       "requiredFields": [
         {
-          "fieldName": "vehicle.getVehicleInfos.data",
-          "schemaId": "dmt-v1"
-        },
-        {
           "fieldName": "vehicle.getVehicleInfos.data.registrationNumber",
           "schemaId": "dmt-v1"
         },
@@ -49,7 +45,7 @@
   "providerRequests": {
     "dmt": [
       {
-        "query": "query Querydmt { vehicle ( ownerNic : \"199012345678\" ) { getVehicleInfos ( ownerNic : \"199012345678\" ) { data { registrationNumber } } } }"
+        "query": "query Querydmt { vehicle { getVehicleInfos ( ownerNic : \"199012345678\" ) { data { registrationNumber } } } }"
       }
     ],
     "drp": [

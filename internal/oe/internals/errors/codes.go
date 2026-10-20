@@ -22,6 +22,8 @@ const (
 const (
 	CodeMissingEntityIdentifier   = "MISSING_IDENTIFIER"
 	CodeAmbiguousEntityIdentifier = "AMBIGUOUS_IDENTIFIER"
+	// CodeProviderError marks fields a provider failed to serve, and errors a provider returned.
+	CodeProviderError = "PROVIDER_ERROR"
 )
 
 // Auth-related

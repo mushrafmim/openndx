@@ -57,7 +57,7 @@ and the provider expects `person(nic: "...") { fullName }`. The mapping is:
 }
 ```
 
-`sourceArgPath` is the consumer-side argument (dash-separated path ending in the argument name). `targetArgPath` is the leading part of the provider field path the argument belongs to: `person` for `person.fullName`. Add one mapping per provider argument.
+`sourceArgPath` is the consumer-side argument: the consumer field path from the root, then the argument name, joined with dashes (`personInfo-nic`). `targetArgPath` is the provider field the argument is attached to, a leading part of the provider field path: `person` for `person.fullName`. The argument goes on that field only. Add one mapping per provider argument.
 
 ## 4. Declare the fields in the GraphQL schema
 
@@ -83,4 +83,4 @@ Providers are read once at startup, so restart the OE after editing `config.json
 | `PDP_ERROR` | A queried field has no policy metadata for that `schemaId` (step 1). |
 | `PDP_NOT_ALLOWED` | The consumer application has no grant for the field. |
 | `CE_NOT_APPROVED` | The owner has not approved consent yet. |
-| Field missing from the result, no error | The provider call failed, so its fields are omitted. Check the OE log and the provider's URL and credentials. |
+| Field is `null` with a `PROVIDER_ERROR` at its `path` | The provider call failed: the provider was unreachable or not configured, answered with a non-2xx status, or sent a body that isn't a GraphQL response. Check the OE log and the provider's URL and credentials. |

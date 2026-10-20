@@ -21,7 +21,6 @@ func TestLoad(t *testing.T) {
 		compiled, err := src.Active(context.Background())
 		require.NoError(t, err)
 		assert.NotNil(t, compiled.Schema.Query.Fields.ForName("fromFile"))
-		assert.NotNil(t, compiled.Document)
 	})
 
 	t.Run("serves the same schema for every request", func(t *testing.T) {

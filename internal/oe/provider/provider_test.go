@@ -413,7 +413,7 @@ func TestProvider_Execute(t *testing.T) {
 
 	t.Run("returns an error when the response is not JSON", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "provider unavailable", http.StatusInternalServerError)
+			w.Write([]byte("provider unavailable"))
 		}))
 		defer server.Close()
 
@@ -421,6 +421,22 @@ func TestProvider_Execute(t *testing.T) {
 
 		if _, err := provider.Execute(context.Background(), graphql.Request{Query: "query { a }"}); err == nil {
 			t.Fatal("Expected an error for a non-JSON response")
+		}
+	})
+
+	t.Run("returns an error for a non-2xx status even with a JSON body", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"data":{"a":"stale"}}`))
+		}))
+		defer server.Close()
+
+		provider := NewProvider("test-provider", server.URL, "schema1", nil)
+
+		_, err := provider.Execute(context.Background(), graphql.Request{Query: "query { a }"})
+		if err == nil || !strings.Contains(err.Error(), "returned HTTP status 503") {
+			t.Fatalf("Expected an HTTP status error, got %v", err)
 		}
 	})
 
