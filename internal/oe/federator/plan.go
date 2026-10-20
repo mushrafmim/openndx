@@ -148,6 +148,11 @@ func (p *planner) field(field *operation.Field, scope *elementScope) error {
 		f.addField(info.ProviderField)
 		return nil
 
+	case isList && len(field.Selections) > 0:
+		// Without @sourceInfo there is no provider list to read the items from.
+		return fmt.Errorf("list field %s has no @sourceInfo, so its items can't be read from a provider",
+			strings.Join(field.SchemaPath, "."))
+
 	default:
 		// An object field without @sourceInfo, or one whose @sourceInfo only
 		// documents its provider object: its fields carry their own sources.

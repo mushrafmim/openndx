@@ -28,6 +28,11 @@ type PersonInfo {
 	tags: [String] @sourceInfo(providerKey: "drp", schemaId: "drp-v1", providerField: "person.tags")
 	ownedVehicles: [Vehicle!] @sourceInfo(providerKey: "dmt", schemaId: "dmt-v1", providerField: "vehicle.list.data")
 	untracked: String
+	contacts: [Contact]
+}
+
+type Contact {
+	phone: String @sourceInfo(providerKey: "drp", schemaId: "drp-v1", providerField: "person.phone")
 }
 
 type Vehicle {
@@ -130,6 +135,19 @@ func TestBuildPlan(t *testing.T) {
 		_, p := planFor(t, `{ __typename personInfo(nic: "1") { untracked __typename } }`, nil)
 
 		assert.Empty(t, p.fetches)
+	})
+
+	t.Run("rejects a list field with a selection but no @sourceInfo", func(t *testing.T) {
+		compiled, err := schema.Compile(planTestSchema)
+		require.NoError(t, err)
+		doc, err := parser.ParseQuery(&ast.Source{Input: `{ personInfo(nic: "1") { contacts { phone } } }`})
+		require.NoError(t, err)
+		require.Empty(t, validator.ValidateWithRules(compiled.Schema, doc, nil))
+		op, err := operation.Build(compiled, doc, "", nil)
+		require.NoError(t, err)
+
+		_, err = buildPlan(compiled.Schema, op, planTestMappings)
+		assert.EqualError(t, err, "list field personInfo.contacts has no @sourceInfo, so its items can't be read from a provider")
 	})
 
 	t.Run("rejects introspection fields", func(t *testing.T) {

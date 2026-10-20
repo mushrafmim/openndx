@@ -85,6 +85,7 @@ The OE follows the GraphQL spec's field collection: fragments and inline fragmen
 Not supported, and rejected with `BAD_REQUEST`:
 
 - selections on fields of interface or union type, because the OE can't tell which type a provider returned;
+- selections on a list field without `@sourceInfo`, because there is no provider list to read the items from;
 - introspection (`__schema`, `__type`).
 
 ## Error codes
