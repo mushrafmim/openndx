@@ -13,6 +13,7 @@ Every setting the Orchestration Engine reads. The overview and the short version
 
 | Key | Type | Notes |
 |---|---|---|
+| `schemaPath` | string | The consumer schema file. Default `schema.graphql`; a relative path is resolved against the directory of `config.json`. See [Schema](#schema). |
 | `foundationalIdArgName` | string | **Required.** The query argument that carries the data owner's ID, matched by name (for example `nic`). Startup fails if empty. If a query has none the OE returns `MISSING_IDENTIFIER`; if it has several different values, `AMBIGUOUS_IDENTIFIER`. |
 | `pdpUrl` | string | Policy Decision Point base URL. The OE appends `/api/v1/policy/decide`. If empty, the PDP and consent checks are skipped. `pdpConfig.clientUrl` overrides it. |
 | `ceUrl` | string | Consent Engine URL, which must end in `/internal/api/v1` because the OE appends `/consents`. `ceConfig.clientUrl` overrides it. If the PDP requires consent and this is empty, the request fails with `CE_ERROR`. |
@@ -21,7 +22,7 @@ Every setting the Orchestration Engine reads. The overview and the short version
 | `auditConfig.serviceUrl` | string | Argus audit service URL. Overridden by `AUDIT_SERVICE_URL`. Auditing is off when this is empty. |
 | `auditConfig.actorType`, `auditConfig.actorId` | string | Default `SERVICE` and `orchestration-engine`. |
 
-Keys that are accepted but ignored: `server.port`, `log.level`, `services.pdp_url`, the removed schema keys `schema` and `sdl` (the schema comes from a file; see [Schema](#schema)), and the removed token settings `trustUpstream`, `jwt` and `environment`. Consumer tokens are configured with the `IDP_*` environment variables below.
+Keys that are accepted but ignored: `server.port`, `log.level`, `services.pdp_url`, the removed inline schema keys `schema` and `sdl` (the schema comes from the `schemaPath` file), and the removed token settings `trustUpstream`, `jwt` and `environment`. Consumer tokens are configured with the `IDP_*` environment variables below.
 
 ### providers[]
 
@@ -51,7 +52,6 @@ Each entry maps an argument in the consumer's query to an argument of one provid
 |---|---|---|
 | `PORT` | `4000` | |
 | `CONFIG_PATH` | `./config.json` | |
-| `SCHEMA_PATH` | `./schema.graphql` | The consumer schema file. See [Schema](#schema). |
 | `IDP_JWKS_URL` | `$IDP_BASE_URL/oauth2/jwks` | Consumer token signing keys. See [AUTHENTICATION.md](AUTHENTICATION.md#configuration). |
 | `IDP_ISSUER` | `IDP_TOKEN_URL`, else `$IDP_BASE_URL/oauth2/token` | Expected token `iss`. |
 | `IDP_AUDIENCE` | | **Required.** Expected token `aud`. |
@@ -64,7 +64,7 @@ Each entry maps an argument in the consumer's query to an argument of one provid
 
 ## Schema
 
-The OE reads the consumer GraphQL schema from the file at `SCHEMA_PATH` (default `./schema.graphql`, relative to the working directory) once at startup. It exits at startup if the file is missing or doesn't parse. In Compose the file is mounted at `/app/schema.graphql`.
+The OE reads the consumer GraphQL schema from the file named by `schemaPath` in `config.json` once at startup. The default is `schema.graphql`, and a relative path is resolved against the directory that contains `config.json`, so by default the schema sits next to the config. An absolute path is used as is. The OE exits at startup if the file is missing or doesn't parse. In Compose both files are mounted in `/app`.
 
 To change the schema, deploy a new file and restart the OE: rebuild the image, or mount the file (for example from a Kubernetes ConfigMap) and roll out the pods. Every OE instance then serves the same schema. There is no API for changing the schema at runtime, and the OE uses no database.
 

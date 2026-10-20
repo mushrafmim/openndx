@@ -92,7 +92,9 @@ services:
       IDP_AUDIENCE: http://api.openndx.local
     volumes:
       - ./config.json:/app/config/config.json:ro
-      - ./schema.graphql:/app/schema.graphql:ro
+      # Next to the config: the OE reads schemaPath (default schema.graphql)
+      # relative to the config file's directory.
+      - ./schema.graphql:/app/config/schema.graphql:ro
     ports:
       - "4000:4000"
     depends_on:

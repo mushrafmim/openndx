@@ -37,16 +37,17 @@ export IDP_JWKS_URL=http://localhost:8090/oauth2/jwks IDP_ISSUER=http://localhos
 make run orchestration-engine
 ```
 
-Use `make run`, not `go run ./cmd/oe`. `make run` starts the service from `cmd/oe`, which is where `./config.json` and `./schema.graphql` are read. To run from elsewhere, set `CONFIG_PATH` and `SCHEMA_PATH` (see [CONFIGURATION.md](CONFIGURATION.md#schema)).
+Use `make run`, not `go run ./cmd/oe`. `make run` starts the service from `cmd/oe`, which is where `./config.json` is read; the schema is the `schema.graphql` next to it. To run from elsewhere, set `CONFIG_PATH` (see [CONFIGURATION.md](CONFIGURATION.md#schema)).
 
 To send a real query you need a consumer token, registered policy metadata and an application grant. Follow the [walkthrough](../../dev/WALKTHROUGH.md), or the token and curl example in [dev/README.md](../../dev/README.md).
 
 ## Configuration
 
-The OE reads a JSON file (`CONFIG_PATH`, default `./config.json`), the consumer schema file (`SCHEMA_PATH`, default `./schema.graphql`), and a few environment variables. Both files are read once at startup; to change either, deploy the new file and restart.
+The OE reads a JSON file (`CONFIG_PATH`, default `./config.json`), the consumer schema file that config names (`schemaPath`, default the `schema.graphql` next to it), and a few environment variables. Both files are read once at startup; to change either, deploy the new file and restart.
 
 | `config.json` key | Meaning |
 |---|---|
+| `schemaPath` | The consumer schema file; default `schema.graphql`, resolved against the directory of `config.json`. |
 | `foundationalIdArgName` | **Required.** Name of the query argument that identifies the data owner, for example `nic`. The service exits at startup without it. |
 | `pdpUrl` | PDP base URL. If empty, the OE skips authorization and consent checks (see Security). |
 | `ceUrl` | Consent Engine URL **including** `/internal/api/v1`. |
@@ -58,7 +59,6 @@ The OE reads a JSON file (`CONFIG_PATH`, default `./config.json`), the consumer 
 |---|---|
 | `PORT` | `4000` |
 | `CONFIG_PATH` | `./config.json` |
-| `SCHEMA_PATH` | `./schema.graphql` |
 | `IDP_JWKS_URL`, `IDP_ISSUER`, `IDP_AUDIENCE` | Consumer token validation; `IDP_AUDIENCE` is required. See [AUTHENTICATION.md](AUTHENTICATION.md). |
 | `AUDIT_SERVICE_URL`, `ARGUS_API_KEY` | override `auditConfig.serviceUrl`; audit API key |
 

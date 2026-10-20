@@ -51,12 +51,11 @@ func main() {
 
 	// The consumer schema is read once at startup. To change it, deploy a new
 	// schema file and restart, so every OE instance serves the same schema.
-	schemaPath := utils.GetEnvOrDefault("SCHEMA_PATH", schema.DefaultPath)
-	consumerSchema, err := schema.Load(schemaPath)
+	consumerSchema, err := schema.Load(config.SchemaPath)
 	if err != nil {
-		log.Fatalf("Failed to load the consumer schema (check SCHEMA_PATH): %v", err)
+		log.Fatalf("Failed to load the consumer schema (check schemaPath in the config file): %v", err)
 	}
-	logger.Log.Info("Loaded consumer schema", "path", schemaPath)
+	logger.Log.Info("Loaded consumer schema", "path", config.SchemaPath)
 
 	// Authenticate consumers: accept tokens the IdP issued for OE's audience, whichever
 	// client requested them. IDP_JWKS_URL and IDP_ISSUER default to IDP_BASE_URL's

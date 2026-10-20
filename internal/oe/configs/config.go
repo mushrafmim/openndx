@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/openndx/openndx-core/internal/oe/pkg/auth"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
@@ -29,7 +30,16 @@ type Config struct {
 	// FoundationalIdArgName is the name of the query argument that identifies the
 	// data owner (e.g. "nic"), recognized by name rather than by position.
 	FoundationalIdArgName string `json:"foundationalIdArgName,omitempty"`
+
+	// SchemaPath is the consumer GraphQL schema file, read once at startup.
+	// Defaults to DefaultSchemaPath. LoadConfigFile resolves a relative path
+	// against the directory of the config file, so the default is the
+	// schema.graphql next to config.json.
+	SchemaPath string `json:"schemaPath,omitempty"`
 }
+
+// DefaultSchemaPath is the consumer schema file used when schemaPath is unset.
+const DefaultSchemaPath = "schema.graphql"
 
 // ProviderConfig represents a provider configuration
 type ProviderConfig struct {
@@ -89,6 +99,9 @@ func LoadConfigFromBytes(data []byte) (*Config, error) {
 	if config.ArgMapping == nil {
 		config.ArgMapping = config.ArgMappings
 	}
+	if config.SchemaPath == "" {
+		config.SchemaPath = DefaultSchemaPath
+	}
 
 	// Set default audit config values if not provided
 	if config.AuditConfig.ActorType == "" {
@@ -108,7 +121,14 @@ func LoadConfigFile(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file %s: %w", path, err)
 	}
-	return LoadConfigFromBytes(bytes)
+	config, err := LoadConfigFromBytes(bytes)
+	if err != nil {
+		return nil, err
+	}
+	if !filepath.IsAbs(config.SchemaPath) {
+		config.SchemaPath = filepath.Join(filepath.Dir(path), config.SchemaPath)
+	}
+	return config, nil
 }
 
 // LoadConfig is usually called from main()

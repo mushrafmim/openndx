@@ -223,6 +223,61 @@ func TestLoadConfigFromBytes_ArgMappingExplicitlySet(t *testing.T) {
 	}
 }
 
+func TestLoadConfigFile_SchemaPath(t *testing.T) {
+	absolute := filepath.Join(t.TempDir(), "schemas", "consumer.graphql")
+	tests := []struct {
+		name       string
+		schemaPath string
+		want       func(configDir string) string
+	}{
+		{
+			name: "defaults to schema.graphql next to the config file",
+			want: func(configDir string) string { return filepath.Join(configDir, "schema.graphql") },
+		},
+		{
+			name:       "resolves a relative path against the config file's directory",
+			schemaPath: "schemas/consumer.graphql",
+			want:       func(configDir string) string { return filepath.Join(configDir, "schemas", "consumer.graphql") },
+		},
+		{
+			name:       "keeps an absolute path",
+			schemaPath: absolute,
+			want:       func(string) string { return absolute },
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configDir := t.TempDir()
+			configPath := filepath.Join(configDir, "config.json")
+			jsonData, err := json.Marshal(map[string]string{"schemaPath": tt.schemaPath})
+			if err != nil {
+				t.Fatalf("Failed to marshal config data: %v", err)
+			}
+			if err := os.WriteFile(configPath, jsonData, 0o644); err != nil {
+				t.Fatalf("Failed to write config file: %v", err)
+			}
+
+			config, err := LoadConfigFile(configPath)
+			if err != nil {
+				t.Fatalf("Expected no error, got %v", err)
+			}
+			if want := tt.want(configDir); config.SchemaPath != want {
+				t.Errorf("Expected SchemaPath to be '%s', got '%s'", want, config.SchemaPath)
+			}
+		})
+	}
+}
+
+func TestLoadConfigFromBytes_SchemaPathDefault(t *testing.T) {
+	config, err := LoadConfigFromBytes([]byte(`{}`))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if config.SchemaPath != DefaultSchemaPath {
+		t.Errorf("Expected SchemaPath to be '%s', got '%s'", DefaultSchemaPath, config.SchemaPath)
+	}
+}
+
 func TestLoadConfigFile_ValidFile(t *testing.T) {
 	// Create a temporary config file
 	tempDir := t.TempDir()

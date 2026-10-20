@@ -11,9 +11,6 @@ import (
 	"github.com/graphql-go/graphql/language/source"
 )
 
-// DefaultPath is where the consumer schema is read from when SCHEMA_PATH is unset.
-const DefaultPath = "schema.graphql"
-
 // Source serves the consumer schema. It is loaded once and doesn't change while
 // the OE runs: to change the schema, deploy a new schema file and restart.
 type Source struct {

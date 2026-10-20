@@ -28,7 +28,7 @@ curl http://localhost:4000/health
 
 ### Change the schema
 
-The OE reads the consumer schema from `SCHEMA_PATH` (default `./schema.graphql`) at startup ([CONFIGURATION.md](CONFIGURATION.md#schema)). To try a different schema, edit the file, or point `SCHEMA_PATH` at another one, and restart the OE. A file that is missing or doesn't parse stops it at startup with an error naming the path.
+The OE reads the consumer schema from `schemaPath` in `config.json` (default the `schema.graphql` next to it) at startup ([CONFIGURATION.md](CONFIGURATION.md#schema)). To try a different schema, edit the file, or point `schemaPath` at another one, and restart the OE. A file that is missing or doesn't parse stops it at startup with an error naming the path.
 
 ### Send a federated query
 
