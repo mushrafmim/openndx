@@ -13,16 +13,16 @@ Every setting the Orchestration Engine reads. The overview and the short version
 
 | Key | Type | Notes |
 |---|---|---|
+| `schemaPath` | string | The consumer schema file. Default `schema.graphql`; a relative path is resolved against the directory of `config.json`. See [Schema](#schema). |
 | `foundationalIdArgName` | string | **Required.** The query argument that carries the data owner's ID, matched by name (for example `nic`). Startup fails if empty. If a query has none the OE returns `MISSING_IDENTIFIER`; if it has several different values, `AMBIGUOUS_IDENTIFIER`. |
 | `pdpUrl` | string | Policy Decision Point base URL. The OE appends `/api/v1/policy/decide`. If empty, the PDP and consent checks are skipped. `pdpConfig.clientUrl` overrides it. |
 | `ceUrl` | string | Consent Engine URL, which must end in `/internal/api/v1` because the OE appends `/consents`. `ceConfig.clientUrl` overrides it. If the PDP requires consent and this is empty, the request fails with `CE_ERROR`. |
 | `providers` | array | Data providers; see below and [PROVIDER_CONFIGURATION.md](PROVIDER_CONFIGURATION.md). Loaded once at startup, so changes need a restart. |
 | `argMappings` | array | Argument mappings; see below. |
-| `schema` | string | Inline GraphQL SDL, used if there is no active schema in the database. |
 | `auditConfig.serviceUrl` | string | Argus audit service URL. Overridden by `AUDIT_SERVICE_URL`. Auditing is off when this is empty. |
 | `auditConfig.actorType`, `auditConfig.actorId` | string | Default `SERVICE` and `orchestration-engine`. |
 
-Keys that are accepted but ignored: `server.port`, `log.level`, `services.pdp_url`, `sdl`, and the removed token settings `trustUpstream`, `jwt` and `environment`. Consumer tokens are configured with the `IDP_*` environment variables below.
+Keys that are accepted but ignored: `server.port`, `log.level`, `services.pdp_url`, the removed inline schema keys `schema` and `sdl` (the schema comes from the `schemaPath` file), and the removed token settings `trustUpstream`, `jwt` and `environment`. Consumer tokens are configured with the `IDP_*` environment variables below.
 
 ### providers[]
 
@@ -52,11 +52,6 @@ Each entry maps an argument in the consumer's query to an argument of one provid
 |---|---|---|
 | `PORT` | `4000` | |
 | `CONFIG_PATH` | `./config.json` | |
-| `DB_HOST`, `DB_PORT` | `localhost`, `5432` | |
-| `DB_USERNAME` | `postgres` | |
-| `DB_PASSWORD` | empty | Required to use the schema database. When empty, the OE runs without it. |
-| `DB_NAME` | `orchestration_engine` | |
-| `DB_SSLMODE` | `disable` | |
 | `IDP_JWKS_URL` | `$IDP_BASE_URL/oauth2/jwks` | Consumer token signing keys. See [AUTHENTICATION.md](AUTHENTICATION.md#configuration). |
 | `IDP_ISSUER` | `IDP_TOKEN_URL`, else `$IDP_BASE_URL/oauth2/token` | Expected token `iss`. |
 | `IDP_AUDIENCE` | | **Required.** Expected token `aud`. |
@@ -67,17 +62,11 @@ Each entry maps an argument in the consumer's query to an argument of one provid
 
 [.env.example](.env.example) also lists `SERVICE_NAME`, `SERVICE_VERSION` and `OTEL_*`. The OE does not read them, and it does not serve `/metrics`. Compose passes some of them to every Go service.
 
-If the database cannot be reached at startup the service keeps running, the `/sdl` routes return `503`, and queries fall back to the schema in `config.json` or `schema.graphql`.
+## Schema
 
-## Schema resolution
+The OE reads the consumer GraphQL schema from the file named by `schemaPath` in `config.json` once at startup. The default is `schema.graphql`, and a relative path is resolved against the directory that contains `config.json`, so by default the schema sits next to the config. An absolute path is used as is. The OE exits at startup if the file is missing or doesn't parse. In Compose both files are mounted in `/app`.
 
-For each query the OE picks the schema SDL in this order:
-
-1. The **active schema** in the database (`unified_schemas` table, `is_active = true`).
-2. The `schema` key in `config.json`.
-3. A `schema.graphql` file in the working directory, or one or two directories above it.
-
-If none is found the query fails with a "No active schema found" error. The OE creates its own tables at startup (`unified_schemas`; a `schema_versions` table is created but unused).
+The image contains only the binary, so the schema, like `config.json`, is mounted into the container. To change the schema, mount the new file (for example from a Kubernetes ConfigMap) and restart the OE or roll out the pods. Every OE instance then serves the same schema. There is no API for changing the schema at runtime, and the OE uses no database.
 
 Leaf fields in the schema must carry `@sourceInfo(providerKey, schemaId, providerField)`. See [schema.graphql](schema.graphql) for a sample.
 

@@ -127,29 +127,24 @@ func TestSetupRouter_Health(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "OpenNDX Server is Healthy!")
 }
 
-func TestSetupRouter_SDL_Endpoints(t *testing.T) {
+// TestSetupRouter_NoSchemaManagementRoutes checks that the removed /sdl routes
+// are not served: the consumer schema comes only from the schema file.
+func TestSetupRouter_NoSchemaManagementRoutes(t *testing.T) {
 	mux := SetupRouter(newTestDeps(t, newTestIdP(t)))
 
-	endpoints := []string{
-		"/sdl",
-		"/sdl/versions",
-		"/sdl/validate",
-		"/sdl/check-compatibility",
-	}
-
-	for _, endpoint := range endpoints {
-		req := httptest.NewRequest(http.MethodGet, endpoint, nil)
-		if endpoint == "/sdl/validate" || endpoint == "/sdl/check-compatibility" {
-			req = httptest.NewRequest(http.MethodPost, endpoint, nil)
-		}
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/sdl"},
+		{http.MethodPost, "/sdl"},
+		{http.MethodGet, "/sdl/versions"},
+		{http.MethodPost, "/sdl/validate"},
+		{http.MethodPost, "/sdl/check-compatibility"},
+		{http.MethodPost, "/sdl/versions/1.0.0/activate"},
+	} {
+		req := httptest.NewRequest(route.method, route.path, nil)
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)
-		// We expect some response, likely 500 (service unavailable) or 200 depending on implementation details of handlers
-		// 404 means route not found, 500 means route found but handler returned error (which is expected with nil service)
 
-		// Accept 500 (service unavailable), 200 (success), 400 (bad request), or 404 (not found) as valid responses
-		assert.True(t, w.Code == http.StatusOK || w.Code == http.StatusInternalServerError || w.Code == http.StatusServiceUnavailable || w.Code == http.StatusBadRequest || w.Code == http.StatusNotFound,
-			"Endpoint %s should return 200, 400, 404, 500, or 503 (got %d)", endpoint, w.Code)
+		assert.Equal(t, http.StatusNotFound, w.Code, "%s %s", route.method, route.path)
 	}
 }
 

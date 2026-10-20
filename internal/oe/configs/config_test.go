@@ -223,6 +223,61 @@ func TestLoadConfigFromBytes_ArgMappingExplicitlySet(t *testing.T) {
 	}
 }
 
+func TestLoadConfigFile_SchemaPath(t *testing.T) {
+	absolute := filepath.Join(t.TempDir(), "schemas", "consumer.graphql")
+	tests := []struct {
+		name       string
+		schemaPath string
+		want       func(configDir string) string
+	}{
+		{
+			name: "defaults to schema.graphql next to the config file",
+			want: func(configDir string) string { return filepath.Join(configDir, "schema.graphql") },
+		},
+		{
+			name:       "resolves a relative path against the config file's directory",
+			schemaPath: "schemas/consumer.graphql",
+			want:       func(configDir string) string { return filepath.Join(configDir, "schemas", "consumer.graphql") },
+		},
+		{
+			name:       "keeps an absolute path",
+			schemaPath: absolute,
+			want:       func(string) string { return absolute },
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configDir := t.TempDir()
+			configPath := filepath.Join(configDir, "config.json")
+			jsonData, err := json.Marshal(map[string]string{"schemaPath": tt.schemaPath})
+			if err != nil {
+				t.Fatalf("Failed to marshal config data: %v", err)
+			}
+			if err := os.WriteFile(configPath, jsonData, 0o644); err != nil {
+				t.Fatalf("Failed to write config file: %v", err)
+			}
+
+			config, err := LoadConfigFile(configPath)
+			if err != nil {
+				t.Fatalf("Expected no error, got %v", err)
+			}
+			if want := tt.want(configDir); config.SchemaPath != want {
+				t.Errorf("Expected SchemaPath to be '%s', got '%s'", want, config.SchemaPath)
+			}
+		})
+	}
+}
+
+func TestLoadConfigFromBytes_SchemaPathDefault(t *testing.T) {
+	config, err := LoadConfigFromBytes([]byte(`{}`))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if config.SchemaPath != DefaultSchemaPath {
+		t.Errorf("Expected SchemaPath to be '%s', got '%s'", DefaultSchemaPath, config.SchemaPath)
+	}
+}
+
 func TestLoadConfigFile_ValidFile(t *testing.T) {
 	// Create a temporary config file
 	tempDir := t.TempDir()
@@ -418,84 +473,6 @@ func TestGetProviders_EmptyProviders(t *testing.T) {
 	}
 }
 
-func TestGetSchemaDocument_ValidSchema(t *testing.T) {
-	schemaStr := `
-		type Query {
-			hello: String
-		}
-	`
-	config := &Config{
-		Schema: &schemaStr,
-	}
-
-	doc, err := config.GetSchemaDocument()
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-	if doc == nil {
-		t.Fatal("Expected doc to be non-nil")
-	}
-	if doc.Definitions == nil {
-		t.Error("Expected doc.Definitions to be non-nil")
-	}
-}
-
-func TestGetSchemaDocument_InvalidSchema(t *testing.T) {
-	schemaStr := `invalid graphql schema {{{`
-	config := &Config{
-		Schema: &schemaStr,
-	}
-
-	doc, err := config.GetSchemaDocument()
-
-	if err == nil {
-		t.Fatal("Expected error, got nil")
-	}
-	if doc != nil {
-		t.Errorf("Expected doc to be nil, got %v", doc)
-	}
-	if !strings.Contains(err.Error(), "error parsing schema") {
-		t.Errorf("Expected error message to contain 'error parsing schema', got '%s'", err.Error())
-	}
-}
-
-func TestGetSchemaDocument_NoSchema(t *testing.T) {
-	config := &Config{
-		Schema: nil,
-	}
-
-	doc, err := config.GetSchemaDocument()
-
-	if err == nil {
-		t.Fatal("Expected error, got nil")
-	}
-	if doc != nil {
-		t.Errorf("Expected doc to be nil, got %v", doc)
-	}
-	if !strings.Contains(err.Error(), "no schema defined in configuration") {
-		t.Errorf("Expected error message to contain 'no schema defined in configuration', got '%s'", err.Error())
-	}
-}
-
-func TestGetSchemaDocument_EmptySchema(t *testing.T) {
-	schemaStr := ""
-	config := &Config{
-		Schema: &schemaStr,
-	}
-
-	doc, err := config.GetSchemaDocument()
-
-	if err == nil {
-		t.Fatal("Expected error, got nil")
-	}
-	if doc != nil {
-		t.Errorf("Expected doc to be nil, got %v", doc)
-	}
-	if !strings.Contains(err.Error(), "no schema defined in configuration") {
-		t.Errorf("Expected error message to contain 'no schema defined in configuration', got '%s'", err.Error())
-	}
-}
-
 func TestConfig_AllFieldsUnmarshal(t *testing.T) {
 	jsonData := []byte(`{
 		"ceUrl": "http://ce.example.com",
@@ -560,18 +537,7 @@ func TestConfig_AllFieldsUnmarshal(t *testing.T) {
 	if config.CeConfig.ClientURL != "http://ce-client.example.com" {
 		t.Errorf("Expected CeConfig.ClientURL to be 'http://ce-client.example.com', got '%s'", config.CeConfig.ClientURL)
 	}
-	if config.Schema == nil {
-		t.Fatal("Expected Schema to be non-nil")
-	}
-	if *config.Schema != "type Query { test: String }" {
-		t.Errorf("Expected Schema to be 'type Query { test: String }', got '%s'", *config.Schema)
-	}
-	if config.Sdl == nil {
-		t.Fatal("Expected Sdl to be non-nil")
-	}
-	if *config.Sdl != "type Mutation { test: String }" {
-		t.Errorf("Expected Sdl to be 'type Mutation { test: String }', got '%s'", *config.Sdl)
-	}
+	// The removed "schema" and "sdl" keys are still accepted, and ignored.
 }
 
 func TestProviderConfig_WithAuth(t *testing.T) {
@@ -687,38 +653,5 @@ func TestConfig_ArgMappings(t *testing.T) {
 	}
 	if len(config.ArgMapping) != len(config.ArgMappings) {
 		t.Error("Expected ArgMapping to equal ArgMappings")
-	}
-}
-
-func TestGetSchemaDocument_ComplexSchema(t *testing.T) {
-	schemaStr := `
-		type Query {
-			user(id: ID!): User
-			users: [User!]!
-		}
-
-		type User {
-			id: ID!
-			name: String!
-			email: String!
-		}
-
-		type Mutation {
-			createUser(name: String!, email: String!): User!
-		}
-	`
-	config := &Config{
-		Schema: &schemaStr,
-	}
-
-	doc, err := config.GetSchemaDocument()
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-	if doc == nil {
-		t.Fatal("Expected doc to be non-nil")
-	}
-	if len(doc.Definitions) == 0 {
-		t.Error("Expected doc.Definitions to have at least one definition")
 	}
 }

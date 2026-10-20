@@ -15,18 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newTestFederator builds a Federator from cfg with the real PDP, consent and
-// provider clients, the way cmd/oe/main.go does. A nil schemas serves cfg's schema.
+// newTestFederator builds a Federator from cfg and schemas with the real PDP,
+// consent and provider clients, the way cmd/oe/main.go does.
 func newTestFederator(t *testing.T, cfg *configs.Config, schemas SchemaSource) *Federator {
 	t.Helper()
 
-	if schemas == nil {
-		var configSDL string
-		if cfg.Schema != nil {
-			configSDL = *cfg.Schema
-		}
-		schemas = schema.NewSource(nil, configSDL)
-	}
 	deps := Deps{
 		Providers: ProviderLookup(provider.NewProviderHandler(cfg.GetProviders()).GetProvider),
 		Schemas:   schemas,
@@ -45,8 +38,12 @@ func newTestFederator(t *testing.T, cfg *configs.Config, schemas SchemaSource) *
 // staticSchema is a SchemaSource that always serves the same SDL.
 type staticSchema string
 
-func (s staticSchema) Active(context.Context) (*ast.Document, error) {
-	return schema.Parse(string(s), "TestSchema")
+func (s staticSchema) Active(ctx context.Context) (*ast.Document, error) {
+	src, err := schema.FromSDL(string(s))
+	if err != nil {
+		return nil, err
+	}
+	return src.Active(ctx)
 }
 
 const defaultTestSchemaSDL = `

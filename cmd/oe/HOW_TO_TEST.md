@@ -26,30 +26,9 @@ curl http://localhost:4000/health
 # {"message":"OpenNDX Server is Healthy!"}
 ```
 
-### Manage schema versions
+### Change the schema
 
-The `/sdl` routes need the database. Each should respond as shown.
-
-```bash
-# create a version (not active yet)
-curl -X POST http://localhost:4000/sdl -H "Content-Type: application/json" \
-  -d '{"version":"1.1.0","sdl":"type Query { hello: String }","created_by":"me"}'
-
-# list versions, then activate one
-curl http://localhost:4000/sdl/versions
-curl -X POST http://localhost:4000/sdl/versions/1.1.0/activate
-
-# the active schema
-curl http://localhost:4000/sdl
-
-# check syntax, and compatibility with the active schema
-curl -X POST http://localhost:4000/sdl/validate -H "Content-Type: application/json" \
-  -d '{"sdl":"type Query { hello: String }"}'                     # {"valid":true}
-curl -X POST http://localhost:4000/sdl/check-compatibility -H "Content-Type: application/json" \
-  -d '{"sdl":"type Query { hello: String }"}'                     # {"compatible":..., "reason":...}
-```
-
-Activating a version takes effect on the next query. Remember to activate a schema that has `@sourceInfo` directives before querying.
+The OE reads the consumer schema from `schemaPath` in `config.json` (default the `schema.graphql` next to it) at startup ([CONFIGURATION.md](CONFIGURATION.md#schema)). To try a different schema, edit the file, or point `schemaPath` at another one, and restart the OE. A file that is missing or doesn't parse stops it at startup with an error naming the path.
 
 ### Send a federated query
 
@@ -65,15 +44,3 @@ Activating a version takes effect on the next query. Remember to activate a sche
 | Everything granted and approved | `data` holds the merged fields from all providers |
 
 Open `consentPortalUrl` as the citizen to approve, then repeat the query.
-
-## Inspecting the schema table
-
-The OE keeps schema versions in the `unified_schemas` table of its database:
-
-```sql
-SELECT id, version, is_active, created_at, created_by FROM unified_schemas ORDER BY created_at DESC;
-SELECT * FROM unified_schemas WHERE is_active = true;
-DELETE FROM unified_schemas WHERE created_by = 'me';   -- clean up test versions
-```
-
-The table has `id`, `version` (unique), `sdl`, `status`, `description`, `created_at`, `updated_at`, `created_by`, `checksum` and `is_active`.

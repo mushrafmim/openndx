@@ -72,7 +72,7 @@ type PersonInfo {
 - `providerKey` and `schemaId` must match the provider entry in `config.json`.
 - `providerField` is the path in the provider's schema and must match the `fieldName` registered in step 1.
 
-The checked-in sample is [schema.graphql](schema.graphql). To change the schema the OE serves, create a new version and activate it with the `/sdl` routes (see [HOW_TO_TEST.md](HOW_TO_TEST.md#manage-schema-versions)), or edit `schema.graphql` when the database holds no active schema.
+The checked-in sample is [schema.graphql](schema.graphql). To change the schema the OE serves, edit the file named by `schemaPath` in `config.json` (default the `schema.graphql` next to it) and restart the OE (see [CONFIGURATION.md](CONFIGURATION.md#schema)).
 
 ## 5. Restart and check
 

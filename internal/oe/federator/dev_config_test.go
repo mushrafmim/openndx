@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/openndx/openndx-core/internal/oe/auth"
 	"github.com/openndx/openndx-core/internal/oe/configs"
+	"github.com/openndx/openndx-core/internal/oe/federator/schema"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/policy"
 	"github.com/stretchr/testify/assert"
@@ -19,9 +19,8 @@ import (
 // TestDevelopmentConfigArgumentMappings exercises the actual local configs and
 // schema so the walkthrough's NIC reaches each selected provider.
 func TestDevelopmentConfigArgumentMappings(t *testing.T) {
-	schema, err := os.ReadFile("../../../cmd/oe/schema.graphql")
+	schemas, err := schema.Load("../../../cmd/oe/schema.graphql")
 	require.NoError(t, err)
-	sdl := string(schema)
 	for _, configFile := range []string{"config.docker.json", "config.example.json"} {
 		for _, tc := range []struct {
 			name      string
@@ -66,7 +65,6 @@ func TestDevelopmentConfigArgumentMappings(t *testing.T) {
 			t.Run(configFile+"/"+tc.name, func(t *testing.T) {
 				cfg, err := configs.LoadConfigFile("../../../cmd/oe/" + configFile)
 				require.NoError(t, err)
-				cfg.Schema = &sdl
 				pdp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					_ = json.NewEncoder(w).Encode(policy.PdpResponse{AppAuthorized: true})
 				}))
@@ -99,7 +97,7 @@ func TestDevelopmentConfigArgumentMappings(t *testing.T) {
 					p.ProviderURL = server.URL
 					p.Auth = nil
 				}
-				f := newTestFederator(t, cfg, nil)
+				f := newTestFederator(t, cfg, schemas)
 				response := f.FederateQuery(context.Background(), tc.request, &auth.ConsumerAssertion{ApplicationID: "demo-client"})
 				require.Empty(t, response.Errors)
 				require.Equal(t, tc.want, response.Data["personInfo"])

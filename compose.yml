@@ -235,13 +235,6 @@ services:
       - PORT=4000
       - SERVICE_NAME=orchestration-engine
       - OTEL_METRICS_EXPORTER=${OTEL_METRICS_EXPORTER:-prometheus}
-      # Database configuration
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-1234}
-      - DB_NAME=${DB_NAME_OE:-orchestration_engine}
-      - DB_SSLMODE=${DB_SSLMODE:-disable}
       # IDP configuration for validating consumer tokens on /public/graphql.
       # IDP_AUDIENCE is OE's resource server (thunderid/bootstrap/resource.yaml):
       # consumers request `resource=http://api.openndx.local` with client_credentials.
@@ -253,14 +246,12 @@ services:
       - ARGUS_API_KEY=${ARGUS_API_KEY:-1234}
     volumes:
       - ./cmd/oe/config.docker.json:/app/config.json:ro
+      # The consumer schema, next to the config (its schemaPath).
       - ./cmd/oe/schema.graphql:/app/schema.graphql:ro
     extra_hosts:
       # Lets the container reach the mock providers from dev/compose.yml running
       # on the host (resolves host.docker.internal on Linux too).
       - "host.docker.internal:host-gateway"
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:4000/health"]
       interval: 30s

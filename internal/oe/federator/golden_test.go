@@ -250,9 +250,11 @@ func TestFederateQueryGolden(t *testing.T) {
 func newGoldenFederator(t *testing.T, env *goldenEnv) *federator.Federator {
 	t.Helper()
 
+	schemas, err := schema.FromSDL(goldenSchemaSDL)
+	require.NoError(t, err)
 	deps := federator.Deps{
 		Providers: federator.ProviderLookup(provider.NewProviderHandler(env.config.GetProviders()).GetProvider),
-		Schemas:   schema.NewSource(nil, *env.config.Schema),
+		Schemas:   schemas,
 		Auditor:   middleware.NewAuditor(env.audit, "SERVICE", "orchestration-engine"),
 		Consent:   consent.NewCEServiceClient(env.config.CeConfig.ClientURL),
 	}
@@ -307,10 +309,8 @@ func newGoldenEnv(t *testing.T, tc goldenCase) *goldenEnv {
 		},
 	}
 
-	schema := goldenSchemaSDL
 	env.config = &configs.Config{
 		FoundationalIdArgName: "nic",
-		Schema:                &schema,
 		ArgMapping:            goldenArgMappings,
 		CeConfig:              configs.CeConfig{ClientURL: env.consentServer(t, tc).URL},
 	}

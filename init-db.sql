@@ -13,7 +13,6 @@ SELECT COALESCE(NULLIF(:'ce_database', ''), 'consent_engine') AS ce_database \gs
 -- safe to re-run manually (the postgres image only auto-runs it on first init).
 SELECT 'CREATE DATABASE pdp' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'pdp')\gexec
 SELECT format('CREATE DATABASE %I', :'ce_database') WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'ce_database')\gexec
-SELECT 'CREATE DATABASE orchestration_engine' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'orchestration_engine')\gexec
 SELECT 'CREATE DATABASE audit' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'audit')\gexec
 SELECT 'CREATE DATABASE portal_backend' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'portal_backend')\gexec
 

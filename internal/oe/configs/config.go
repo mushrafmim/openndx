@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
-	"github.com/graphql-go/graphql/language/ast"
-	"github.com/graphql-go/graphql/language/parser"
-	"github.com/graphql-go/graphql/language/source"
 	"github.com/openndx/openndx-core/internal/oe/pkg/auth"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/provider"
@@ -27,14 +25,21 @@ type Config struct {
 	PdpConfig   PdpConfig             `json:"pdpConfig,omitempty"`
 	CeConfig    CeConfig              `json:"ceConfig,omitempty"`
 	AuditConfig AuditConfig           `json:"auditConfig,omitempty"`
-	Schema      *string               `json:"schema,omitempty"`
-	Sdl         *string               `json:"sdl,omitempty"`
 	ArgMapping  []*graphql.ArgMapping `json:"argMapping,omitempty"`
 
 	// FoundationalIdArgName is the name of the query argument that identifies the
 	// data owner (e.g. "nic"), recognized by name rather than by position.
 	FoundationalIdArgName string `json:"foundationalIdArgName,omitempty"`
+
+	// SchemaPath is the consumer GraphQL schema file, read once at startup.
+	// Defaults to DefaultSchemaPath. LoadConfigFile resolves a relative path
+	// against the directory of the config file, so the default is the
+	// schema.graphql next to config.json.
+	SchemaPath string `json:"schemaPath,omitempty"`
 }
+
+// DefaultSchemaPath is the consumer schema file used when schemaPath is unset.
+const DefaultSchemaPath = "schema.graphql"
 
 // ProviderConfig represents a provider configuration
 type ProviderConfig struct {
@@ -94,6 +99,9 @@ func LoadConfigFromBytes(data []byte) (*Config, error) {
 	if config.ArgMapping == nil {
 		config.ArgMapping = config.ArgMappings
 	}
+	if config.SchemaPath == "" {
+		config.SchemaPath = DefaultSchemaPath
+	}
 
 	// Set default audit config values if not provided
 	if config.AuditConfig.ActorType == "" {
@@ -113,7 +121,14 @@ func LoadConfigFile(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file %s: %w", path, err)
 	}
-	return LoadConfigFromBytes(bytes)
+	config, err := LoadConfigFromBytes(bytes)
+	if err != nil {
+		return nil, err
+	}
+	if !filepath.IsAbs(config.SchemaPath) {
+		config.SchemaPath = filepath.Join(filepath.Dir(path), config.SchemaPath)
+	}
+	return config, nil
 }
 
 // LoadConfig is usually called from main()
@@ -143,23 +158,4 @@ func (c *Config) GetProviders() []*provider.Provider {
 		)
 	}
 	return providers
-}
-
-// GetSchemaDocument parses the schema string and returns an AST document
-func (c *Config) GetSchemaDocument() (*ast.Document, error) {
-	if c.Schema == nil || *c.Schema == "" {
-		return nil, fmt.Errorf("no schema defined in configuration")
-	}
-
-	src := source.NewSource(&source.Source{
-		Body: []byte(*c.Schema),
-		Name: "ConfigSchema",
-	})
-
-	schema, err := parser.Parse(parser.ParseParams{Source: src})
-	if err != nil {
-		return nil, fmt.Errorf("error parsing schema: %w", err)
-	}
-
-	return schema, nil
 }
