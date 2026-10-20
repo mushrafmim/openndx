@@ -2,9 +2,25 @@
   "response": {
     "data": {
       "personInfo": {
+        "birthInfo": {
+          "date": null
+        },
         "fullName": "Nimal Perera"
       }
-    }
+    },
+    "errors": [
+      {
+        "extensions": {
+          "code": "PROVIDER_ERROR"
+        },
+        "message": "Failed to fetch data from provider rgd",
+        "path": [
+          "personInfo",
+          "birthInfo",
+          "date"
+        ]
+      }
+    ]
   },
   "policyRequests": [
     {

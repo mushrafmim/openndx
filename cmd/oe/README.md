@@ -83,7 +83,7 @@ sequenceDiagram
     participant CE
     participant P as Providers
     C->>OE: POST /public/graphql
-    OE->>OE: validate token, validate query against the schema, split it by @sourceInfo
+    OE->>OE: validate token and query, normalize it, plan one sub-query per provider by @sourceInfo
     OE->>PDP: POST /api/v1/policy/decide
     PDP-->>OE: authorized? consent needed?
     opt owner consent required
@@ -96,10 +96,10 @@ sequenceDiagram
 ```
 
 - The consumer's identity is the token's `client_id`. It is sent to the PDP as `applicationId`.
-- Each field's `providerField` and `schemaId` become the `(schemaId, fieldName)` the PDP looks up, so every field must have policy metadata registered.
+- Each selected leaf field's `providerField` and `schemaId` become the `(schemaId, fieldName)` the PDP looks up, so every field must have policy metadata registered. Fields skipped with `@skip`/`@include` aren't sent.
 - If consent is not yet approved, the response is HTTP 200 with `errors[0].extensions.code = CE_NOT_APPROVED`, plus `consentPortalUrl` and `consentStatus`. The citizen approves in the Consent Portal and the consumer repeats the query.
 - Federation errors come back as HTTP 200 with `errors[].extensions.code` (`PDP_NOT_ALLOWED`, `CE_NOT_APPROVED`, `MISSING_IDENTIFIER`, and others; see [CONFIGURATION.md](CONFIGURATION.md#error-codes)). Only an unreadable body (`400`) or a missing or invalid token (`401`, JSON) use HTTP error statuses.
-- A provider that fails is left out of the result, and the failure is audited. The response is still HTTP 200.
+- When a provider fails, including with a non-2xx HTTP status, the fields it serves are `null` with a `PROVIDER_ERROR` at their `path`, and the failure is audited. The other providers' data is still returned, with HTTP 200.
 
 ## Security and deployment
 

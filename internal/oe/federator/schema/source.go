@@ -5,10 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-
-	"github.com/graphql-go/graphql/language/ast"
-	"github.com/graphql-go/graphql/language/parser"
-	"github.com/graphql-go/graphql/language/source"
 )
 
 // Source serves the consumer schema. It is compiled once and doesn't change while
@@ -43,13 +39,4 @@ func FromSDL(sdl string) (*Source, error) {
 // be modified.
 func (s *Source) Active(_ context.Context) (*CompiledSchema, error) {
 	return s.compiled, nil
-}
-
-// parseDocument parses an SDL document with graphql-go; name identifies its origin in parse errors.
-func parseDocument(sdl, name string) (*ast.Document, error) {
-	src := source.NewSource(&source.Source{
-		Body: []byte(sdl),
-		Name: name,
-	})
-	return parser.Parse(parser.ParseParams{Source: src})
 }

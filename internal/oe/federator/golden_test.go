@@ -108,6 +108,8 @@ type goldenCase struct {
 	ceResponse *consent.ConsentResponseInternalView
 	// providerStatus overrides a provider's HTTP status by provider key.
 	providerStatus map[string]int
+	// providerBody overrides a provider's JSON response body by provider key.
+	providerBody map[string]string
 }
 
 func strPtr(s string) *string { return &s }
@@ -202,10 +204,40 @@ var goldenCases = []goldenCase{
 		request: graphql.Request{Query: `query { personInfo { fullName } }`},
 	},
 	{
-		// Characterizes current behaviour: aliases are not honoured and only the
-		// first nic is bound, so conflicting values are not detected.
+		// Every field's nic is read, aliases included, so the two data owners are
+		// rejected before the PDP is called.
 		name:    "conflicting_data_owner_ids_via_aliases",
 		request: graphql.Request{Query: `query { a: personInfo(nic: "111") { fullName } b: personInfo(nic: "222") { address } }`},
+	},
+	{
+		name:    "aliases",
+		request: graphql.Request{Query: `query { a: personInfo(nic: "199012345678") { name: fullName } b: personInfo(nic: "199012345678") { home: address birth: birthInfo { day: date } } }`},
+	},
+	{
+		name: "fragments_skip_include",
+		request: graphql.Request{
+			Query: `query Person($withBirth: Boolean!) {
+				personInfo(nic: "199012345678") {
+					...names
+					address @skip(if: true)
+					... on PersonInfo { birthInfo @include(if: $withBirth) { place } }
+				}
+			}
+			fragment names on PersonInfo { fullName }`,
+			Variables: map[string]interface{}{"withBirth": true},
+		},
+	},
+	{
+		// A non-2xx status is a failure even when the body is a GraphQL response.
+		name:           "provider_error_status_with_json_body",
+		request:        graphql.Request{Query: `query { personInfo(nic: "199012345678") { fullName birthInfo { date } } }`},
+		providerStatus: map[string]int{"rgd": http.StatusServiceUnavailable},
+		providerBody:   map[string]string{"rgd": `{"data": {"getPersonInfo": {"birthDate": "stale"}}}`},
+	},
+	{
+		name:         "provider_graphql_errors",
+		request:      graphql.Request{Query: `query { personInfo(nic: "199012345678") { fullName birthInfo { date } } }`},
+		providerBody: map[string]string{"rgd": `{"data": {"getPersonInfo": null}, "errors": [{"message": "person not found", "path": ["getPersonInfo"]}]}`},
 	},
 	{
 		name:    "mutation_rejected",
@@ -321,7 +353,7 @@ func newGoldenEnv(t *testing.T, tc goldenCase) *goldenEnv {
 		env.config.Providers = append(env.config.Providers, &configs.ProviderConfig{
 			ProviderKey: p.key,
 			SchemaID:    p.schemaID,
-			ProviderURL: env.providerServer(t, p, tc.providerStatus[p.key]).URL,
+			ProviderURL: env.providerServer(t, p, tc.providerStatus[p.key], tc.providerBody[p.key]).URL,
 		})
 	}
 	return env
@@ -371,7 +403,7 @@ func (e *goldenEnv) consentServer(t *testing.T, tc goldenCase) *httptest.Server 
 	return srv
 }
 
-func (e *goldenEnv) providerServer(t *testing.T, p goldenProvider, status int) *httptest.Server {
+func (e *goldenEnv) providerServer(t *testing.T, p goldenProvider, status int, body string) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req graphql.Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -384,12 +416,19 @@ func (e *goldenEnv) providerServer(t *testing.T, p goldenProvider, status int) *
 		})
 		e.mu.Unlock()
 
-		if status != 0 && status != http.StatusOK {
+		if status == 0 {
+			status = http.StatusOK
+		}
+		if status != http.StatusOK && body == "" {
 			http.Error(w, "provider unavailable", status)
 			return
 		}
+		if body == "" {
+			body = `{"data": ` + p.data + `}`
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_, err := w.Write([]byte(`{"data": ` + p.data + `}`))
+		w.WriteHeader(status)
+		_, err := w.Write([]byte(body))
 		if err != nil {
 			t.Errorf("write %s provider response: %v", p.key, err)
 		}

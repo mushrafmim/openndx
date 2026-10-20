@@ -63,6 +63,14 @@ jobs:
           fi
           echo "Go mod files are clean."
 
+      - name: Check that graphql-go is not a dependency
+        run: |
+          # The OE parses, validates and plans GraphQL with gqlparser (#640).
+          if grep -q 'github.com/graphql-go/' go.mod; then
+            echo "::error::go.mod lists github.com/graphql-go. Use github.com/vektah/gqlparser/v2 instead."
+            exit 1
+          fi
+
       - name: Build application
         run: go build ./${{ env.SERVICE_PATH }}
 

@@ -34,8 +34,6 @@ func TestCompile(t *testing.T) {
 
 		_, ok = compiled.SourceInfo("Query", "personInfo")
 		assert.False(t, ok, "fields without @sourceInfo are not indexed")
-
-		require.NotNil(t, compiled.Document, "the graphql-go document is kept for the mapper")
 	})
 
 	t.Run("accepts a declaration with the arguments in any order and nullability", func(t *testing.T) {

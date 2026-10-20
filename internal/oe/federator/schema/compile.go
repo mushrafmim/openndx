@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 
-	gqlgoast "github.com/graphql-go/graphql/language/ast"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/parser"
@@ -32,9 +31,6 @@ type SourceInfo struct {
 type CompiledSchema struct {
 	// Schema is the spec AST that consumer queries are validated against.
 	Schema *ast.Schema
-	// Document is the same SDL parsed by graphql-go, for the federator's mapper.
-	// Temporary: removed when the graphql-go mapper is replaced (#640, step 6).
-	Document *gqlgoast.Document
 
 	sourceInfo map[fieldKey]SourceInfo
 }
@@ -73,12 +69,7 @@ func Compile(sdl string) (*CompiledSchema, error) {
 		return nil, err
 	}
 
-	document, err := parseDocument(sdl, "ActiveSchema")
-	if err != nil {
-		return nil, err
-	}
-
-	return &CompiledSchema{Schema: schema, Document: document, sourceInfo: index}, nil
+	return &CompiledSchema{Schema: schema, sourceInfo: index}, nil
 }
 
 // checkSourceInfoDeclaration rejects a @sourceInfo declaration that the

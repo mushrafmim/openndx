@@ -1,35 +1,18 @@
 {
   "response": {
-    "data": {
-      "personInfo": {
-        "address": "12 Galle Road, Colombo",
-        "fullName": "Nimal Perera"
-      }
-    }
-  },
-  "policyRequests": [
-    {
-      "applicationId": "app-golden",
-      "requiredFields": [
-        {
-          "fieldName": "person.fullName",
-          "schemaId": "drp-v1"
-        },
-        {
-          "fieldName": "person.permanentAddress",
-          "schemaId": "drp-v1"
-        }
-      ]
-    }
-  ],
-  "consentRequests": [],
-  "providerRequests": {
-    "drp": [
+    "data": null,
+    "errors": [
       {
-        "query": "query Querydrp { person ( nic : \"111\" ) { fullName permanentAddress } }"
+        "extensions": {
+          "code": "AMBIGUOUS_IDENTIFIER"
+        },
+        "message": "Conflicting Data Owner ID values in query"
       }
     ]
   },
+  "policyRequests": [],
+  "consentRequests": [],
+  "providerRequests": {},
   "auditEvents": [
     {
       "eventType": "DATA_REQUEST",
@@ -38,22 +21,6 @@
       "actorId": "app-golden",
       "targetType": "SERVICE",
       "targetId": "SERVICE"
-    },
-    {
-      "eventType": "POLICY_CHECK",
-      "status": "SUCCESS",
-      "actorType": "SERVICE",
-      "actorId": "orchestration-engine",
-      "targetType": "SERVICE",
-      "targetId": "policy-decision-point"
-    },
-    {
-      "eventType": "PROVIDER_FETCH",
-      "status": "SUCCESS",
-      "actorType": "SERVICE",
-      "actorId": "orchestration-engine",
-      "targetType": "SERVICE",
-      "targetId": "drp"
     }
   ]
 }

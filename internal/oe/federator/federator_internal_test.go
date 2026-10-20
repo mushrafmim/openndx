@@ -484,12 +484,12 @@ func TestFederateQuery_InjectedDeps(t *testing.T) {
 			ServiceKey:      "drp",
 			SchemaID:        "drp-schema",
 			Query:           drp.got[0].Query,
-			RequestedFields: []string{"person", "person.fullName"},
+			RequestedFields: []string{"person.fullName"},
 		}, auditor.fetches[0])
 		assert.NoError(t, auditor.errs[0])
 	})
 
-	t.Run("audits a failed provider fetch and omits its data", func(t *testing.T) {
+	t.Run("audits a failed provider fetch and reports its fields as null", func(t *testing.T) {
 		auditor := &recordingAuditor{}
 		f, err := New(Deps{
 			Providers: fakeRegistry{"drp": &fakeProvider{err: fmt.Errorf("connection refused")}},
@@ -500,7 +500,12 @@ func TestFederateQuery_InjectedDeps(t *testing.T) {
 
 		resp := f.FederateQuery(context.Background(), req, assertion)
 
-		assert.Nil(t, resp.Data["personInfo"])
+		assert.Equal(t, map[string]interface{}{"fullName": nil}, resp.Data["personInfo"])
+		assert.Equal(t, []interface{}{map[string]interface{}{
+			"message":    "Failed to fetch data from provider drp",
+			"path":       []any{"personInfo", "fullName"},
+			"extensions": map[string]interface{}{"code": errors.CodeProviderError},
+		}}, resp.Errors)
 		require.Len(t, auditor.errs, 1)
 		assert.EqualError(t, auditor.errs[0], "connection refused")
 	})

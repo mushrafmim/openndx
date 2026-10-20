@@ -2,26 +2,22 @@ package federator
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 
 	"github.com/openndx/openndx-core/internal/oe/consent"
+	"github.com/openndx/openndx-core/internal/oe/federator/operation"
 	"github.com/openndx/openndx-core/internal/oe/internals/errors"
 	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/policy"
 )
 
-// authorizeAccess decides whether appID may run a query that reads fields with the
-// arguments args. It asks the PDP, identifies the data owner, and asks the owner's
-// consent when the PDP requires it. It returns a non-nil response when the query
-// must be rejected.
-func (f *Federator) authorizeAccess(ctx context.Context, appID string, fields []ProviderLevelFieldRecord, args []*ArgSource) (context.Context, *graphql.Response) {
+// authorizeAccess decides whether appID may read fields about dataOwnerID. It asks
+// the PDP, and asks the owner's consent when the PDP requires it. It returns a
+// non-nil response when the query must be rejected.
+func (f *Federator) authorizeAccess(ctx context.Context, appID string, fields []policy.RequiredField, dataOwnerID string) (context.Context, *graphql.Response) {
 	ctx, pdpResponse, denied := f.checkPolicy(ctx, appID, fields)
-	if denied != nil {
-		return ctx, denied
-	}
-
-	dataOwnerID, denied := f.dataOwnerID(args)
 	if denied != nil {
 		return ctx, denied
 	}
@@ -46,23 +42,16 @@ func rejectWithCode(message, code string) *graphql.Response {
 
 // checkPolicy asks the PDP whether appID may read fields. Without a PDP the check is
 // skipped and the returned PDP response is nil.
-func (f *Federator) checkPolicy(ctx context.Context, appID string, fields []ProviderLevelFieldRecord) (context.Context, *policy.PdpResponse, *graphql.Response) {
+func (f *Federator) checkPolicy(ctx context.Context, appID string, fields []policy.RequiredField) (context.Context, *policy.PdpResponse, *graphql.Response) {
 	if f.deps.Policy == nil {
 		logger.Log.Warn("PDP client not available, skipping policy check")
 		// Continue without PDP check - this allows the system to work without PDP
 		return ctx, nil, nil
 	}
 
-	requiredFields := make([]policy.RequiredField, 0, len(fields))
-	for _, field := range fields {
-		requiredFields = append(requiredFields, policy.RequiredField{
-			SchemaID:  field.SchemaId,
-			FieldName: field.FieldPath,
-		})
-	}
 	pdpRequest := &policy.PdpRequest{
 		AppId:          appID,
-		RequiredFields: requiredFields,
+		RequiredFields: fields,
 	}
 
 	pdpResponse, err := f.deps.Policy.MakePdpRequest(ctx, pdpRequest)
@@ -106,35 +95,21 @@ func (f *Federator) checkPolicy(ctx context.Context, appID string, fields []Prov
 	return ctx, pdpResponse, nil
 }
 
-// dataOwnerID returns the Data Owner ID, identified among args by the configured
-// foundational identifier argument name (e.g. "nic") — not by position.
-func (f *Federator) dataOwnerID(args []*ArgSource) (string, *graphql.Response) {
-	var values []string
-	for _, arg := range args {
-		if arg == nil || arg.Argument == nil || arg.Name == nil {
-			continue
-		}
-		if arg.Name.Value != f.opts.FoundationalIdArgName {
-			continue
-		}
-		if s, ok := arg.Value.GetValue().(string); ok && s != "" {
-			values = append(values, s)
-		}
-	}
-
-	if len(values) == 0 {
+// dataOwnerID returns the Data Owner ID: the value of the configured foundational
+// identifier argument (e.g. "nic") on every field of op, aliases included.
+func (f *Federator) dataOwnerID(op *operation.Operation) (string, *graphql.Response) {
+	id, err := op.DataOwnerID(f.opts.FoundationalIdArgName)
+	switch {
+	case stderrors.Is(err, operation.ErrMissingIdentifier):
 		logger.Log.Info("Data Owner ID argument is missing or invalid",
 			"foundationalIdArgName", f.opts.FoundationalIdArgName)
 		return "", rejectWithCode("Data Owner ID argument is missing or invalid", errors.CodeMissingEntityIdentifier)
+	case stderrors.Is(err, operation.ErrAmbiguousIdentifier):
+		logger.Log.Info("Conflicting Data Owner ID values found in query",
+			"foundationalIdArgName", f.opts.FoundationalIdArgName)
+		return "", rejectWithCode("Conflicting Data Owner ID values in query", errors.CodeAmbiguousEntityIdentifier)
 	}
-	for _, v := range values[1:] {
-		if v != values[0] {
-			logger.Log.Info("Conflicting Data Owner ID values found in query",
-				"foundationalIdArgName", f.opts.FoundationalIdArgName, "valueCount", len(values))
-			return "", rejectWithCode("Conflicting Data Owner ID values in query", errors.CodeAmbiguousEntityIdentifier)
-		}
-	}
-	return values[0], nil
+	return id, nil
 }
 
 // checkConsent asks the Consent Engine for dataOwnerID's consent to the fields the

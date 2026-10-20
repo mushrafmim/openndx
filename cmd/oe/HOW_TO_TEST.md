@@ -41,6 +41,8 @@ The OE reads the consumer schema from `schemaPath` in `config.json` (default the
 | Field has no policy metadata | `PDP_ERROR` |
 | No `nic` argument in the query | `BAD_REQUEST` (argument `nic` is required), or `MISSING_IDENTIFIER` if the schema declares `nic` as optional |
 | Unknown field, or wrong argument type | `BAD_REQUEST`, with `locations` |
+| Two aliases with different `nic` values | `AMBIGUOUS_IDENTIFIER` |
+| A provider is down or returns a non-2xx status | `data` has that provider's fields as `null`, with a `PROVIDER_ERROR` at each field's `path` |
 | Consent still pending | `CE_NOT_APPROVED` with `consentPortalUrl` (`<portal>?consentId=<uuid>`) and `consentStatus: pending` |
 | Everything granted and approved | `data` holds the merged fields from all providers |
 

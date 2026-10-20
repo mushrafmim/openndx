@@ -57,7 +57,7 @@ and the provider expects `person(nic: "...") { fullName }`. The mapping is:
 }
 ```
 
-`sourceArgPath` is the consumer-side argument (dash-separated path ending in the argument name). `targetArgPath` is the leading part of the provider field path the argument belongs to: `person` for `person.fullName`. Add one mapping per provider argument.
+`sourceArgPath` is the consumer-side argument: the consumer field path from the root, then the argument name, joined with dashes (`personInfo-nic`). `targetArgPath` is the provider field the argument is attached to, a leading part of the provider field path: `person` for `person.fullName`. The argument goes on that field only. Add one mapping per provider argument.
 
 ## 4. Declare the fields in the GraphQL schema
 
