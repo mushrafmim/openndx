@@ -64,11 +64,15 @@ Each entry maps an argument in the consumer's query to an argument of one provid
 
 ## Schema
 
-The OE reads the consumer GraphQL schema from the file named by `schemaPath` in `config.json` once at startup. The default is `schema.graphql`, and a relative path is resolved against the directory that contains `config.json`, so by default the schema sits next to the config. An absolute path is used as is. The OE exits at startup if the file is missing or doesn't parse. In Compose both files are mounted in `/app`.
+The OE reads the consumer GraphQL schema from the file named by `schemaPath` in `config.json` once at startup. The default is `schema.graphql`, and a relative path is resolved against the directory that contains `config.json`, so by default the schema sits next to the config. An absolute path is used as is. The OE exits at startup if the file is missing or isn't a valid schema (see below). In Compose both files are mounted in `/app`.
 
 The image contains only the binary, so the schema, like `config.json`, is mounted into the container. To change the schema, mount the new file (for example from a Kubernetes ConfigMap) and restart the OE or roll out the pods. Every OE instance then serves the same schema. There is no API for changing the schema at runtime, and the OE uses no database.
 
-Leaf fields in the schema must carry `@sourceInfo(providerKey, schemaId, providerField)`. See [schema.graphql](schema.graphql) for a sample.
+At startup the OE validates the schema against the GraphQL spec (with [gqlparser](https://github.com/vektah/gqlparser)) and compiles it once.
+
+Leaf fields in the schema must carry `@sourceInfo(providerKey, schemaId, providerField)`, with `providerKey` and `providerField` set. The schema may declare the directive itself; if it doesn't, the OE adds `directive @sourceInfo(providerKey: String!, schemaId: String, providerField: String!) on FIELD_DEFINITION`. See [schema.graphql](schema.graphql) for a sample.
+
+Every consumer query is validated against the schema before the OE calls the PDP: unknown fields, wrong argument types and missing required arguments are rejected with `BAD_REQUEST`.
 
 ## Error codes
 
@@ -82,10 +86,10 @@ GraphQL errors carry the code in `errors[].extensions.code`. Federation errors u
 | `CE_NOT_APPROVED` | Consent is pending or otherwise not approved. `consentPortalUrl` and `consentStatus` tell the consumer where and what. |
 | `CE_ERROR` | The Consent Engine call failed, or consent is needed and no Consent Engine is configured. |
 | `CE_NO_RESPONSE` | The Consent Engine returned nothing. |
-| `MISSING_IDENTIFIER` | The query has no `foundationalIdArgName` argument. |
+| `MISSING_IDENTIFIER` | The query has no value for the `foundationalIdArgName` argument. When the schema declares that argument as required (for example `nic: String!`), a query without it fails validation with `BAD_REQUEST` instead. |
 | `AMBIGUOUS_IDENTIFIER` | The query has that argument with different values. |
-| `BAD_REQUEST` | The query could not be parsed. |
+| `BAD_REQUEST` | The query could not be parsed, or failed validation against the schema. The error carries `locations` in the query. |
 
-Some errors carry only a `message` and no code, for example `Only query operation is supported` (mutations and subscriptions are rejected) and `No active schema found`.
+Mutations and subscriptions are rejected: with `BAD_REQUEST` when the schema has no `Mutation` or `Subscription` type, otherwise with the message `Only query operation is supported` and no code.
 
 HTTP-level errors: `400` for an unreadable request body, `401` with a JSON body such as `{"error":"unauthorized","message":"invalid authentication token"}` for a missing or invalid token.

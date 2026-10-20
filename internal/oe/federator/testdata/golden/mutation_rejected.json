@@ -3,8 +3,16 @@
     "data": null,
     "errors": [
       {
-        "extensions": null,
-        "message": "Only query operation is supported"
+        "extensions": {
+          "code": "BAD_REQUEST"
+        },
+        "locations": [
+          {
+            "column": 1,
+            "line": 1
+          }
+        ],
+        "message": "Schema does not support operation type \"mutation\""
       }
     ]
   },

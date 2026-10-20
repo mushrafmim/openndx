@@ -9,10 +9,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/graphql-go/graphql/language/ast"
 	"github.com/openndx/openndx-core/internal/oe/auth"
 	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/consent"
+	"github.com/openndx/openndx-core/internal/oe/federator/schema"
 	"github.com/openndx/openndx-core/internal/oe/internals/errors"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/policy"
@@ -336,7 +336,7 @@ func (c *fakeConsent) CreateConsent(_ context.Context, req *consent.CreateConsen
 // failingSchemaSource is a SchemaSource whose lookup always fails.
 type failingSchemaSource struct{}
 
-func (failingSchemaSource) Active(context.Context) (*ast.Document, error) {
+func (failingSchemaSource) Active(context.Context) (*schema.CompiledSchema, error) {
 	return nil, fmt.Errorf("could not find schema.graphql file in any expected location")
 }
 
@@ -505,6 +505,103 @@ func TestFederateQuery_InjectedDeps(t *testing.T) {
 		assert.EqualError(t, auditor.errs[0], "connection refused")
 	})
 }
+
+func TestFederateQuery_ValidatesAgainstSchema(t *testing.T) {
+	schemaSDL := `
+		type Query {
+			personInfo(nic: String!): PersonInfo
+		}
+		type PersonInfo {
+			fullName: String @sourceInfo(providerKey: "drp", providerField: "person.fullName", schemaId: "drp-schema")
+		}
+	`
+	opts := Options{
+		FoundationalIdArgName: "nic",
+		ArgMapping: []*graphql.ArgMapping{
+			{ProviderKey: "drp", SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "personInfo-nic", TargetArgPath: "person"},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		query   string
+		message string
+	}{
+		{"unknown field", `query { personInfo(nic: "123") { age } }`, `Cannot query field "age" on type "PersonInfo".`},
+		{"wrong argument type", `query { personInfo(nic: 123) { fullName } }`, `String cannot represent a non string value: 123`},
+		{"missing required argument", `query { personInfo { fullName } }`, `Field "personInfo" argument "nic" of type "String!" is required, but it was not provided.`},
+		{"syntax error", `query { personInfo(nic: "123" { fullName } }`, `Expected Name, found {`},
+	}
+	for _, tt := range tests {
+		t.Run("rejects a query with a "+tt.name, func(t *testing.T) {
+			pdp := &fakePolicy{resp: &policy.PdpResponse{AppAuthorized: true}}
+			drp := &fakeProvider{}
+			f, err := New(Deps{
+				Providers: fakeRegistry{"drp": drp},
+				Schemas:   staticSchema(schemaSDL),
+				Policy:    pdp,
+			}, opts)
+			require.NoError(t, err)
+
+			resp := f.FederateQuery(context.Background(), graphql.Request{Query: tt.query}, &auth.ConsumerAssertion{ApplicationID: "app-123"})
+
+			require.Len(t, resp.Errors, 1)
+			reported := resp.Errors[0].(map[string]interface{})
+			assert.Equal(t, tt.message, reported["message"])
+			assert.Equal(t, map[string]interface{}{"code": errors.CodeBadRequest}, reported["extensions"])
+			assert.NotEmpty(t, reported["locations"])
+			assert.Nil(t, pdp.got, "an invalid query must not reach the PDP")
+			assert.Empty(t, drp.got, "an invalid query must not reach a provider")
+		})
+	}
+}
+
+// TestFederateQuery_SharedSchemaConcurrently runs queries in parallel against one
+// cached compiled schema; run with -race to check the schema is only read.
+func TestFederateQuery_SharedSchemaConcurrently(t *testing.T) {
+	compiled, err := schema.Compile(`
+		type Query {
+			personInfo(nic: String!): PersonInfo
+		}
+		type PersonInfo {
+			fullName: String @sourceInfo(providerKey: "drp", providerField: "person.fullName", schemaId: "drp-schema")
+			address: String @sourceInfo(providerKey: "drp", providerField: "person.address", schemaId: "drp-schema")
+		}
+	`)
+	require.NoError(t, err)
+	drp := &fakeProvider{resp: graphql.Response{Data: map[string]interface{}{
+		"person": map[string]interface{}{"fullName": "Jane Doe", "address": "Colombo"},
+	}}}
+	f, err := New(Deps{
+		Providers: fakeRegistry{"drp": drp},
+		Schemas:   fixedSchema{compiled},
+	}, Options{
+		FoundationalIdArgName: "nic",
+		ArgMapping: []*graphql.ArgMapping{
+			{ProviderKey: "drp", SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "personInfo-nic", TargetArgPath: "person"},
+		},
+	})
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resp := f.FederateQuery(context.Background(),
+				graphql.Request{Query: `query { personInfo(nic: "123") { fullName address } }`},
+				&auth.ConsumerAssertion{ApplicationID: "app-123"})
+			assert.Empty(t, resp.Errors)
+			assert.Equal(t, map[string]interface{}{"fullName": "Jane Doe", "address": "Colombo"}, resp.Data["personInfo"])
+		}()
+	}
+	wg.Wait()
+}
+
+// fixedSchema is a SchemaSource that serves one compiled schema.
+type fixedSchema struct{ compiled *schema.CompiledSchema }
+
+func (s fixedSchema) Active(context.Context) (*schema.CompiledSchema, error) { return s.compiled, nil }
 
 func TestProviderLookup(t *testing.T) {
 	p := &fakeProvider{}

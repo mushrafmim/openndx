@@ -38,12 +38,8 @@ func newTestFederator(t *testing.T, cfg *configs.Config, schemas SchemaSource) *
 // staticSchema is a SchemaSource that always serves the same SDL.
 type staticSchema string
 
-func (s staticSchema) Active(ctx context.Context) (*ast.Document, error) {
-	src, err := schema.FromSDL(string(s))
-	if err != nil {
-		return nil, err
-	}
-	return src.Active(ctx)
+func (s staticSchema) Active(context.Context) (*schema.CompiledSchema, error) {
+	return schema.Compile(string(s))
 }
 
 const defaultTestSchemaSDL = `

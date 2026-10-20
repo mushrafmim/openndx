@@ -11,13 +11,13 @@ import (
 	"github.com/graphql-go/graphql/language/source"
 )
 
-// Source serves the consumer schema. It is loaded once and doesn't change while
+// Source serves the consumer schema. It is compiled once and doesn't change while
 // the OE runs: to change the schema, deploy a new schema file and restart.
 type Source struct {
-	doc *ast.Document
+	compiled *CompiledSchema
 }
 
-// Load reads and parses the consumer schema file at path.
+// Load reads and compiles the consumer schema file at path.
 func Load(path string) (*Source, error) {
 	sdl, err := os.ReadFile(path)
 	if err != nil {
@@ -25,25 +25,31 @@ func Load(path string) (*Source, error) {
 	}
 	src, err := FromSDL(string(sdl))
 	if err != nil {
-		return nil, fmt.Errorf("parse schema file %s: %w", path, err)
+		return nil, fmt.Errorf("compile schema file %s: %w", path, err)
 	}
 	return src, nil
 }
 
-// FromSDL parses sdl as the consumer schema.
+// FromSDL compiles sdl as the consumer schema.
 func FromSDL(sdl string) (*Source, error) {
-	doc, err := parser.Parse(parser.ParseParams{Source: source.NewSource(&source.Source{
-		Body: []byte(sdl),
-		Name: "Schema",
-	})})
+	compiled, err := Compile(sdl)
 	if err != nil {
 		return nil, err
 	}
-	return &Source{doc: doc}, nil
+	return &Source{compiled: compiled}, nil
 }
 
-// Active returns the consumer schema. The document is shared by all requests and
-// must not be modified.
-func (s *Source) Active(_ context.Context) (*ast.Document, error) {
-	return s.doc, nil
+// Active returns the consumer schema. It is shared by all requests and must not
+// be modified.
+func (s *Source) Active(_ context.Context) (*CompiledSchema, error) {
+	return s.compiled, nil
+}
+
+// parseDocument parses an SDL document with graphql-go; name identifies its origin in parse errors.
+func parseDocument(sdl, name string) (*ast.Document, error) {
+	src := source.NewSource(&source.Source{
+		Body: []byte(sdl),
+		Name: name,
+	})
+	return parser.Parse(parser.ParseParams{Source: src})
 }

@@ -105,29 +105,40 @@ func (f *Federator) FederateQuery(ctx context.Context, request graphql.Request, 
 	appID := consumerInfo.ApplicationID
 	ctx = f.deps.Auditor.RequestReceived(ctx, appID, request.Query)
 
-	// Convert the query string into its ast
-	src := source.NewSource(&source.Source{
-		Body: []byte(request.Query),
-		Name: "Query",
-	})
-
-	doc, err := parser.Parse(parser.ParseParams{Source: src})
-	if err != nil {
-		logger.Log.Error("Failed to parse query", "Error", err)
-		return createErrorResponseWithCode(fmt.Sprintf("Failed to parse query: %v", err), errors.CodeBadRequest)
+	query, invalid := parseQuery(request.Query)
+	if invalid != nil {
+		logger.Log.Info("Failed to parse query", "errors", invalid.Errors)
+		return *invalid
 	}
 
-	schema, err := f.deps.Schemas.Active(ctx)
+	compiled, err := f.deps.Schemas.Active(ctx)
 	if err != nil {
 		logger.Log.Error("Failed to load the active schema", "Error", err)
 		return graphql.Response{
 			Data: nil,
 			Errors: []interface{}{
 				&graphql.JSONError{
-					Message: "No active schema found. Please create and activate a schema using the schema management API first, or ensure schema.graphql file exists.",
+					Message: "No active schema found.",
 				},
 			},
 		}
+	}
+
+	if invalid := validateQuery(compiled.Schema, query); invalid != nil {
+		logger.Log.Info("Query failed validation against the schema", "errors", invalid.Errors)
+		return *invalid
+	}
+
+	// The mapper, builder and accumulator still work on graphql-go's AST, so the
+	// validated query is parsed again (#640, step 6 removes this).
+	schema := compiled.Document
+	doc, err := parser.Parse(parser.ParseParams{Source: source.NewSource(&source.Source{
+		Body: []byte(request.Query),
+		Name: "Query",
+	})})
+	if err != nil {
+		logger.Log.Error("Failed to parse query", "Error", err)
+		return createErrorResponseWithCode(fmt.Sprintf("Failed to parse query: %v", err), errors.CodeBadRequest)
 	}
 
 	// Collect the directives from the query

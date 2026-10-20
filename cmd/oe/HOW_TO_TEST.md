@@ -28,7 +28,7 @@ curl http://localhost:4000/health
 
 ### Change the schema
 
-The OE reads the consumer schema from `schemaPath` in `config.json` (default the `schema.graphql` next to it) at startup ([CONFIGURATION.md](CONFIGURATION.md#schema)). To try a different schema, edit the file, or point `schemaPath` at another one, and restart the OE. A file that is missing or doesn't parse stops it at startup with an error naming the path.
+The OE reads the consumer schema from `schemaPath` in `config.json` (default the `schema.graphql` next to it) at startup ([CONFIGURATION.md](CONFIGURATION.md#schema)). To try a different schema, edit the file, or point `schemaPath` at another one, and restart the OE. A file that is missing or isn't a valid schema stops it at startup with an error naming the path.
 
 ### Send a federated query
 
@@ -39,7 +39,8 @@ The OE reads the consumer schema from `schemaPath` in `config.json` (default the
 | No or bad token | HTTP `401`, `{"error":"unauthorized",...}` |
 | Application has no grant for a field | `errors[0].extensions.code` is `PDP_NOT_ALLOWED`, with `unauthorizedFields` |
 | Field has no policy metadata | `PDP_ERROR` |
-| No `nic` argument in the query | `MISSING_IDENTIFIER` |
+| No `nic` argument in the query | `BAD_REQUEST` (argument `nic` is required), or `MISSING_IDENTIFIER` if the schema declares `nic` as optional |
+| Unknown field, or wrong argument type | `BAD_REQUEST`, with `locations` |
 | Consent still pending | `CE_NOT_APPROVED` with `consentPortalUrl` (`<portal>?consentId=<uuid>`) and `consentStatus: pending` |
 | Everything granted and approved | `data` holds the merged fields from all providers |
 

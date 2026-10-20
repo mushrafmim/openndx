@@ -4,23 +4,19 @@
     "errors": [
       {
         "extensions": {
-          "code": "MISSING_IDENTIFIER"
+          "code": "BAD_REQUEST"
         },
-        "message": "Data Owner ID argument is missing or invalid"
+        "locations": [
+          {
+            "column": 9,
+            "line": 1
+          }
+        ],
+        "message": "Field \"personInfo\" argument \"nic\" of type \"String!\" is required, but it was not provided."
       }
     ]
   },
-  "policyRequests": [
-    {
-      "applicationId": "app-golden",
-      "requiredFields": [
-        {
-          "fieldName": "person.fullName",
-          "schemaId": "drp-v1"
-        }
-      ]
-    }
-  ],
+  "policyRequests": [],
   "consentRequests": [],
   "providerRequests": {},
   "auditEvents": [
@@ -31,14 +27,6 @@
       "actorId": "app-golden",
       "targetType": "SERVICE",
       "targetId": "SERVICE"
-    },
-    {
-      "eventType": "POLICY_CHECK",
-      "status": "SUCCESS",
-      "actorType": "SERVICE",
-      "actorId": "orchestration-engine",
-      "targetType": "SERVICE",
-      "targetId": "policy-decision-point"
     }
   ]
 }
