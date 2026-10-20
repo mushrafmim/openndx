@@ -1,6 +1,11 @@
 package operation
 
 import (
+	"context"
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/openndx/openndx-core/internal/oe/federator/schema"
@@ -325,4 +330,84 @@ func TestDataOwnerID(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "42", got)
 	})
+}
+
+// TestBuild_SampleSchema normalizes a query against cmd/oe/schema.graphql that
+// uses a named fragment, an inline fragment, aliases, @skip and @include with
+// variables, and two data owners.
+func TestBuild_SampleSchema(t *testing.T) {
+	src, err := schema.Load("../../../../cmd/oe/schema.graphql")
+	require.NoError(t, err)
+	compiled, err := src.Active(context.Background())
+	require.NoError(t, err)
+
+	doc, err := parser.ParseQuery(&ast.Source{Name: "Query", Input: `
+		query Person($nic: String!, $withBirth: Boolean!, $skipAddress: Boolean = true) {
+			citizen: personInfo(nic: $nic) {
+				...identity
+				home: address @skip(if: $skipAddress)
+				... on PersonInfo { profession }
+				birthInfo @include(if: $withBirth) {
+					place: birthPlace
+					district
+				}
+			}
+			other: personInfo(nic: "512346") { fullName }
+		}
+		fragment identity on PersonInfo { fullName sex dateOfBirth }`})
+	require.NoError(t, err)
+	require.Empty(t, validator.ValidateWithRules(compiled.Schema, doc, nil))
+
+	op, err := Build(compiled, doc, "Person", map[string]any{"nic": "748213", "withBirth": true})
+	require.NoError(t, err)
+
+	assert.Equal(t, strings.TrimLeft(`
+citizen (personInfo) nic=748213
+  fullName <- drp person.fullName
+  sex <- rgd getPersonInfo.sex
+  dateOfBirth <- rgd getPersonInfo.birthDate
+  profession <- drp person.profession
+  birthInfo
+    place (birthPlace) <- rgd getPersonInfo.birthPlace
+    district <- rgd getPersonInfo.district
+other (personInfo) nic=512346
+  fullName <- drp person.fullName
+`, "\n"), render(op.Fields))
+
+	_, err = op.DataOwnerID("nic")
+	assert.ErrorIs(t, err, ErrAmbiguousIdentifier, "the query asks about two data owners")
+
+	// The argument mappings in cmd/oe/config.example.json.
+	drp := &graphql.ArgMapping{ProviderKey: "drp", SchemaID: "drp-schema-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "nic"}
+	rgd := &graphql.ArgMapping{ProviderKey: "rgd", SchemaID: "abc-212", SourceArgPath: "personInfo-nic", TargetArgPath: "getPersonInfo", TargetArgName: "nic"}
+	var bound []string
+	for _, binding := range op.BindArguments([]*graphql.ArgMapping{drp, rgd}) {
+		bound = append(bound, fmt.Sprintf("%s %s=%v", binding.Mapping.ProviderKey, strings.Join(binding.Field.Path, "."), binding.Value))
+	}
+	assert.Equal(t, []string{"drp citizen=748213", "drp other=512346", "rgd citizen=748213", "rgd other=512346"}, bound)
+}
+
+// render prints fields one per line, indented by depth: the response key, the
+// field name when aliased, the arguments, and the @sourceInfo.
+func render(fields []*Field) string {
+	var b strings.Builder
+	var write func(fields []*Field, indent string)
+	write = func(fields []*Field, indent string) {
+		for _, field := range fields {
+			b.WriteString(indent + field.ResponseKey)
+			if field.Name != field.ResponseKey {
+				b.WriteString(" (" + field.Name + ")")
+			}
+			for _, name := range slices.Sorted(maps.Keys(field.Arguments)) {
+				fmt.Fprintf(&b, " %s=%v", name, field.Arguments[name])
+			}
+			if info := field.SourceInfo; info != nil {
+				fmt.Fprintf(&b, " <- %s %s", info.ProviderKey, info.ProviderField)
+			}
+			b.WriteString("\n")
+			write(field.Selections, indent+"  ")
+		}
+	}
+	write(fields, "")
+	return b.String()
 }
