@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/database"
+	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/openndx/openndx-core/internal/utils"
 )
 
@@ -46,18 +47,13 @@ type SecurityConfig struct {
 	RateLimit  int
 }
 
-// IDPConfig holds IDP configuration
+// IDPConfig holds the configuration for validating consent-portal tokens.
 type IDPConfig struct {
-	Issuer   string
-	JwksUrl  string
-	Audience string
-	ClientID string
+	// Authn validates each token's signature, issuer, audience and expiry.
+	Authn authn.Config
 	// SubjectClaim is the token claim carrying the data owner's canonical UID
 	// (matched against the consent record's owner_id). Defaults to "sub".
 	SubjectClaim string
-	// InsecureSkipVerify skips TLS verification on the JWKS fetch. Dev-only
-	// (e.g. a self-signed local IdP); leave false in production.
-	InsecureSkipVerify bool
 }
 
 // LoadConfig loads configuration from flags and environment variables
@@ -88,12 +84,10 @@ func loadConfig(serviceName string, args []string) (*Config, error) {
 		return nil, err
 	}
 
-	// Reading IDP Configs (generic across IdPs; each check is applied by the
-	// verifier only when its value is configured)
+	// Reading IDP Configs. The JWKS URL, issuer and audience are required.
 	userIssuer := utils.GetEnvOrDefault("IDP_ISSUER", "")
 	userAudience := utils.GetEnvOrDefault("IDP_AUDIENCE", "")
 	userJwksURL := utils.GetEnvOrDefault("IDP_JWKS_URL", "")
-	userClientID := utils.GetEnvOrDefault("IDP_CLIENT_ID", "")
 	// Token claim carrying the owner UID matched against consent owner_id.
 	userSubjectClaim := utils.GetEnvOrDefault("IDP_SUBJECT_CLAIM", "sub")
 	// Dev-only: skip TLS verification on the JWKS fetch (self-signed local IdP).
@@ -159,12 +153,13 @@ func loadConfig(serviceName string, args []string) (*Config, error) {
 			RateLimit:  *rateLimit,
 		},
 		IDPConfig: IDPConfig{
-			Issuer:             userIssuer,
-			JwksUrl:            userJwksURL,
-			Audience:           userAudience,
-			ClientID:           userClientID,
-			SubjectClaim:       userSubjectClaim,
-			InsecureSkipVerify: jwksInsecureSkipVerify,
+			Authn: authn.Config{
+				JWKSURL:               userJwksURL,
+				Issuer:                userIssuer,
+				Audience:              userAudience,
+				InsecureSkipTLSVerify: jwksInsecureSkipVerify,
+			},
+			SubjectClaim: userSubjectClaim,
 		},
 		Database: database.Config{
 			Driver: database.Postgres,
@@ -218,6 +213,12 @@ func getDefaultRateLimit(env string) int {
 func (c *Config) Validate() error {
 	if c == nil {
 		return fmt.Errorf("configuration is required")
+	}
+	if err := c.IDPConfig.Authn.Validate(); err != nil {
+		return fmt.Errorf("invalid IDP configuration (check IDP_JWKS_URL, IDP_ISSUER and IDP_AUDIENCE): %w", err)
+	}
+	if c.IDPConfig.SubjectClaim == "" {
+		return fmt.Errorf("IDP_SUBJECT_CLAIM must not be empty")
 	}
 	if err := c.Database.Validate(); err != nil {
 		return fmt.Errorf("invalid database configuration: %w", err)

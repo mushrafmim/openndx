@@ -3,7 +3,6 @@ package router
 import (
 	"net/http"
 
-	"github.com/openndx/openndx-core/internal/ce/auth"
 	"github.com/openndx/openndx-core/internal/ce/handlers"
 	"github.com/openndx/openndx-core/internal/ce/middleware"
 	"github.com/openndx/openndx-core/internal/utils"
@@ -13,21 +12,24 @@ import (
 type Router struct {
 	internalHandler *handlers.InternalHandler
 	portalHandler   *handlers.PortalHandler
-	authMiddleware  *middleware.JWTAuthMiddleware
+	authenticate    func(http.Handler) http.Handler
 	corsMiddleware  func(http.Handler) http.Handler
 }
 
-// NewRouter creates a new router with all dependencies
+// NewRouter creates a new router with all dependencies. authenticate protects
+// the portal consent routes: it rejects requests without a valid token and
+// otherwise adds the data owner's subject to the request context
+// (internal/authn's RequireAuthMiddleware followed by middleware.OwnerSubject).
 func NewRouter(
 	allowedOrigins string,
 	internalHandler *handlers.InternalHandler,
 	portalHandler *handlers.PortalHandler,
-	jwtVerifier *auth.JWTVerifier,
+	authenticate func(http.Handler) http.Handler,
 ) *Router {
 	return &Router{
 		internalHandler: internalHandler,
 		portalHandler:   portalHandler,
-		authMiddleware:  middleware.NewJWTAuthMiddleware(jwtVerifier),
+		authenticate:    authenticate,
 		corsMiddleware:  middleware.NewCORSMiddleware(allowedOrigins),
 	}
 }
@@ -60,13 +62,13 @@ func (r *Router) registerPortalRoutes(mux *http.ServeMux) {
 	// Consent endpoints (authentication required)
 	mux.Handle("GET /api/v1/consents",
 		utils.PanicRecoveryMiddleware(
-			r.authMiddleware.Authenticate(http.HandlerFunc(r.portalHandler.ListConsents))))
+			r.authenticate(http.HandlerFunc(r.portalHandler.ListConsents))))
 	mux.Handle("GET /api/v1/consents/{consentId}",
 		utils.PanicRecoveryMiddleware(
-			r.authMiddleware.Authenticate(http.HandlerFunc(r.portalHandler.GetConsent))))
+			r.authenticate(http.HandlerFunc(r.portalHandler.GetConsent))))
 	mux.Handle("PUT /api/v1/consents/{consentId}",
 		utils.PanicRecoveryMiddleware(
-			r.authMiddleware.Authenticate(http.HandlerFunc(r.portalHandler.UpdateConsent))))
+			r.authenticate(http.HandlerFunc(r.portalHandler.UpdateConsent))))
 }
 
 // ApplyCORS wraps a handler with CORS middleware

@@ -35,8 +35,9 @@ inboundAuthConfig:
 # in docs/DESIGN-esignet-citizen-authentication.md is still being built. Do not mount
 # into a shared or production deployment.
 #
-# clientId matches CONSENT_PORTAL_CLIENT_ID in .env, which consent-engine reads as
-# IDP_CLIENT_ID to validate portal-endpoint tokens. redirectUris are built from
+# clientId matches CONSENT_PORTAL_CLIENT_ID in .env, which the consent portal logs in
+# with. Its tokens are audienced to the client ID, which consent-engine checks as
+# IDP_AUDIENCE (CONSENT_ENGINE_AUDIENCE in .env). redirectUris are built from
 # CONSENT_PORTAL_URL, resolved at bootstrap time (SubstituteEnvironmentVariables);
 # the thunderid-setup service sets it.
 #

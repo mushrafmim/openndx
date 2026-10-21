@@ -10,9 +10,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/openndx/openndx-core/internal/ce/auth"
+	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/openndx/openndx-core/internal/ce/config"
 	"github.com/openndx/openndx-core/internal/ce/handlers"
+	"github.com/openndx/openndx-core/internal/ce/middleware"
 	"github.com/openndx/openndx-core/internal/ce/router"
 	"github.com/openndx/openndx-core/internal/ce/services"
 	"github.com/openndx/openndx-core/internal/database"
@@ -82,28 +83,27 @@ func run() error {
 	internalHandler := handlers.NewInternalHandler(consentService)
 	portalHandler := handlers.NewPortalHandler(consentService)
 
-	slog.Info("JWT verifier configuration",
-		"client_id", cfg.IDPConfig.ClientID,
-		"issuer", cfg.IDPConfig.Issuer,
-		"audience", cfg.IDPConfig.Audience,
-		"jwks_url", cfg.IDPConfig.JwksUrl,
+	slog.Info("Portal authentication configuration",
+		"issuer", cfg.IDPConfig.Authn.Issuer,
+		"audience", cfg.IDPConfig.Authn.Audience,
+		"jwks_url", cfg.IDPConfig.Authn.JWKSURL,
 		"subject_claim", cfg.IDPConfig.SubjectClaim,
-		"jwks_insecure_skip_verify", cfg.IDPConfig.InsecureSkipVerify)
+		"jwks_insecure_skip_verify", cfg.IDPConfig.Authn.InsecureSkipTLSVerify)
 
-	jwtVerifier, err := auth.NewJWTVerifier(auth.JWTVerifierConfig{
-		JWKSUrl:            cfg.IDPConfig.JwksUrl,
-		Issuer:             cfg.IDPConfig.Issuer,
-		Audience:           cfg.IDPConfig.Audience,
-		ClientID:           cfg.IDPConfig.ClientID,
-		SubjectClaim:       cfg.IDPConfig.SubjectClaim,
-		InsecureSkipVerify: cfg.IDPConfig.InsecureSkipVerify,
-	})
+	// Authenticate consent-portal requests: authn validates the token, then
+	// OwnerSubject reads the data owner's UID from the configured claim.
+	authnManager, err := authn.NewManager(cfg.IDPConfig.Authn)
 	if err != nil {
-		return fmt.Errorf("initialize JWT verifier: %w", err)
+		return fmt.Errorf("initialize authentication: %w", err)
+	}
+	requireAuth := authnManager.RequireAuthMiddleware()
+	ownerSubject := middleware.OwnerSubject(cfg.IDPConfig.SubjectClaim)
+	authenticate := func(next http.Handler) http.Handler {
+		return requireAuth(ownerSubject(next))
 	}
 
 	// Initialize router and register all routes
-	apiRouter := router.NewRouter(cfg.Service.AllowedOrigins, internalHandler, portalHandler, jwtVerifier)
+	apiRouter := router.NewRouter(cfg.Service.AllowedOrigins, internalHandler, portalHandler, authenticate)
 	mux := http.NewServeMux()
 
 	slog.Info("Registering API routes")

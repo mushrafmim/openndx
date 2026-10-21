@@ -50,9 +50,9 @@ go run ./cmd/ce        # or: make run consent-engine
 | `ENVIRONMENT` | `local` | |
 | `CONSENT_PORTAL_URL` | `http://localhost:5173` | Must include scheme and host. Consent links are `<url>?consentId=<uuid>`. |
 | `CORS_ALLOWED_ORIGINS` | empty | Comma-separated. `CONSENT_PORTAL_URL` is always allowed. A value of `*` stops the service at startup. |
-| `IDP_JWKS_URL` | empty | Signing keys for portal tokens. If empty or unreachable, every portal call returns 401. |
-| `IDP_ISSUER`, `IDP_AUDIENCE`, `IDP_CLIENT_ID` | empty | Each check applies only when set. With no issuer and audience, any token signed by a key in the JWKS is accepted. |
-| `IDP_SUBJECT_CLAIM` | `sub` | Token claim whose value must equal the consent's `ownerId`. Compose sets `nic`. |
+| `IDP_JWKS_URL` | none | **Required.** Signing keys for portal tokens. If unreachable, every portal call returns 401. |
+| `IDP_ISSUER`, `IDP_AUDIENCE` | none | **Required.** Expected token `iss` and `aud`. Compose uses ThunderID's base URL and `CONSENT_PORTAL`. |
+| `IDP_SUBJECT_CLAIM` | `sub` | Token claim whose value must equal the consent's `ownerId`. Compose sets `nic`. A token without it gets `401`. |
 | `IDP_JWKS_INSECURE_SKIP_VERIFY` | `false` | Skips TLS verification for the JWKS fetch. Development only. |
 | `DB_HOST`, `DB_PORT` | `localhost`, `5432` | |
 | `DB_USERNAME`, `DB_PASSWORD` | `postgres`, none | The password is required. |
@@ -64,7 +64,7 @@ Flags: `-env`, `-port`, `-timeout` (default `10s`), `-log-level`, `-log-format`.
 
 ## API
 
-Full schemas: [openapi.yaml](openapi.yaml). Errors are `{"error": {"code": "...", "message": "..."}}`.
+Full schemas: [openapi.yaml](openapi.yaml). Errors are `{"error": {"code": "...", "message": "..."}}`, except a portal call with a missing or invalid token, which gets the shared authentication layer's `401` body, `{"error": "unauthorized", "message": "..."}`. Token checks: [CONSENT_LIFECYCLE.md](CONSENT_LIFECYCLE.md#who-may-decide).
 
 **Internal API** (no authentication, for the Orchestration Engine):
 
@@ -113,7 +113,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5432/consent_test?sslm
   go test ./cmd/ce/... ./internal/ce/config ./internal/database -count=1 -v
 ```
 
-Docker image: `docker build -t consent-engine -f cmd/ce/Dockerfile .` from the repo root. Code is in [`internal/ce`](../../internal/ce): `router`, `middleware`, `auth`, `handlers`, `services`, `models`.
+Docker image: `docker build -t consent-engine -f cmd/ce/Dockerfile .` from the repo root. Code is in [`internal/ce`](../../internal/ce): `router`, `middleware`, `handlers`, `services`, `models`.
 
 ## More docs
 

@@ -4,9 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"strings"
 
-	"github.com/openndx/openndx-core/internal/ce/auth"
+	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/openndx/openndx-core/internal/ce/models"
 	"github.com/openndx/openndx-core/internal/ce/utils"
 )
@@ -20,58 +19,34 @@ const (
 	ownerSubjectKey contextKey = "ownerSubject"
 )
 
-// JWTAuthMiddleware provides HTTP middleware for JWT authentication
-type JWTAuthMiddleware struct {
-	verifier *auth.JWTVerifier
-}
+// SubjectClaim is the standard token claim that identifies the user.
+const SubjectClaim = "sub"
 
-// NewJWTAuthMiddleware creates a new JWT authentication middleware
-func NewJWTAuthMiddleware(verifier *auth.JWTVerifier) *JWTAuthMiddleware {
-	return &JWTAuthMiddleware{
-		verifier: verifier,
+// OwnerSubject returns middleware that adds the data owner's UID to the request
+// context. It must run after internal/authn's RequireAuthMiddleware, which has
+// already validated the token. The UID is read from claim: "sub" is the token's
+// subject, and any other claim (e.g. "nic") is read from its extra claims. A
+// token without the claim is rejected with 401.
+func OwnerSubject(claim string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authCtx := authn.GetAuthContext(r.Context())
+			var subject string
+			if claim == SubjectClaim {
+				subject = authCtx.Subject()
+			} else {
+				subject = authCtx.ExtraClaims().String(claim)
+			}
+			if subject == "" {
+				slog.Warn("Token has no owner subject claim", "claim", claim)
+				utils.RespondWithError(w, http.StatusUnauthorized, models.ErrorCodeUnauthorized, "Token does not identify the data owner")
+				return
+			}
+
+			slog.Debug("User authenticated", "subject", subject)
+			next.ServeHTTP(w, r.WithContext(WithOwnerSubject(r.Context(), subject)))
+		})
 	}
-}
-
-// Authenticate is the middleware function that validates JWT tokens
-func (m *JWTAuthMiddleware) Authenticate(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract Authorization header
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			utils.RespondWithError(w, http.StatusUnauthorized, models.ErrorCodeUnauthorized, "Authorization header is required")
-			return
-		}
-
-		// Check Bearer prefix
-		const bearerPrefix = "Bearer "
-		if !strings.HasPrefix(authHeader, bearerPrefix) {
-			utils.RespondWithError(w, http.StatusUnauthorized, models.ErrorCodeUnauthorized, "Invalid authorization format. Expected 'Bearer <token>'")
-			return
-		}
-
-		// Extract token
-		tokenString := strings.TrimPrefix(authHeader, bearerPrefix)
-		if tokenString == "" {
-			utils.RespondWithError(w, http.StatusUnauthorized, models.ErrorCodeUnauthorized, "Token is required")
-			return
-		}
-
-		// Verify token and extract the owner subject (UID)
-		subject, err := m.verifier.VerifyTokenAndExtractSubject(tokenString)
-		if err != nil {
-			slog.Warn("Token verification failed", "error", err)
-			utils.RespondWithError(w, http.StatusUnauthorized, models.ErrorCodeUnauthorized, "Invalid or expired token")
-			return
-		}
-
-		// Add owner subject to request context
-		r = r.WithContext(WithOwnerSubject(r.Context(), subject))
-
-		slog.Debug("User authenticated", "subject", subject)
-
-		// Call next handler
-		next.ServeHTTP(w, r)
-	})
 }
 
 // WithOwnerSubject returns a copy of ctx carrying the authenticated owner's subject (UID)
