@@ -179,7 +179,6 @@ jobs:
           IDP_JWKS_URL="https://www.googleapis.com/oauth2/v3/certs" \
           IDP_ISSUER="https://accounts.google.com" \
           IDP_AUDIENCE="test-audience" \
-          IDP_ORG_NAME="test-org" \
           ./bin/consent-engine > logs/ce.log 2>&1 &
           CE_PID=$!
           echo "CE PID: $CE_PID"

@@ -168,7 +168,6 @@ services:
       # IDP configuration (JWT verification for consent-portal tokens)
       - IDP_ISSUER=${IDP_PUBLIC_URL:-http://localhost:8090}
       - IDP_AUDIENCE=${CONSENT_ENGINE_AUDIENCE:-CONSENT_PORTAL}
-      - IDP_CLIENT_ID=${CONSENT_PORTAL_CLIENT_ID:-CONSENT_PORTAL}
       - IDP_JWKS_URL=${IDP_JWKS_URL:-http://thunderid:8090/oauth2/jwks}
       - IDP_SUBJECT_CLAIM=${IDP_SUBJECT_CLAIM:-nic}
     depends_on:

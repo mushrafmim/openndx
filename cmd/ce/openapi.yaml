@@ -136,15 +136,7 @@ paths:
                   code: "BAD_REQUEST"
                   message: "invalid status: granted"
         '401':
-          description: Unauthorized - invalid or missing token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error:
-                  code: "UNAUTHORIZED"
-                  message: "Invalid or expired token"
+          $ref: '#/components/responses/Unauthorized'
         '408':
           description: Request timeout
           content:
@@ -207,15 +199,7 @@ paths:
                   code: "BAD_REQUEST"
                   message: "consentId is required"
         '401':
-          description: Unauthorized - invalid or missing token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error:
-                  code: "UNAUTHORIZED"
-                  message: "User email not found in token"
+          $ref: '#/components/responses/Unauthorized'
         '403':
           description: Forbidden - consent belongs to a different user
           content:
@@ -338,15 +322,7 @@ paths:
                       code: "BAD_REQUEST"
                       message: "Invalid consent update request"
         '401':
-          description: Unauthorized - invalid or missing token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error:
-                  code: "UNAUTHORIZED"
-                  message: "User email not found in token"
+          $ref: '#/components/responses/Unauthorized'
         '403':
           description: Forbidden - consent belongs to a different user
           content:
@@ -619,12 +595,55 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        JWT token obtained from the identity provider.
-        The token must contain the user's email address.
-        
-        Example: `Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+        Access token from the identity provider, signed with RS256, RS384 or RS512 by a key
+        in `IDP_JWKS_URL`, issued by `IDP_ISSUER` for `IDP_AUDIENCE`, unexpired, and carrying
+        `sub`, `client_id` and the claim named by `IDP_SUBJECT_CLAIM` (default `sub`), whose
+        value identifies the data owner.
+
+        Example: `Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Ii4uLiJ9...`
+
+  responses:
+    Unauthorized:
+      description: |
+        Missing or invalid token. A token that fails validation gets the shared authentication
+        layer's body (`AuthnErrorResponse`); a valid token without the subject claim gets
+        `ErrorResponse` with code `UNAUTHORIZED`.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/AuthnErrorResponse'
+              - $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidToken:
+              value:
+                error: "unauthorized"
+                message: "invalid authentication token"
+            missingToken:
+              value:
+                error: "unauthorized"
+                message: "authentication required"
+            missingSubjectClaim:
+              value:
+                error:
+                  code: "UNAUTHORIZED"
+                  message: "Token does not identify the data owner"
 
   schemas:
+    AuthnErrorResponse:
+      type: object
+      description: Error body returned when the bearer token is missing or fails validation
+      properties:
+        error:
+          type: string
+          example: "unauthorized"
+        message:
+          type: string
+          example: "invalid authentication token"
+      required:
+        - error
+        - message
+
     ConsentField:
       type: object
       description: Represents a field that requires consent

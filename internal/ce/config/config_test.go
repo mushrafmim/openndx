@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/database"
+	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,11 +16,38 @@ func cleanConfigEnv(t *testing.T) {
 		"ENVIRONMENT", "PORT", "HOST", "DB_HOST", "DB_PORT", "DB_USERNAME", "DB_PASSWORD", "DB_NAME", "DB_SSLMODE",
 		"DB_MAX_OPEN_CONNS", "DB_MAX_IDLE_CONNS", "DB_CONN_MAX_LIFETIME_SECONDS", "DB_CONN_MAX_IDLE_TIME",
 		"CONSENT_PORTAL_URL", "CORS_ALLOWED_ORIGINS", "IDP_ISSUER", "IDP_AUDIENCE", "IDP_JWKS_URL",
-		"IDP_CLIENT_ID", "IDP_SUBJECT_CLAIM", "IDP_JWKS_INSECURE_SKIP_VERIFY",
+		"IDP_SUBJECT_CLAIM", "IDP_JWKS_INSECURE_SKIP_VERIFY",
 	} {
 		t.Setenv(key, "")
 	}
 	t.Setenv("DB_PASSWORD", "test-password")
+	t.Setenv("IDP_JWKS_URL", "http://idp.example/oauth2/jwks")
+	t.Setenv("IDP_ISSUER", "http://idp.example")
+	t.Setenv("IDP_AUDIENCE", "CONSENT_PORTAL")
+}
+
+func TestLoadConfigBuildsAuthnConfig(t *testing.T) {
+	cleanConfigEnv(t)
+	t.Setenv("IDP_SUBJECT_CLAIM", "nic")
+	t.Setenv("IDP_JWKS_INSECURE_SKIP_VERIFY", "true")
+	cfg, err := loadConfig("consent-engine", nil)
+	require.NoError(t, err)
+	require.Equal(t, IDPConfig{
+		Authn: authn.Config{
+			JWKSURL:               "http://idp.example/oauth2/jwks",
+			Issuer:                "http://idp.example",
+			Audience:              "CONSENT_PORTAL",
+			InsecureSkipTLSVerify: true,
+		},
+		SubjectClaim: "nic",
+	}, cfg.IDPConfig)
+}
+
+func TestLoadConfigDefaultsSubjectClaimToSub(t *testing.T) {
+	cleanConfigEnv(t)
+	cfg, err := loadConfig("consent-engine", nil)
+	require.NoError(t, err)
+	require.Equal(t, "sub", cfg.IDPConfig.SubjectClaim)
 }
 
 func TestLoadConfigBuildsValidatedGlobalDatabaseConfig(t *testing.T) {
@@ -76,6 +104,10 @@ func TestLoadConfigRejectsInvalidValues(t *testing.T) {
 		{"PORT", "abc", "service port"},
 		{"CONSENT_PORTAL_URL", "portal", "consent portal URL"},
 		{"IDP_JWKS_INSECURE_SKIP_VERIFY", "sometimes", "must be a boolean"},
+		{"IDP_JWKS_URL", "", "jwksURL is required"},
+		{"IDP_JWKS_URL", "not-a-url", "jwksURL"},
+		{"IDP_ISSUER", "", "issuer is required"},
+		{"IDP_AUDIENCE", "", "audience is required"},
 	} {
 		t.Run(tc.key+"_"+tc.value, func(t *testing.T) {
 			cleanConfigEnv(t)
