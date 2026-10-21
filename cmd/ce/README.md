@@ -113,7 +113,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5432/consent_test?sslm
   go test ./cmd/ce/... ./internal/ce/config ./internal/database -count=1 -v
 ```
 
-Docker image: `docker build -t consent-engine -f cmd/ce/Dockerfile .` from the repo root. Code is in [`internal/ce`](../../internal/ce): `router`, `middleware`, `auth`, `handlers`, `services`, `models`.
+Docker image: `docker build -t consent-engine -f cmd/ce/Dockerfile .` from the repo root. Code is in [`internal/ce`](../../internal/ce): `router`, `middleware`, `handlers`, `services`, `models`.
 
 ## More docs
 
