@@ -39,6 +39,8 @@ ehthumbs.db
 Thumbs.db
 
 # Portal Backend specific
+# Local copy of config.example.yaml
+/config.yaml
 pb
 debug
 logs/

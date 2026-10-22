@@ -1,0 +1,67 @@
+# Portal Backend configuration for running natively. Copy it to config.yaml
+# (git-ignored) and edit the copy:
+#   cp cmd/pb/config.example.yaml cmd/pb/config.yaml
+# then run `make run portal-backend`.
+# Keys left out keep their defaults, listed in CONFIGURATION.md.
+# A value written as "{{env:NAME}}" or "{{file:/path}}" is read from that
+# environment variable or file at startup; an unset variable stops the service.
+
+server:
+  port: 8083
+  timeout: 15s
+
+logging:
+  level: debug # debug, info, warn or error
+  format: text # text or json
+
+cors:
+  # Browser origins of the member and admin portals. "*" is rejected while
+  # allowCredentials is true.
+  allowedOrigins:
+    - http://localhost:5173
+
+idp:
+  # Validates incoming access tokens. audience is PB's resource server
+  # identifier; tokens for any other audience are rejected.
+  jwksURL: http://localhost:8090/oauth2/jwks
+  issuer: http://localhost:8090
+  audience: http://pb.openndx.local
+  # Skips TLS verification of the JWKS fetch. Development only.
+  insecureSkipTLSVerify: false
+  # PB's own client for ThunderID's management API, which creates each
+  # application's OAuth2 client.
+  management:
+    baseURL: http://localhost:8090
+    clientID: PORTAL_BACKEND
+    clientSecret: "{{env:IDP_CLIENT_SECRET}}"
+    scopes: [system]
+    # ThunderID's System resource server, which owns the `system` scope.
+    resource: https://localhost:8090/mcp
+    # Role assigned to every created application; grants it `getdata`.
+    # Empty skips the assignment.
+    dataConsumerRoleID: 01900000-0000-7000-8000-000000000092
+
+pdp:
+  url: http://localhost:8082
+
+# Argus audit service. Auditing is off when url is empty.
+audit:
+  url: ""
+  apiKey: ""
+
+database:
+  driver: postgres
+  postgres:
+    host: localhost
+    port: 5432
+    user: postgres
+    password: "{{env:DB_PASSWORD}}"
+    name: portal_backend
+    sslMode: disable
+    pool:
+      maxOpenConns: 25
+      maxIdleConns: 5
+      maxConnLifetimeSeconds: 3600
+  idleTimeout: 30m
+  # Drops legacy columns and auto-migrates PB's tables at startup.
+  runMigration: true

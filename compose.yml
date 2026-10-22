@@ -258,41 +258,19 @@ services:
     container_name: pb-${ENVIRONMENT:-local}
     ports:
       - "${PB_PORT:-8083}:8083"
+    # Settings are in cmd/pb/config.docker.yaml; it reads these values, shared
+    # with other services, from this environment.
     environment:
-      - PORT=8083
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-*}
-      - PDP_SERVICE_URL=http://policy-decision-point:8082
-      # Database configuration
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=${DB_USER:-postgres}
+      - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-1234}
-      - DB_NAME=${DB_NAME_PB:-portal_backend}
-      - DB_SSLMODE=${DB_SSLMODE:-disable}
-      - RUN_MIGRATION=${RUN_MIGRATION:-true}
-      # IDP configuration for validating incoming JWTs (ondx CLI, portal frontends).
-      # IDP_AUDIENCE is PB's resource server (thunderid/bootstrap/resource.yaml):
-      # clients request `resource=http://pb.openndx.local` at login, and PB
-      # accepts tokens for that audience whichever client they were issued to.
-      - IDP_ISSUER=${IDP_PUBLIC_URL:-http://localhost:8090}
-      - IDP_JWKS_URL=${IDP_JWKS_URL:-http://thunderid:8090/oauth2/jwks}
-      - IDP_AUDIENCE=${PB_AUDIENCE:-http://pb.openndx.local}
-      # PB's own outbound calls to ThunderID's management API: POST /applications
-      # creates the application's M2M client in its member's organization unit
-      # and assigns it the DataConsumerGetData role, so it can request `getdata`
-      # (internal/pb/idp/thunderid). PORTAL_BACKEND is PB's own client
-      # (thunderid/bootstrap/application.yaml). Its `system` scope belongs to
-      # ThunderID's built-in System resource server, whose identifier is fixed
-      # at https://localhost:8090/mcp whatever the public URL.
-      - IDP_BASE_URL=http://thunderid:8090
-      - IDP_CLIENT_ID=PORTAL_BACKEND
-      - IDP_CLIENT_SECRET=${PORTAL_BACKEND_CLIENT_SECRET:-1234}
-      - IDP_SCOPE=system
-      - IDP_TOKEN_RESOURCE=https://localhost:8090/mcp
-      - IDP_DATA_CONSUMER_ROLE_ID=01900000-0000-7000-8000-000000000092
-      # Audit (optional, degrades gracefully if unreachable)
+      - DB_NAME_PB=${DB_NAME_PB:-portal_backend}
+      - IDP_PUBLIC_URL=${IDP_PUBLIC_URL:-http://localhost:8090}
+      - PB_AUDIENCE=${PB_AUDIENCE:-http://pb.openndx.local}
+      - PORTAL_BACKEND_CLIENT_SECRET=${PORTAL_BACKEND_CLIENT_SECRET:-1234}
       - AUDIT_SERVICE_URL=${AUDIT_SERVICE_URL:-http://audit-service:3001}
       - ARGUS_API_KEY=${ARGUS_API_KEY:-1234}
+    volumes:
+      - ./cmd/pb/config.docker.yaml:/app/config/config.yaml:ro
     depends_on:
       postgres:
         condition: service_healthy
