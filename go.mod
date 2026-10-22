@@ -7,6 +7,7 @@ require (
 	github.com/LSFLK/argus/pkg/audit v0.1.0
 	github.com/OpenNSW/core/authz v0.1.0
 	github.com/OpenNSW/core/configyaml v0.0.0-20261020125115-877adee81c24
+	github.com/OpenNSW/core/cors v0.1.0
 	github.com/OpenNSW/core/database v0.3.0
 	github.com/OpenNSW/core/shared v0.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1

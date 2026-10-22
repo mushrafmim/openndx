@@ -55,7 +55,7 @@ jobs:
       - name: Initialize CE schema
         run: psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f cmd/ce/schema.sql
       - name: Verify PostgreSQL connections
-        run: go test -race ./cmd/ce/... ./internal/ce/config ./internal/database -count=1 -v
+        run: go test -race ./cmd/ce/... ./internal/database -count=1 -v
 
   validate:
     runs-on: ubuntu-latest

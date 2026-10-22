@@ -31,20 +31,8 @@ services:
     build:
       context: ../..
       dockerfile: cmd/ce/Dockerfile
-    environment:
-      PORT: 8081
-      LOG_LEVEL: info
-      # V1 database env vars (for v1/database/database.go)
-      DB_HOST: ce-db
-      DB_PORT: 5432
-      DB_USERNAME: postgres
-      DB_PASSWORD: password
-      DB_NAME: consent_db
-      DB_SSLMODE: disable
-      # JWT/Asgardeo configuration for V1 auth (using Google's public JWKS for testing)
-      IDP_JWKS_URL: "https://www.googleapis.com/oauth2/v3/certs"
-      IDP_ISSUER: "https://accounts.google.com"
-      IDP_AUDIENCE: "test-audience"
+    volumes:
+      - ./ce-config.yaml:/app/config/config.yaml:ro
     ports:
       - "8081:8081"
     depends_on:

@@ -1,0 +1,49 @@
+# Consent Engine configuration for running natively. Copy it to config.yaml
+# (git-ignored) and edit the copy:
+#   cp cmd/ce/config.example.yaml cmd/ce/config.yaml
+# then run `make run consent-engine`.
+# Keys left out keep their defaults, listed in README.md.
+# A value written as "{{env:NAME}}" or "{{file:/path}}" is read from that
+# environment variable or file at startup; an unset variable stops the service.
+
+server:
+  port: 8081
+  timeout: 10s
+
+logging:
+  level: debug # debug, info, warn or error
+  format: text # text or json
+
+# Consent links are <consentPortalURL>?consentId=<uuid>. Its origin (scheme and
+# host) is always an allowed CORS origin.
+consentPortalURL: http://localhost:5173
+
+cors:
+  # Origins allowed besides consentPortalURL. "*" is rejected while
+  # allowCredentials is true.
+  allowedOrigins: []
+
+# Validates the consent portal's access tokens.
+idp:
+  jwksURL: http://localhost:8090/oauth2/jwks
+  issuer: http://localhost:8090
+  audience: CONSENT_PORTAL
+  # Token claim matched against a consent's ownerId.
+  subjectClaim: nic
+  # Skips TLS verification of the JWKS fetch. Development only.
+  insecureSkipTLSVerify: false
+
+database:
+  driver: postgres
+  postgres:
+    host: localhost
+    port: 5432
+    user: postgres
+    password: "{{env:DB_PASSWORD}}"
+    name: consent_engine
+    sslMode: disable
+    pool:
+      maxOpenConns: 25
+      maxIdleConns: 5
+      maxConnLifetimeSeconds: 3600
+  idleTimeout: 30m

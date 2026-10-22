@@ -1,0 +1,23 @@
+# Consent Engine configuration for the integration tests
+# (docker-compose.test.yml mounts it at /app/config/config.yaml).
+
+logging:
+  level: info
+
+consentPortalURL: http://localhost:5173
+
+idp:
+  # Google's public JWKS: the tests never call the portal API with a valid token.
+  jwksURL: https://www.googleapis.com/oauth2/v3/certs
+  issuer: https://accounts.google.com
+  audience: test-audience
+
+database:
+  driver: postgres
+  postgres:
+    host: ce-db
+    port: 5432
+    user: postgres
+    password: password
+    name: consent_db
+    sslMode: disable
