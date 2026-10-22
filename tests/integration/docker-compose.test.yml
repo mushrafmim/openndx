@@ -4,16 +4,8 @@ services:
     build:
       context: ../..
       dockerfile: cmd/pdp/Dockerfile
-    environment:
-      PORT: 8082
-      LOG_LEVEL: info
-      DB_HOST: pdp-db
-      DB_PORT: 5432
-      DB_USERNAME: postgres
-      DB_PASSWORD: password
-      DB_NAME: policy_db
-      DB_SSLMODE: disable
-      RUN_MIGRATION: "true"
+    volumes:
+      - ./pdp-config.yaml:/app/config/config.yaml:ro
     ports:
       - "8082:8082"
     depends_on:

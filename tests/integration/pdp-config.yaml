@@ -1,0 +1,19 @@
+# Policy Decision Point configuration for docker-compose.test.yml, against
+# the pdp-db service from docker-compose.db.yml.
+
+server:
+  port: 8082
+
+logging:
+  level: info
+
+database:
+  driver: postgres
+  postgres:
+    host: pdp-db
+    port: 5432
+    user: postgres
+    password: password
+    name: policy_db
+    sslMode: disable
+  runMigration: true

@@ -1,0 +1,23 @@
+# Policy Decision Point configuration for Docker Compose (compose.yml mounts
+# it at /app/config/config.yaml). DB_USER and DB_PASSWORD are shared with the
+# postgres service, so they come from the environment.
+
+server:
+  port: 8082
+  timeout: 10s
+
+logging:
+  level: debug
+  format: text
+
+database:
+  driver: postgres
+  postgres:
+    host: postgres
+    port: 5432
+    user: "{{env:DB_USER}}"
+    password: "{{env:DB_PASSWORD}}"
+    name: pdp
+    sslMode: disable
+  idleTimeout: 30m
+  runMigration: true

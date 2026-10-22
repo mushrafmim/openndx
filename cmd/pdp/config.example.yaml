@@ -1,0 +1,33 @@
+# Policy Decision Point configuration for running natively. Copy it to
+# config.yaml (git-ignored) and edit the copy:
+#   cp cmd/pdp/config.example.yaml cmd/pdp/config.yaml
+# then run `make run policy-decision-point`.
+# Keys left out keep their defaults, listed in README.md.
+# A value written as "{{env:NAME}}" or "{{file:/path}}" is read from that
+# environment variable or file at startup; an unset variable stops the service.
+
+server:
+  port: 8082
+  timeout: 10s
+
+logging:
+  level: debug # debug, info, warn or error
+  format: text # text or json
+
+database:
+  driver: postgres
+  postgres:
+    host: localhost
+    port: 5432
+    user: postgres
+    password: "{{env:DB_PASSWORD}}"
+    name: pdp
+    sslMode: disable
+    pool:
+      maxOpenConns: 25
+      maxIdleConns: 5
+      maxConnLifetimeSeconds: 3600
+  idleTimeout: 30m
+  # Creates the enum types and the policy_metadata table. Needed on a fresh
+  # database, and safe to leave on.
+  runMigration: true
