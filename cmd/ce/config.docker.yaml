@@ -1,0 +1,31 @@
+# Consent Engine configuration for Docker Compose (compose.yml mounts it at
+# /app/config/config.yaml). Values shared with other services come from the
+# environment that compose.yml passes in, with the defaults from .env.example.
+
+server:
+  port: 8081
+  timeout: 10s
+
+logging:
+  level: debug
+  format: text
+
+consentPortalURL: "{{env:CONSENT_PORTAL_URL}}"
+
+idp:
+  # Reached over the compose network; the issuer is ThunderID's public URL.
+  jwksURL: http://thunderid:8090/oauth2/jwks
+  issuer: "{{env:IDP_PUBLIC_URL}}"
+  audience: "{{env:CONSENT_ENGINE_AUDIENCE}}"
+  subjectClaim: "{{env:IDP_SUBJECT_CLAIM}}"
+
+database:
+  driver: postgres
+  postgres:
+    host: postgres
+    port: 5432
+    user: "{{env:DB_USER}}"
+    password: "{{env:DB_PASSWORD}}"
+    name: "{{env:DB_NAME_CE}}"
+    sslMode: disable
+  idleTimeout: 30m

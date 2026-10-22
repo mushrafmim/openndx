@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/openndx/openndx-core/internal/ce/handlers"
-	"github.com/openndx/openndx-core/internal/ce/middleware"
 	"github.com/openndx/openndx-core/internal/utils"
 )
 
@@ -13,7 +12,6 @@ type Router struct {
 	internalHandler *handlers.InternalHandler
 	portalHandler   *handlers.PortalHandler
 	authenticate    func(http.Handler) http.Handler
-	corsMiddleware  func(http.Handler) http.Handler
 }
 
 // NewRouter creates a new router with all dependencies. authenticate protects
@@ -21,7 +19,6 @@ type Router struct {
 // otherwise adds the data owner's subject to the request context
 // (internal/authn's RequireAuthMiddleware followed by middleware.OwnerSubject).
 func NewRouter(
-	allowedOrigins string,
 	internalHandler *handlers.InternalHandler,
 	portalHandler *handlers.PortalHandler,
 	authenticate func(http.Handler) http.Handler,
@@ -30,7 +27,6 @@ func NewRouter(
 		internalHandler: internalHandler,
 		portalHandler:   portalHandler,
 		authenticate:    authenticate,
-		corsMiddleware:  middleware.NewCORSMiddleware(allowedOrigins),
 	}
 }
 
@@ -69,9 +65,4 @@ func (r *Router) registerPortalRoutes(mux *http.ServeMux) {
 	mux.Handle("PUT /api/v1/consents/{consentId}",
 		utils.PanicRecoveryMiddleware(
 			r.authenticate(http.HandlerFunc(r.portalHandler.UpdateConsent))))
-}
-
-// ApplyCORS wraps a handler with CORS middleware
-func (r *Router) ApplyCORS(handler http.Handler) http.Handler {
-	return r.corsMiddleware(handler)
 }

@@ -8,10 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
+	"github.com/OpenNSW/core/cors"
 	"github.com/openndx/openndx-core/internal/authn"
-	"github.com/openndx/openndx-core/internal/ce/config"
 	"github.com/openndx/openndx-core/internal/ce/handlers"
 	"github.com/openndx/openndx-core/internal/ce/middleware"
 	"github.com/openndx/openndx-core/internal/ce/router"
@@ -38,8 +39,7 @@ func main() {
 
 // run loads validated configuration and owns the consent engine's resources and server.
 func run() error {
-	// Load configuration using flags
-	cfg, err := config.LoadConfig("consent-engine")
+	cfg, err := loadConfig(os.Args[1:])
 	if errors.Is(err, flag.ErrHelp) {
 		return nil
 	}
@@ -51,14 +51,13 @@ func run() error {
 	utils.SetupLogging(cfg.Logging.Format, cfg.Logging.Level)
 
 	slog.Info("Starting consent engine",
-		"environment", cfg.Environment,
-		"port", cfg.Service.Port,
+		"port", cfg.Server.Port,
 		"version", Version,
 		"build_time", BuildTime,
 		"git_commit", GitCommit)
 
 	// Temporary GORM initialization until #631 switches to database.Open.
-	gormDB, sqlDB, err := database.OpenGORM(context.Background(), cfg.Database, cfg.DatabaseIdleTimeout)
+	gormDB, sqlDB, err := database.OpenGORM(context.Background(), cfg.Database.Config, cfg.Database.IdleTimeout)
 	if err != nil {
 		return fmt.Errorf("initialize database: %w", err)
 	}
@@ -70,11 +69,10 @@ func run() error {
 		}
 	}()
 
-	// Get consent portal URL from environment
-	slog.Info("Using consent portal URL", "url", cfg.ConsentPortalUrl)
+	slog.Info("Using consent portal URL", "url", cfg.ConsentPortalURL, "cors_allowed_origins", cfg.CORS.AllowedOrigins)
 
 	// Initialize consent service
-	consentService, err := services.NewConsentService(gormDB, cfg.ConsentPortalUrl)
+	consentService, err := services.NewConsentService(gormDB, cfg.ConsentPortalURL)
 	if err != nil {
 		return fmt.Errorf("initialize consent service: %w", err)
 	}
@@ -84,26 +82,26 @@ func run() error {
 	portalHandler := handlers.NewPortalHandler(consentService)
 
 	slog.Info("Portal authentication configuration",
-		"issuer", cfg.IDPConfig.Authn.Issuer,
-		"audience", cfg.IDPConfig.Authn.Audience,
-		"jwks_url", cfg.IDPConfig.Authn.JWKSURL,
-		"subject_claim", cfg.IDPConfig.SubjectClaim,
-		"jwks_insecure_skip_verify", cfg.IDPConfig.Authn.InsecureSkipTLSVerify)
+		"issuer", cfg.IDP.Issuer,
+		"audience", cfg.IDP.Audience,
+		"jwks_url", cfg.IDP.JWKSURL,
+		"subject_claim", cfg.IDP.SubjectClaim,
+		"jwks_insecure_skip_verify", cfg.IDP.InsecureSkipTLSVerify)
 
 	// Authenticate consent-portal requests: authn validates the token, then
 	// OwnerSubject reads the data owner's UID from the configured claim.
-	authnManager, err := authn.NewManager(cfg.IDPConfig.Authn)
+	authnManager, err := authn.NewManager(cfg.IDP.Config)
 	if err != nil {
 		return fmt.Errorf("initialize authentication: %w", err)
 	}
 	requireAuth := authnManager.RequireAuthMiddleware()
-	ownerSubject := middleware.OwnerSubject(cfg.IDPConfig.SubjectClaim)
+	ownerSubject := middleware.OwnerSubject(cfg.IDP.SubjectClaim)
 	authenticate := func(next http.Handler) http.Handler {
 		return requireAuth(ownerSubject(next))
 	}
 
 	// Initialize router and register all routes
-	apiRouter := router.NewRouter(cfg.Service.AllowedOrigins, internalHandler, portalHandler, authenticate)
+	apiRouter := router.NewRouter(internalHandler, portalHandler, authenticate)
 	mux := http.NewServeMux()
 
 	slog.Info("Registering API routes")
@@ -118,15 +116,15 @@ func run() error {
 
 	// Create server configuration
 	serverConfig := &utils.ServerConfig{
-		Port:         cfg.Service.Port,
-		ReadTimeout:  cfg.Service.Timeout,
-		WriteTimeout: cfg.Service.Timeout,
+		Port:         strconv.Itoa(cfg.Server.Port),
+		ReadTimeout:  cfg.Server.Timeout,
+		WriteTimeout: cfg.Server.Timeout,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Wrap the mux with metrics (outermost) and then CORS from the router
+	// Wrap the mux with metrics (outermost) and then CORS
 	// Metrics must be outermost to capture all requests, including CORS-blocked ones
-	handler := monitoring.HTTPMetricsMiddleware(apiRouter.ApplyCORS(mux))
+	handler := monitoring.HTTPMetricsMiddleware(cors.CORS(&cfg.CORS)(mux))
 	httpServer := utils.CreateServer(serverConfig, handler)
 
 	// Start server with graceful shutdown

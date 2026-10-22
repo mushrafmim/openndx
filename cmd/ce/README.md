@@ -31,36 +31,45 @@ curl http://localhost:8081/internal/api/v1/health
 Native, against a PostgreSQL with an empty database. The service does not create tables, so load the schema first:
 
 ```bash
-PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_NAME" \
+PGPASSWORD=<password> psql -h localhost -U postgres -d consent_engine \
   -v ON_ERROR_STOP=1 -f cmd/ce/schema.sql
 
-export DB_HOST=localhost DB_PORT=5432 DB_USERNAME=postgres DB_PASSWORD=<password> \
-       DB_NAME=consent_engine DB_SSLMODE=disable \
-       IDP_ISSUER=<issuer> IDP_AUDIENCE=<audience> IDP_JWKS_URL=<jwks-url>
-go run ./cmd/ce        # or: make run consent-engine
+cp cmd/ce/config.example.yaml cmd/ce/config.yaml    # once; config.yaml is git-ignored
+export DB_PASSWORD=<password>
+make run consent-engine    # or: go run ./cmd/ce -config cmd/ce/config.yaml
 ```
 
-`DB_PASSWORD` must be non-empty, even for a PostgreSQL that uses trust authentication. No binary loads a `.env` file, so export the variables or pass `--env-file` to Docker. [.env.example](.env.example) is a template. Schema changes go directly into `schema.sql`; there is no versioned upgrade path.
+[config.example.yaml](config.example.yaml) points at `localhost:5432` as user `postgres`, reads the password from `DB_PASSWORD`, and validates tokens from a ThunderID on `localhost:8090`. Schema changes go directly into `schema.sql`; there is no versioned upgrade path.
 
 ## Configuration
 
-| Variable | Default | Notes |
-|---|---|---|
-| `PORT` | `8081` | |
-| `ENVIRONMENT` | `local` | |
-| `CONSENT_PORTAL_URL` | `http://localhost:5173` | Must include scheme and host. Consent links are `<url>?consentId=<uuid>`. |
-| `CORS_ALLOWED_ORIGINS` | empty | Comma-separated. `CONSENT_PORTAL_URL` is always allowed. A value of `*` stops the service at startup. |
-| `IDP_JWKS_URL` | none | **Required.** Signing keys for portal tokens. If unreachable, every portal call returns 401. |
-| `IDP_ISSUER`, `IDP_AUDIENCE` | none | **Required.** Expected token `iss` and `aud`. Compose uses ThunderID's base URL and `CONSENT_PORTAL`. |
-| `IDP_SUBJECT_CLAIM` | `sub` | Token claim whose value must equal the consent's `ownerId`. Compose sets `nic`. A token without it gets `401`. |
-| `IDP_JWKS_INSECURE_SKIP_VERIFY` | `false` | Skips TLS verification for the JWKS fetch. Development only. |
-| `DB_HOST`, `DB_PORT` | `localhost`, `5432` | |
-| `DB_USERNAME`, `DB_PASSWORD` | `postgres`, none | The password is required. |
-| `DB_NAME` | `consent_engine` | |
-| `DB_SSLMODE` | `require` | |
-| `DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS`, `DB_CONN_MAX_LIFETIME_SECONDS`, `DB_CONN_MAX_IDLE_TIME` | `25`, `5`, `3600`, `30m` | Connection pool. |
+The CE reads one YAML file: the `-config` flag, else `CONFIG_PATH`, else `config.yaml` in the working directory. There are no other flags or environment variables. The Docker image sets `CONFIG_PATH=/app/config/config.yaml` and has no config file of its own, so mount one there. Compose mounts [config.docker.yaml](config.docker.yaml).
 
-Flags: `-env`, `-port`, `-timeout` (default `10s`), `-log-level`, `-log-format`. `-host`, `-cors` and `-rate-limit` are accepted but have no effect. Compose values are in [compose.yml](../../compose.yml).
+A value written as `"{{env:NAME}}"` or `"{{file:/path}}"` is read from that environment variable or file at startup, so secrets stay out of the file. The placeholder must be the whole value, and an unset or empty variable stops the service.
+
+| Key                                                                               | Default                    | Notes                                                                                                                  |
+|-----------------------------------------------------------------------------------|----------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `server.port`                                                                     | `8081`                     | Listen port. The server binds on all interfaces.                                                                       |
+| `server.timeout`                                                                  | `10s`                      | Read and write timeout.                                                                                                |
+| `logging.level`                                                                   | `info`                     | `debug`, `info`, `warn` or `error`.                                                                                    |
+| `logging.format`                                                                  | `text`                     | `text` or `json`.                                                                                                      |
+| `consentPortalURL`                                                                | none                       | **Required.** Must include scheme and host. Consent links are `<url>?consentId=<uuid>`. Its origin is always allowed.  |
+| `cors.allowedOrigins`                                                             | empty                      | Origins allowed besides `consentPortalURL`. `*` stops the service at startup while `allowCredentials` is true.         |
+| `cors.allowedMethods`, `cors.allowedHeaders`                                      | see [config.go](config.go) | A list in the file replaces the default list.                                                                          |
+| `cors.allowCredentials`, `cors.maxAge`                                            | `true`, `86400`            |                                                                                                                        |
+| `idp.jwksURL`                                                                     | none                       | **Required.** Signing keys for portal tokens. If unreachable, every portal call returns 401.                           |
+| `idp.issuer`, `idp.audience`                                                      | none                       | **Required.** Expected token `iss` and `aud`. Compose uses ThunderID's base URL and `CONSENT_PORTAL`.                  |
+| `idp.subjectClaim`                                                                | `sub`                      | Token claim whose value must equal the consent's `ownerId`. Compose sets `nic`. A token without it gets `401`.         |
+| `idp.insecureSkipTLSVerify`                                                       | `false`                    | Skips TLS verification for the JWKS fetch. Development only.                                                           |
+| `database.driver`                                                                 | `postgres`                 | Only `postgres` is supported.                                                                                          |
+| `database.postgres.host`, `.user`, `.password`                                    | none                       | **Required.**                                                                                                          |
+| `database.postgres.port`                                                          | `5432`                     |                                                                                                                        |
+| `database.postgres.name`                                                          | `consent_engine`           |                                                                                                                        |
+| `database.postgres.sslMode`                                                       | `require`                  | Use `disable` for a local PostgreSQL without TLS.                                                                      |
+| `database.postgres.pool.maxOpenConns`, `.maxIdleConns`, `.maxConnLifetimeSeconds` | `25`, `5`, `3600`          | Connection pool.                                                                                                       |
+| `database.idleTimeout`                                                            | `30m`                      | Closes connections idle this long.                                                                                     |
+
+The service checks the file at startup and exits with an error naming the bad key. Keys it does not know are ignored, so check the spelling of any key that seems to have no effect.
 
 ## API
 
@@ -68,20 +77,20 @@ Full schemas: [openapi.yaml](openapi.yaml). Errors are `{"error": {"code": "..."
 
 **Internal API** (no authentication, for the Orchestration Engine):
 
-| Method and path | Purpose |
-|---|---|
-| `POST /internal/api/v1/consents` | Create a consent (`201`). Body: `appId`, `consentRequirement {owner, ownerId, fields[]}`, optional `appName`, `grantDuration`, `consentType`. |
-| `GET /internal/api/v1/consents?ownerId=&appId=` | Latest consent for the pair. Both parameters are required (`400`); `404` if none. |
-| `GET /internal/api/v1/health` | `{"status": "healthy"}` |
+| Method and path                                 | Purpose                                                                                                                                       |
+|-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| `POST /internal/api/v1/consents`                | Create a consent (`201`). Body: `appId`, `consentRequirement {owner, ownerId, fields[]}`, optional `appName`, `grantDuration`, `consentType`. |
+| `GET /internal/api/v1/consents?ownerId=&appId=` | Latest consent for the pair. Both parameters are required (`400`); `404` if none.                                                             |
+| `GET /internal/api/v1/health`                   | `{"status": "healthy"}`                                                                                                                       |
 
 **Portal API** (Bearer access token; the token's subject claim must equal the consent's `ownerId`):
 
-| Method and path | Purpose |
-|---|---|
-| `GET /api/v1/consents` | The caller's consents, newest first. `status` (repeatable or comma-separated), `limit` (1-100, default 20), `offset`. |
-| `GET /api/v1/consents/{consentId}` | One consent. `403` if it belongs to someone else. |
-| `PUT /api/v1/consents/{consentId}` | Body `{"action": "approve" \| "reject" \| "revoke"}`. `409` if the consent is not in a state that allows the action. |
-| `GET /api/v1/health` | Public, no token needed. |
+| Method and path                    | Purpose                                                                                                               |
+|------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| `GET /api/v1/consents`             | The caller's consents, newest first. `status` (repeatable or comma-separated), `limit` (1-100, default 20), `offset`. |
+| `GET /api/v1/consents/{consentId}` | One consent. `403` if it belongs to someone else.                                                                     |
+| `PUT /api/v1/consents/{consentId}` | Body `{"action": "approve" \| "reject" \| "revoke"}`. `409` if the consent is not in a state that allows the action.  |
+| `GET /api/v1/health`               | Public, no token needed.                                                                                              |
 
 **System:** `GET /health` and `GET /metrics` (Prometheus), both unauthenticated.
 
@@ -110,10 +119,10 @@ Service tests use an in-memory SQLite database. The PostgreSQL connection and bo
 
 ```bash
 TEST_DATABASE_URL='postgres://postgres:password@localhost:5432/consent_test?sslmode=disable' \
-  go test ./cmd/ce/... ./internal/ce/config ./internal/database -count=1 -v
+  go test ./cmd/ce/... ./internal/database -count=1 -v
 ```
 
-Docker image: `docker build -t consent-engine -f cmd/ce/Dockerfile .` from the repo root. Code is in [`internal/ce`](../../internal/ce): `router`, `middleware`, `handlers`, `services`, `models`.
+Docker image: `docker build -t consent-engine -f cmd/ce/Dockerfile .` from the repo root. The configuration is in [`config.go`](config.go). Code is in [`internal/ce`](../../internal/ce): `router`, `middleware`, `handlers`, `services`, `models`. CORS is [`OpenNSW/core/cors`](https://github.com/OpenNSW/core/tree/main/cors).
 
 ## More docs
 

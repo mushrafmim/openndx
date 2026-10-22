@@ -162,18 +162,10 @@ jobs:
           echo "PDP PID: $PDP_PID"
 
           echo "🚀 Starting Consent Engine..."
-          PORT=8081 \
-          LOG_LEVEL=debug \
-          DB_HOST=localhost \
-          DB_PORT=5434 \
-          DB_USERNAME=postgres \
-          DB_PASSWORD=password \
-          DB_NAME=consent_db \
-          DB_SSLMODE=disable \
-          IDP_JWKS_URL="https://www.googleapis.com/oauth2/v3/certs" \
-          IDP_ISSUER="https://accounts.google.com" \
-          IDP_AUDIENCE="test-audience" \
-          ./bin/consent-engine > logs/ce.log 2>&1 &
+          # ce-config.yaml with the database on localhost:5434.
+          sed -e 's|host: ce-db|host: localhost|' -e 's|port: 5432|port: 5434|' \
+            -e 's|level: info|level: debug|' ce-config.yaml > ce-config.ci.yaml
+          ./bin/consent-engine -config ce-config.ci.yaml > logs/ce.log 2>&1 &
           CE_PID=$!
           echo "CE PID: $CE_PID"
 
@@ -271,5 +263,5 @@ jobs:
           pkill -f mock-provider || true
           pkill -f orchestration-engine || true
           docker compose -f docker-compose.db.yml down -v
-          rm -rf bin logs pdp-config.ci.yaml
+          rm -rf bin logs ce-config.ci.yaml pdp-config.ci.yaml
           echo "✅ Cleanup complete"

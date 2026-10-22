@@ -47,8 +47,7 @@ USER 10001
 # Expose port
 EXPOSE 8081
 
-# Set environment variables
-ENV ENVIRONMENT=production
+# The image has no config file: mount one here, or point CONFIG_PATH elsewhere.
+ENV CONFIG_PATH=/app/config/config.yaml
 
-# Run the application (env and port are read from the ENVIRONMENT and PORT variables)
 CMD ["./ce"]

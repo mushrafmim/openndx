@@ -32,20 +32,19 @@ func TestNewRouter(t *testing.T) {
 	internalHandler := &handlers.InternalHandler{}
 	portalHandler := &handlers.PortalHandler{}
 
-	router := NewRouter("http://localhost:5173", internalHandler, portalHandler, newTestAuthenticate(t))
+	router := NewRouter(internalHandler, portalHandler, newTestAuthenticate(t))
 
 	assert.NotNil(t, router)
 	assert.Equal(t, internalHandler, router.internalHandler)
 	assert.Equal(t, portalHandler, router.portalHandler)
 	assert.NotNil(t, router.authenticate)
-	assert.NotNil(t, router.corsMiddleware)
 }
 
 func TestRouter_RegisterRoutes(t *testing.T) {
 	internalHandler := &handlers.InternalHandler{}
 	portalHandler := &handlers.PortalHandler{}
 
-	router := NewRouter("http://localhost:5173", internalHandler, portalHandler, newTestAuthenticate(t))
+	router := NewRouter(internalHandler, portalHandler, newTestAuthenticate(t))
 	mux := http.NewServeMux()
 
 	router.RegisterRoutes(mux)
@@ -68,7 +67,7 @@ func TestRouter_RegisterRoutes(t *testing.T) {
 func TestRouter_PortalConsentRoutesRequireAuthentication(t *testing.T) {
 	// The handlers have no service: reaching one would panic, so a 401 shows
 	// the route rejected the request before the handler ran.
-	router := NewRouter("http://localhost:5173", &handlers.InternalHandler{}, &handlers.PortalHandler{}, newTestAuthenticate(t))
+	router := NewRouter(&handlers.InternalHandler{}, &handlers.PortalHandler{}, newTestAuthenticate(t))
 	mux := http.NewServeMux()
 	router.RegisterRoutes(mux)
 
@@ -93,28 +92,4 @@ func TestRouter_PortalConsentRoutesRequireAuthentication(t *testing.T) {
 			})
 		}
 	}
-}
-
-func TestRouter_ApplyCORS(t *testing.T) {
-	internalHandler := &handlers.InternalHandler{}
-	portalHandler := &handlers.PortalHandler{}
-
-	router := NewRouter("http://localhost:5173", internalHandler, portalHandler, newTestAuthenticate(t))
-
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
-	wrapped := router.ApplyCORS(handler)
-
-	assert.NotNil(t, wrapped)
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set("Origin", "http://localhost:5173")
-	w := httptest.NewRecorder()
-
-	wrapped.ServeHTTP(w, req)
-
-	// CORS headers should be set
-	assert.NotEmpty(t, w.Header().Get("Access-Control-Allow-Origin"))
 }
