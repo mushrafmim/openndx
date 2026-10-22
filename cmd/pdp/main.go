@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
-	"github.com/openndx/openndx-core/internal/pdp/config"
+	"github.com/openndx/openndx-core/internal/database"
 	"github.com/openndx/openndx-core/internal/pdp/db"
 	"github.com/openndx/openndx-core/internal/pdp/handler"
 	"github.com/openndx/openndx-core/internal/utils"
@@ -20,56 +24,52 @@ var (
 	GitCommit = "unknown"
 )
 
+// main reports startup failures after run has released its resources.
 func main() {
-	// Load configuration using flags
-	cfg := config.LoadConfig("policy-decision-point")
+	if err := run(); err != nil {
+		slog.Error("Policy decision point failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+// run loads validated configuration and owns the PDP's resources and server.
+func run() error {
+	cfg, err := loadConfig(os.Args[1:])
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load configuration: %w", err)
+	}
 
 	// Setup logging
 	utils.SetupLogging(cfg.Logging.Format, cfg.Logging.Level)
 
 	slog.Info("Starting policy decision point",
-		"environment", cfg.Environment,
-		"port", cfg.Service.Port,
+		"port", cfg.Server.Port,
 		"version", Version,
 		"build_time", BuildTime,
 		"git_commit", GitCommit)
 
-	// Log database configuration being used
-	slog.Info("Database configuration",
-		"host", cfg.DBConfigs.Host,
-		"port", cfg.DBConfigs.Port,
-		"username", cfg.DBConfigs.Username,
-		"database", cfg.DBConfigs.Database,
-		"sslmode", cfg.DBConfigs.SSLMode)
-
-	// Log IDP configuration (for future use)
-	slog.Info("IDP configuration",
-		"issuer", cfg.IDPConfig.Issuer,
-		"audience", cfg.IDPConfig.Audience,
-		"jwks_url", cfg.IDPConfig.JwksURL)
-
-	// Initialize V1 GORM database connection
-	v1DbConfig := db.NewDatabaseConfig(&cfg.DBConfigs)
-	gormDB, err := db.ConnectGormDB(v1DbConfig)
+	gormDB, sqlDB, err := database.OpenGORM(context.Background(), cfg.Database.Config, cfg.Database.IdleTimeout)
 	if err != nil {
-		slog.Error("Failed to connect to GORM database", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("V1 database connected successfully")
-
-	// Get underlying SQL DB for proper cleanup
-	v1SqlDB, err := gormDB.DB()
-	if err != nil {
-		slog.Error("Failed to get V1 database connection", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("initialize database: %w", err)
 	}
 	defer func() {
-		if err := v1SqlDB.Close(); err != nil {
-			slog.Error("Failed to close V1 database connection", "error", err)
+		if err := sqlDB.Close(); err != nil {
+			slog.Error("Failed to close database connection", "error", err)
 		} else {
-			slog.Info("V1 database connection closed successfully")
+			slog.Info("Database connection closed successfully")
 		}
 	}()
+
+	if cfg.Database.RunMigration {
+		if err := db.Migrate(gormDB); err != nil {
+			return fmt.Errorf("migrate database: %w", err)
+		}
+	} else {
+		slog.Info("Database migration skipped (database.runMigration is false)")
+	}
 
 	// Initialize V1 handlers
 	v1Handler := handler.NewHandler(gormDB)
@@ -130,7 +130,7 @@ func main() {
 			} else {
 				v1Info := map[string]interface{}{
 					"status":   "connected",
-					"database": v1DbConfig.Database,
+					"database": cfg.Database.Postgres.Name,
 				}
 
 				// Check if policy_metadata table exists
@@ -164,16 +164,16 @@ func main() {
 
 	// Create server configuration
 	serverConfig := &utils.ServerConfig{
-		Port:         cfg.Service.Port,
-		ReadTimeout:  cfg.Service.Timeout,
-		WriteTimeout: cfg.Service.Timeout,
+		Port:         strconv.Itoa(cfg.Server.Port),
+		ReadTimeout:  cfg.Server.Timeout,
+		WriteTimeout: cfg.Server.Timeout,
 		IdleTimeout:  60 * time.Second,
 	}
 	server := utils.CreateServer(serverConfig, utils.PanicRecoveryMiddleware(mux))
 
 	// Start server with graceful shutdown
 	if err := utils.StartServerWithGracefulShutdown(server, "policy-decision-point"); err != nil {
-		slog.Error("Server failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("server failed: %w", err)
 	}
+	return nil
 }

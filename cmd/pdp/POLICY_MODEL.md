@@ -47,7 +47,7 @@ Making a field `public` does not open it to every application. It only removes t
 
 ## Table
 
-`policy_metadata` (PostgreSQL, created by `RUN_MIGRATION=true`):
+`policy_metadata` (PostgreSQL, created at startup when `database.runMigration` is `true`):
 
 | Column | Type | Notes |
 |---|---|---|

@@ -119,23 +119,13 @@ services:
     container_name: pdp-${ENVIRONMENT:-local}
     ports:
       - "${PDP_PORT:-8082}:8082"
+    # Settings are in cmd/pdp/config.docker.yaml; it reads DB_USER and
+    # DB_PASSWORD from this environment.
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-local}
-      - PORT=8082
-      - SERVICE_NAME=policy-decision-point
-      - OTEL_METRICS_EXPORTER=${OTEL_METRICS_EXPORTER:-prometheus}
-      # Database configuration
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=${DB_USER:-postgres}
+      - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-1234}
-      - DB_NAME=${DB_NAME_PDP:-pdp}
-      - DB_SSLMODE=${DB_SSLMODE:-disable}
-      - RUN_MIGRATION=${RUN_MIGRATION:-true}
-      # IDP configuration
-      - IDP_ISSUER=${IDP_PUBLIC_URL:-http://localhost:8090}
-      - IDP_AUDIENCE=${IDP_AUDIENCE:-http://api.openndx.local}
-      - IDP_JWKS_URL=${IDP_JWKS_URL:-http://thunderid:8090/oauth2/jwks}
+    volumes:
+      - ./cmd/pdp/config.docker.yaml:/app/config/config.yaml:ro
     depends_on:
       postgres:
         condition: service_healthy
