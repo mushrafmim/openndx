@@ -50,7 +50,8 @@ No `.env` file is loaded; [.env.example](.env.example) is a template to source y
 |---|---|---|
 | `PORT` | `8083` | |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated origins; credentials are allowed. |
-| `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE` | `localhost`, `5432`, `postgres`, `password`, `testdb2`, `require` | |
+| `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_SSLMODE` | `localhost`, `5432`, `postgres`, `require` | |
+| `DB_PASSWORD`, `DB_NAME` | none | **Required.** |
 | `RUN_MIGRATION` | unset | Run table migrations at startup only when exactly `true`. |
 | `PDP_SERVICE_URL` | none | **Required.** Must start with `http://` or `https://`. |
 | `IDP_AUDIENCE` | none | **Required.** PB's resource-server identifier; tokens for any other audience are rejected. |
@@ -117,7 +118,7 @@ make quality-check portal-backend
 
 Tests run without external services. `make validate-test` does not cover `internal/authn`; run `go test ./internal/authn/...` for the token validation code. Docker image: `docker build -t portal-backend -f cmd/pb/Dockerfile .` from the repo root.
 
-Code is in [`internal/pb`](../../internal/pb): `member`, `schema` and `application` (one package per resource: model, service, handler), `caller` (scopes and the caller's member), `policy` (PDP client), `idp/thunderid` (ThunderID client), `middleware` (CORS and audit), `database`. Token validation is in [`internal/authn`](../../internal/authn/README.md).
+Code is in [`internal/pb`](../../internal/pb): `member`, `schema` and `application` (one package per resource: model, service, handler), `caller` (scopes and the caller's member), `policy` (PDP client), `idp/thunderid` (ThunderID client), `middleware` (CORS and audit), `database/dbtest` (test databases). PB connects through the shared [`internal/database`](../../internal/database), which uses `OpenNSW/core/database`. Token validation is in [`internal/authn`](../../internal/authn/README.md).
 
 ## Rename note
 

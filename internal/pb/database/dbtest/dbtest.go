@@ -42,7 +42,7 @@ func SetupMockDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock, func()) {
 func SetupSQLiteDB(t *testing.T, models ...any) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 		DisableForeignKeyConstraintWhenMigrating: true,
-		// Match production (database.ConnectGormDB) so duplicate-key errors
+		// Match production (internal/database.OpenGORM) so duplicate-key errors
 		// surface as gorm.ErrDuplicatedKey
 		TranslateError: true,
 	})
