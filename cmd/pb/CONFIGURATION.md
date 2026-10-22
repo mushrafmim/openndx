@@ -17,8 +17,8 @@ Every environment variable the Portal Backend reads. The short version is in the
 |---|---|---|---|
 | `DB_HOST`, `DB_PORT` | `localhost`, `5432` | `postgres`, `5432` | |
 | `DB_USERNAME` | `postgres` | `postgres` | |
-| `DB_PASSWORD` | `password` | `1234` | |
-| `DB_NAME` | `testdb2` | `portal_backend` | |
+| `DB_PASSWORD` | none | `1234` | **Required.** |
+| `DB_NAME` | none | `portal_backend` | **Required.** |
 | `DB_SSLMODE` | `require` | `disable` | |
 | `RUN_MIGRATION` | unset | `true` | Migrations run only when the value is exactly `true`. They first drop the legacy `members.idp_user_id` column, then auto-migrate `members`, `schemas`, `applications`, `schema_submissions` and `application_submissions`. There are no versioned migrations. |
 
@@ -62,4 +62,4 @@ The Dockerfile sets `main.Version`, `main.BuildTime` and `main.GitCommit` with l
 
 ## Startup failures
 
-PB exits at startup if it cannot connect to the database, if `PDP_SERVICE_URL`, `IDP_CLIENT_ID`, `IDP_CLIENT_SECRET` or a usable IdP base URL is missing, or if `IDP_AUDIENCE`, the JWKS URL or the issuer is missing or not a valid URL.
+PB exits at startup if `DB_PASSWORD` or `DB_NAME` is missing, if `DB_PORT` is not a number, if it cannot connect to the database within 10 seconds, if `PDP_SERVICE_URL`, `IDP_CLIENT_ID`, `IDP_CLIENT_SECRET` or a usable IdP base URL is missing, or if `IDP_AUDIENCE`, the JWKS URL or the issuer is missing or not a valid URL.

@@ -59,6 +59,9 @@ func wrapGORM(sqlDB *sql.DB) (*gorm.DB, error) {
 	}
 	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{
 		DisableAutomaticPing: true,
+		// Translate driver errors (e.g. unique violations) into gorm.Err*
+		// sentinels, so callers can map them without inspecting driver errors.
+		TranslateError: true,
 		Logger: logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
 			SlowThreshold: 200 * time.Millisecond, LogLevel: logger.Warn,
 			IgnoreRecordNotFoundError: true, ParameterizedQueries: true,

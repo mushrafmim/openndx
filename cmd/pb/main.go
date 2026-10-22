@@ -12,9 +12,9 @@ import (
 	"github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/authz"
 	"github.com/openndx/openndx-core/internal/authn"
+	"github.com/openndx/openndx-core/internal/database"
 	"github.com/openndx/openndx-core/internal/pb/application"
 	"github.com/openndx/openndx-core/internal/pb/caller"
-	"github.com/openndx/openndx-core/internal/pb/database"
 	"github.com/openndx/openndx-core/internal/pb/idp/idpfactory"
 	"github.com/openndx/openndx-core/internal/pb/member"
 	"github.com/openndx/openndx-core/internal/pb/middleware"
@@ -39,20 +39,27 @@ func main() {
 		"build_time", BuildTime,
 		"git_commit", GitCommit)
 
-	// Initialize GORM database connection for V1
-	v1DbConfig := database.NewDatabaseConfig()
-	gormDB, err := database.ConnectGormDB(v1DbConfig)
+	dbConfig, err := databaseConfigFromEnv()
 	if err != nil {
-		slog.Error("Failed to connect to GORM database", "error", err)
+		slog.Error("Invalid database configuration", "error", err)
 		os.Exit(1)
 	}
+	gormDB, sqlDB, err := database.OpenGORM(context.Background(), dbConfig, dbIdleTimeout)
+	if err != nil {
+		slog.Error("Failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("Connected to PostgreSQL",
+		"host", dbConfig.Postgres.Host,
+		"port", dbConfig.Postgres.Port,
+		"database", dbConfig.Postgres.Name)
 
 	if os.Getenv("RUN_MIGRATION") == "true" {
 		if err := member.DropLegacyColumns(gormDB); err != nil {
 			slog.Error("Failed to run database migrations", "error", err)
 			os.Exit(1)
 		}
-		err = database.AutoMigrate(gormDB,
+		err = autoMigrate(gormDB,
 			&member.Member{},
 			&schema.Schema{},
 			&application.Application{},
@@ -180,9 +187,9 @@ func main() {
 	// requests, which no apiMux route matches.
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /health", healthHandler(gormDB, v1DbConfig.Database))
+	mux.HandleFunc("GET /health", healthHandler(gormDB, dbConfig.Postgres.Name))
 	mux.HandleFunc("GET /debug", debugHandler)
-	mux.HandleFunc("GET /debug/db", debugDBHandler(gormDB, v1DbConfig.Database))
+	mux.HandleFunc("GET /debug/db", debugDBHandler(gormDB, dbConfig.Postgres.Name))
 
 	mux.Handle("/api/v1/", middleware.NewCORSMiddleware()(authnManager.RequireAuthMiddleware()(caller.Middleware(memberService.MemberIDByOuID)(apiMux))))
 
@@ -227,13 +234,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Gracefully close database connection
-	if gormDB != nil {
-		if sqlDB, err := gormDB.DB(); err == nil {
-			if err := sqlDB.Close(); err != nil {
-				slog.Error("Failed to close database connection", "error", err)
-			}
-		}
+	if err := sqlDB.Close(); err != nil {
+		slog.Error("Failed to close database connection", "error", err)
 	}
 
 	slog.Info("Portal Backend exited")
