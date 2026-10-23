@@ -13,7 +13,7 @@
         "extensions": {
           "code": "PROVIDER_ERROR"
         },
-        "message": "Provider rgd: person not found",
+        "message": "Provider for schema rgd-v1: person not found",
         "path": [
           "personInfo",
           "birthInfo",
@@ -39,14 +39,14 @@
   ],
   "consentRequests": [],
   "providerRequests": {
-    "drp": [
+    "drp-v1": [
       {
-        "query": "query Querydrp { person ( nic : \"199012345678\" ) { fullName } }"
+        "query": "query Querydrp_v1 { person ( nic : \"199012345678\" ) { fullName } }"
       }
     ],
-    "rgd": [
+    "rgd-v1": [
       {
-        "query": "query Queryrgd { getPersonInfo ( nic : \"199012345678\" ) { birthDate } }"
+        "query": "query Queryrgd_v1 { getPersonInfo ( nic : \"199012345678\" ) { birthDate } }"
       }
     ]
   },
@@ -73,7 +73,7 @@
       "actorType": "SERVICE",
       "actorId": "orchestration-engine",
       "targetType": "SERVICE",
-      "targetId": "drp"
+      "targetId": "drp-v1"
     },
     {
       "eventType": "PROVIDER_FETCH",
@@ -81,7 +81,7 @@
       "actorType": "SERVICE",
       "actorId": "orchestration-engine",
       "targetType": "SERVICE",
-      "targetId": "rgd"
+      "targetId": "rgd-v1"
     }
   ]
 }

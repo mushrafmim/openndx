@@ -51,7 +51,7 @@ The OE reads a JSON file (`CONFIG_PATH`, default `./config.json`), the consumer 
 | `foundationalIdArgName` | **Required.** Name of the query argument that identifies the data owner, for example `nic`. The service exits at startup without it. |
 | `pdpUrl` | PDP base URL. If empty, the OE skips authorization and consent checks (see Security). |
 | `ceUrl` | Consent Engine URL **including** `/internal/api/v1`. |
-| `providers[]` | Data providers: `providerKey`, `providerUrl`, `schemaId`, optional `auth`. See [PROVIDER_CONFIGURATION.md](PROVIDER_CONFIGURATION.md). |
+| `providers[]` | Data providers: `schemaId`, `providerUrl`, optional `auth`. See [PROVIDER_CONFIGURATION.md](PROVIDER_CONFIGURATION.md). |
 | `argMappings[]` | How consumer arguments map to each provider's arguments. |
 | `auditConfig` | Argus audit service URL and actor identity. |
 

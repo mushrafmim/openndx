@@ -157,7 +157,6 @@ func TestAuditor_ConsentCheck(t *testing.T) {
 func TestAuditor_ProviderFetch(t *testing.T) {
 	fetch := federator.ProviderFetch{
 		ApplicationID:   "app-1",
-		ServiceKey:      "drp",
 		SchemaID:        "drp-schema",
 		Query:           "query { person { name } }",
 		RequestedFields: []string{"person.name"},
@@ -173,8 +172,8 @@ func TestAuditor_ProviderFetch(t *testing.T) {
 		if event.EventType != "PROVIDER_FETCH" || event.Status != auditpkg.StatusSuccess {
 			t.Errorf("Expected a successful PROVIDER_FETCH, got %s %s", event.Status, event.EventType)
 		}
-		if event.TargetID == nil || *event.TargetID != "drp" {
-			t.Errorf("Expected target drp, got %v", event.TargetID)
+		if event.TargetID == nil || *event.TargetID != "drp-schema" {
+			t.Errorf("Expected target drp-schema, got %v", event.TargetID)
 		}
 		meta := responseMetadata(t, event)
 		if meta["applicationId"] != "app-1" || meta["schemaId"] != "drp-schema" {

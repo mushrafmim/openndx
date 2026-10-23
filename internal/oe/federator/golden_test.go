@@ -46,8 +46,7 @@ var update = flag.Bool("update", false, "rewrite golden files in testdata/golden
 
 const goldenSchemaSDL = `
 directive @sourceInfo(
-	providerKey: String!
-	schemaId: String
+	schemaId: String!
 	providerField: String!
 ) on FIELD_DEFINITION
 
@@ -56,39 +55,38 @@ type Query {
 }
 
 type PersonInfo {
-	fullName: String @sourceInfo(providerKey: "drp", schemaId: "drp-v1", providerField: "person.fullName")
-	address: String @sourceInfo(providerKey: "drp", schemaId: "drp-v1", providerField: "person.permanentAddress")
+	fullName: String @sourceInfo(schemaId: "drp-v1", providerField: "person.fullName")
+	address: String @sourceInfo(schemaId: "drp-v1", providerField: "person.permanentAddress")
 	birthInfo: BirthInfo
-	ownedVehicles: [VehicleInfo] @sourceInfo(providerKey: "dmt", schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data")
+	ownedVehicles: [VehicleInfo] @sourceInfo(schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data")
 }
 
 type BirthInfo {
-	date: String @sourceInfo(providerKey: "rgd", schemaId: "rgd-v1", providerField: "getPersonInfo.birthDate")
-	place: String @sourceInfo(providerKey: "rgd", schemaId: "rgd-v1", providerField: "getPersonInfo.birthPlace")
+	date: String @sourceInfo(schemaId: "rgd-v1", providerField: "getPersonInfo.birthDate")
+	place: String @sourceInfo(schemaId: "rgd-v1", providerField: "getPersonInfo.birthPlace")
 }
 
 type VehicleInfo {
-	regNo: String @sourceInfo(providerKey: "dmt", schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data.registrationNumber")
-	make: String @sourceInfo(providerKey: "dmt", schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data.make")
+	regNo: String @sourceInfo(schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data.registrationNumber")
+	make: String @sourceInfo(schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data.make")
 }
 `
 
 var goldenArgMappings = []*graphql.ArgMapping{
-	{ProviderKey: "drp", SchemaID: "drp-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "nic"},
-	{ProviderKey: "rgd", SchemaID: "rgd-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "getPersonInfo", TargetArgName: "nic"},
-	{ProviderKey: "dmt", SchemaID: "dmt-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "vehicle.getVehicleInfos", TargetArgName: "ownerNic"},
+	{SchemaID: "drp-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "nic"},
+	{SchemaID: "rgd-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "getPersonInfo", TargetArgName: "nic"},
+	{SchemaID: "dmt-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "vehicle.getVehicleInfos", TargetArgName: "ownerNic"},
 }
 
 type goldenProvider struct {
-	key      string
 	schemaID string
 	data     string
 }
 
 var goldenProviders = []goldenProvider{
-	{key: "drp", schemaID: "drp-v1", data: `{"person": {"fullName": "Nimal Perera", "permanentAddress": "12 Galle Road, Colombo"}}`},
-	{key: "rgd", schemaID: "rgd-v1", data: `{"getPersonInfo": {"birthDate": "1990-01-01", "birthPlace": "Kandy"}}`},
-	{key: "dmt", schemaID: "dmt-v1", data: `{"vehicle": {"getVehicleInfos": {"data": [
+	{schemaID: "drp-v1", data: `{"person": {"fullName": "Nimal Perera", "permanentAddress": "12 Galle Road, Colombo"}}`},
+	{schemaID: "rgd-v1", data: `{"getPersonInfo": {"birthDate": "1990-01-01", "birthPlace": "Kandy"}}`},
+	{schemaID: "dmt-v1", data: `{"vehicle": {"getVehicleInfos": {"data": [
 		{"registrationNumber": "CAB-1234", "make": "Toyota"},
 		{"registrationNumber": "WP-5678", "make": "Honda"}
 	]}}}`},
@@ -106,9 +104,9 @@ type goldenCase struct {
 	pdpResponse *policy.PdpResponse
 	// ceResponse overrides the consent engine reply (default: approved).
 	ceResponse *consent.ConsentResponseInternalView
-	// providerStatus overrides a provider's HTTP status by provider key.
+	// providerStatus overrides a provider's HTTP status by schema ID.
 	providerStatus map[string]int
-	// providerBody overrides a provider's JSON response body by provider key.
+	// providerBody overrides a provider's JSON response body by schema ID.
 	providerBody map[string]string
 }
 
@@ -231,13 +229,13 @@ var goldenCases = []goldenCase{
 		// A non-2xx status is a failure even when the body is a GraphQL response.
 		name:           "provider_error_status_with_json_body",
 		request:        graphql.Request{Query: `query { personInfo(nic: "199012345678") { fullName birthInfo { date } } }`},
-		providerStatus: map[string]int{"rgd": http.StatusServiceUnavailable},
-		providerBody:   map[string]string{"rgd": `{"data": {"getPersonInfo": {"birthDate": "stale"}}}`},
+		providerStatus: map[string]int{"rgd-v1": http.StatusServiceUnavailable},
+		providerBody:   map[string]string{"rgd-v1": `{"data": {"getPersonInfo": {"birthDate": "stale"}}}`},
 	},
 	{
 		name:         "provider_graphql_errors",
 		request:      graphql.Request{Query: `query { personInfo(nic: "199012345678") { fullName birthInfo { date } } }`},
-		providerBody: map[string]string{"rgd": `{"data": {"getPersonInfo": null}, "errors": [{"message": "person not found", "path": ["getPersonInfo"]}]}`},
+		providerBody: map[string]string{"rgd-v1": `{"data": {"getPersonInfo": null}, "errors": [{"message": "person not found", "path": ["getPersonInfo"]}]}`},
 	},
 	{
 		name:    "mutation_rejected",
@@ -250,7 +248,7 @@ var goldenCases = []goldenCase{
 	{
 		name:           "provider_failure",
 		request:        graphql.Request{Query: `query { personInfo(nic: "199012345678") { fullName birthInfo { date } } }`},
-		providerStatus: map[string]int{"rgd": http.StatusInternalServerError},
+		providerStatus: map[string]int{"rgd-v1": http.StatusInternalServerError},
 	},
 }
 
@@ -284,8 +282,10 @@ func newGoldenFederator(t *testing.T, env *goldenEnv) *federator.Federator {
 
 	schemas, err := schema.FromSDL(goldenSchemaSDL)
 	require.NoError(t, err)
+	providers, err := provider.NewProviderHandler(env.config.GetProviders())
+	require.NoError(t, err)
 	deps := federator.Deps{
-		Providers: federator.ProviderLookup(provider.NewProviderHandler(env.config.GetProviders()).GetProvider),
+		Providers: federator.ProviderLookup(providers.GetProvider),
 		Schemas:   schemas,
 		Auditor:   middleware.NewAuditor(env.audit, "SERVICE", "orchestration-engine"),
 		Consent:   consent.NewCEServiceClient(env.config.CeConfig.ClientURL),
@@ -351,9 +351,8 @@ func newGoldenEnv(t *testing.T, tc goldenCase) *goldenEnv {
 	}
 	for _, p := range goldenProviders {
 		env.config.Providers = append(env.config.Providers, &configs.ProviderConfig{
-			ProviderKey: p.key,
 			SchemaID:    p.schemaID,
-			ProviderURL: env.providerServer(t, p, tc.providerStatus[p.key], tc.providerBody[p.key]).URL,
+			ProviderURL: env.providerServer(t, p, tc.providerStatus[p.schemaID], tc.providerBody[p.schemaID]).URL,
 		})
 	}
 	return env
@@ -407,10 +406,10 @@ func (e *goldenEnv) providerServer(t *testing.T, p goldenProvider, status int, b
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req graphql.Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("decode %s provider request: %v", p.key, err)
+			t.Errorf("decode %s provider request: %v", p.schemaID, err)
 		}
 		e.mu.Lock()
-		e.transcript.ProviderRequests[p.key] = append(e.transcript.ProviderRequests[p.key], providerCall{
+		e.transcript.ProviderRequests[p.schemaID] = append(e.transcript.ProviderRequests[p.schemaID], providerCall{
 			Query:     canonicalQuery(req.Query),
 			Variables: req.Variables,
 		})
@@ -430,7 +429,7 @@ func (e *goldenEnv) providerServer(t *testing.T, p goldenProvider, status int, b
 		w.WriteHeader(status)
 		_, err := w.Write([]byte(body))
 		if err != nil {
-			t.Errorf("write %s provider response: %v", p.key, err)
+			t.Errorf("write %s provider response: %v", p.schemaID, err)
 		}
 	}))
 	t.Cleanup(srv.Close)

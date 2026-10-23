@@ -30,7 +30,7 @@ type ConsentRequester interface {
 
 // ProviderRegistry looks up the provider that serves a schema.
 type ProviderRegistry interface {
-	Get(serviceKey, schemaID string) (ProviderClient, bool)
+	Get(schemaID string) (ProviderClient, bool)
 }
 
 // ProviderClient sends a sub-query to one provider.
@@ -39,14 +39,14 @@ type ProviderClient interface {
 }
 
 // ProviderLookup adapts lookup, which returns a concrete client type, to a ProviderRegistry.
-func ProviderLookup[C ProviderClient](lookup func(serviceKey, schemaID string) (C, bool)) ProviderRegistry {
+func ProviderLookup[C ProviderClient](lookup func(schemaID string) (C, bool)) ProviderRegistry {
 	return providerLookup[C](lookup)
 }
 
-type providerLookup[C ProviderClient] func(serviceKey, schemaID string) (C, bool)
+type providerLookup[C ProviderClient] func(schemaID string) (C, bool)
 
-func (l providerLookup[C]) Get(serviceKey, schemaID string) (ProviderClient, bool) {
-	client, ok := l(serviceKey, schemaID)
+func (l providerLookup[C]) Get(schemaID string) (ProviderClient, bool) {
+	client, ok := l(schemaID)
 	if !ok {
 		// Avoid returning a typed nil as a non-nil ProviderClient.
 		return nil, false
@@ -57,7 +57,6 @@ func (l providerLookup[C]) Get(serviceKey, schemaID string) (ProviderClient, boo
 // ProviderFetch describes a sub-query sent to a provider, for auditing.
 type ProviderFetch struct {
 	ApplicationID string
-	ServiceKey    string
 	SchemaID      string
 	Query         string
 	// RequestedFields are the provider field paths the consumer asked this provider for.

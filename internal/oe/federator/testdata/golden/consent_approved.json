@@ -41,9 +41,9 @@
     }
   ],
   "providerRequests": {
-    "drp": [
+    "drp-v1": [
       {
-        "query": "query Querydrp { person ( nic : \"199012345678\" ) { fullName permanentAddress } }"
+        "query": "query Querydrp_v1 { person ( nic : \"199012345678\" ) { fullName permanentAddress } }"
       }
     ]
   },
@@ -78,7 +78,7 @@
       "actorType": "SERVICE",
       "actorId": "orchestration-engine",
       "targetType": "SERVICE",
-      "targetId": "drp"
+      "targetId": "drp-v1"
     }
   ]
 }

@@ -9,9 +9,9 @@
   "policyRequests": [],
   "consentRequests": [],
   "providerRequests": {
-    "drp": [
+    "drp-v1": [
       {
-        "query": "query Querydrp { person ( nic : \"199012345678\" ) { fullName } }"
+        "query": "query Querydrp_v1 { person ( nic : \"199012345678\" ) { fullName } }"
       }
     ]
   },
@@ -30,7 +30,7 @@
       "actorType": "SERVICE",
       "actorId": "orchestration-engine",
       "targetType": "SERVICE",
-      "targetId": "drp"
+      "targetId": "drp-v1"
     }
   ]
 }

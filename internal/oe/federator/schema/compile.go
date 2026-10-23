@@ -14,15 +14,14 @@ import (
 const sourceInfoDirective = "sourceInfo"
 
 // sourceInfoDeclaration is added to schemas that use @sourceInfo without declaring it.
-const sourceInfoDeclaration = `directive @sourceInfo(providerKey: String!, schemaId: String, providerField: String!) on FIELD_DEFINITION`
+const sourceInfoDeclaration = `directive @sourceInfo(schemaId: String!, providerField: String!) on FIELD_DEFINITION`
 
 // sourceInfoArguments are the arguments a @sourceInfo declaration must have,
 // each of base type String.
-var sourceInfoArguments = []string{"providerField", "providerKey", "schemaId"}
+var sourceInfoArguments = []string{"providerField", "schemaId"}
 
 // SourceInfo is a field's @sourceInfo: the provider field that serves it.
 type SourceInfo struct {
-	ProviderKey   string
 	SchemaID      string
 	ProviderField string
 }
@@ -74,7 +73,7 @@ func Compile(sdl string) (*CompiledSchema, error) {
 
 // checkSourceInfoDeclaration rejects a @sourceInfo declaration that the
 // federator can't read: it must apply to field definitions and take exactly
-// providerKey, schemaId and providerField, each a String.
+// schemaId and providerField, each a String.
 func checkSourceInfoDeclaration(declaration *ast.DirectiveDefinition) error {
 	if !containsLocation(declaration.Locations, ast.LocationFieldDefinition) {
 		return fmt.Errorf("directive @%s must be declared on FIELD_DEFINITION", sourceInfoDirective)
@@ -88,7 +87,7 @@ func checkSourceInfoDeclaration(declaration *ast.DirectiveDefinition) error {
 	}
 	sort.Strings(names)
 	if fmt.Sprint(names) != fmt.Sprint(sourceInfoArguments) {
-		return fmt.Errorf("directive @%s must take providerKey, schemaId and providerField, got %v", sourceInfoDirective, names)
+		return fmt.Errorf("directive @%s must take schemaId and providerField, got %v", sourceInfoDirective, names)
 	}
 	return nil
 }
@@ -115,12 +114,11 @@ func indexSourceInfo(schema *ast.Schema) (map[fieldKey]SourceInfo, error) {
 				continue
 			}
 			info := SourceInfo{
-				ProviderKey:   argumentString(directive, "providerKey"),
 				SchemaID:      argumentString(directive, "schemaId"),
 				ProviderField: argumentString(directive, "providerField"),
 			}
-			if info.ProviderKey == "" || info.ProviderField == "" {
-				return nil, fmt.Errorf("@%s on %s.%s must set providerKey and providerField", sourceInfoDirective, def.Name, field.Name)
+			if info.SchemaID == "" || info.ProviderField == "" {
+				return nil, fmt.Errorf("@%s on %s.%s must set schemaId and providerField", sourceInfoDirective, def.Name, field.Name)
 			}
 			index[fieldKey{def.Name, field.Name}] = info
 		}

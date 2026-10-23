@@ -75,7 +75,7 @@ func (m *merger) value(field *operation.Field, parentType string, scope *itemSco
 			f := m.plan.sources[field]
 			result := m.results[f]
 			if result.err != nil {
-				m.fieldError(fmt.Sprintf("Failed to fetch data from provider %s", f.providerKey), errors.CodeProviderError, path)
+				m.fieldError(fmt.Sprintf("Failed to fetch data from provider for schema %s", f.schemaID), errors.CodeProviderError, path)
 				return m.complete(field, parentType, nil, true, path)
 			}
 			raw = valueAt(map[string]interface{}(result.response.Data), info.ProviderField)
@@ -163,7 +163,7 @@ func (m *merger) providerErrors() {
 					break
 				}
 			}
-			m.fieldError(fmt.Sprintf("Provider %s: %s", f.providerKey, message), errors.CodeProviderError, path)
+			m.fieldError(fmt.Sprintf("Provider for schema %s: %s", f.schemaID, message), errors.CodeProviderError, path)
 		}
 	}
 }

@@ -259,7 +259,7 @@ func TestGetSchema_Success(t *testing.T) {
 		capturedMethod = r.Method
 
 		resp := schema.SchemaResponse{
-			SchemaID:   "drp-schema-v1",
+			SchemaID:   "drp-person-v1",
 			MemberID:   "mem_123",
 			SchemaName: "DRP Person",
 		}
@@ -270,16 +270,16 @@ func TestGetSchema_Success(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-token")
-	resp, err := client.GetSchema(context.Background(), "drp-schema-v1")
+	resp, err := client.GetSchema(context.Background(), "drp-person-v1")
 
 	assert.NoError(t, err)
 	if assert.NotNil(t, resp) {
-		assert.Equal(t, "drp-schema-v1", resp.SchemaID)
+		assert.Equal(t, "drp-person-v1", resp.SchemaID)
 		assert.Equal(t, "mem_123", resp.MemberID)
 	}
 
 	assert.Equal(t, "Bearer test-token", capturedAuth)
-	assert.Equal(t, "/api/v1/schemas/drp-schema-v1", capturedPath)
+	assert.Equal(t, "/api/v1/schemas/drp-person-v1", capturedPath)
 	assert.Equal(t, http.MethodGet, capturedMethod)
 }
 
@@ -369,8 +369,8 @@ func TestListSchemaPolicyMetadata_Success(t *testing.T) {
 		capturedMethod = r.Method
 		resp := map[string]any{
 			"items": []policy.PolicyMetadataResponse{
-				{ID: "pm_1", SchemaID: "drp-schema-v1", FieldName: "person.fullName", AccessControlType: policy.AccessControlTypePublic},
-				{ID: "pm_2", SchemaID: "drp-schema-v1", FieldName: "person.nic", IsOwner: true},
+				{ID: "pm_1", SchemaID: "drp-person-v1", FieldName: "person.fullName", AccessControlType: policy.AccessControlTypePublic},
+				{ID: "pm_2", SchemaID: "drp-person-v1", FieldName: "person.nic", IsOwner: true},
 			},
 			"count": 2,
 		}
@@ -380,10 +380,10 @@ func TestListSchemaPolicyMetadata_Success(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	fields, err := client.ListSchemaPolicyMetadata(context.Background(), "drp-schema-v1")
+	fields, err := client.ListSchemaPolicyMetadata(context.Background(), "drp-person-v1")
 
 	assert.NoError(t, err)
-	assert.Equal(t, "/api/v1/schemas/drp-schema-v1/policy-metadata", capturedPath)
+	assert.Equal(t, "/api/v1/schemas/drp-person-v1/policy-metadata", capturedPath)
 	assert.Equal(t, http.MethodGet, capturedMethod)
 	assert.Equal(t, 2, fields.Count)
 	if assert.Len(t, fields.Items, 2) {

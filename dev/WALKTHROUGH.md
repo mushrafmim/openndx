@@ -113,14 +113,14 @@ routing in OE are separate: OE still calls DRP and RGD independently.
 
 ```bash
 ./ondx schemas create --profile local \
-  --schema-id drp-schema-v1 --name "DRP Person Registry" \
+  --schema-id drp-person-v1 --name "DRP Person Registry" \
   --endpoint http://host.docker.internal:9091 \
   --member-id "$DRP_MEMBER_ID" \
   --field person.fullName:public:primary \
   --field person.profession:restricted:primary
 
 ./ondx schemas create --profile local \
-  --schema-id abc-212 --name "RGD Birth Registry" \
+  --schema-id rgd-person-v1 --name "RGD Birth Registry" \
   --endpoint http://host.docker.internal:8080/graphql \
   --member-id "$DRP_MEMBER_ID" \
   --field getPersonInfo.birthPlace:restricted:primary \
@@ -144,7 +144,7 @@ Start with permission for only the full name:
 ```bash
 ./ondx applications create --profile local \
   --name "Local Passport Demo" --member-id "$DIE_MEMBER_ID" \
-  --field drp-schema-v1:person.fullName
+  --field drp-person-v1:person.fullName
 ```
 
 This provisions an M2M client in ThunderID and grants it the data-consumer role.
@@ -220,10 +220,10 @@ restricted fields yet. Add them through the CLI:
 ```bash
 ./ondx policy update --profile local --app-id "$APP_ID" \
   --grant-duration 30d \
-  --field drp-schema-v1:person.fullName \
-  --field drp-schema-v1:person.profession \
-  --field abc-212:getPersonInfo.birthPlace \
-  --field abc-212:getPersonInfo.district
+  --field drp-person-v1:person.fullName \
+  --field drp-person-v1:person.profession \
+  --field rgd-person-v1:getPersonInfo.birthPlace \
+  --field rgd-person-v1:getPersonInfo.district
 
 ./ondx applications get --profile local --app-id "$APP_ID"
 ```

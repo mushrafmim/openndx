@@ -28,9 +28,8 @@ Keys that are accepted but ignored: `server.port`, `log.level`, `services.pdp_ur
 
 | Key | Notes |
 |---|---|
-| `providerKey` | Unique name; must match `providerKey` in the schema's `@sourceInfo`. |
+| `schemaId` | The provider schema's ID, as registered in Portal Backend and the PDP. Unique; identifies the provider and must match `schemaId` in the schema's `@sourceInfo`. |
 | `providerUrl` | The provider's GraphQL endpoint. The OE sends the sub-query as a `POST` to it. |
-| `schemaId` | The provider schema's ID, as registered in Portal Backend and the PDP. `(providerKey, schemaId)` identifies a provider. |
 | `auth.type` | `apiKey` or `oauth2`. Omit `auth` for an open provider. |
 | `auth.apiKeyName`, `auth.apiKeyValue` | For `apiKey`: the header name and value sent with each request. |
 | `auth.tokenUrl`, `auth.clientId`, `auth.clientSecret`, `auth.scopes` | For `oauth2`: client-credentials flow. `scopes` is a string array. |
@@ -41,7 +40,7 @@ Each entry maps an argument in the consumer's query to an argument of one provid
 
 | Key | Notes |
 |---|---|
-| `providerKey`, `schemaId` | The provider this mapping applies to. |
+| `schemaId` | The provider this mapping applies to. |
 | `targetArgName` | The argument name the provider expects. |
 | `sourceArgPath` | The consumer-side argument: the consumer field path from the root, then the argument name, joined with dashes. `personInfo-nic` is the `nic` argument of the root field `personInfo`; an argument with the same name on another field doesn't match. |
 | `targetArgPath` | The provider field the argument is attached to: a leading part of the provider field path, for example `person` for the field `person.fullName`. The argument is attached to that field only, not to the fields above it. |
@@ -72,7 +71,7 @@ The image contains only the binary, so the schema, like `config.json`, is mounte
 
 At startup the OE validates the schema against the GraphQL spec (with [gqlparser](https://github.com/vektah/gqlparser)) and compiles it once.
 
-Leaf fields in the schema must carry `@sourceInfo(providerKey, schemaId, providerField)`, with `providerKey` and `providerField` set. The schema may declare the directive itself; if it doesn't, the OE adds `directive @sourceInfo(providerKey: String!, schemaId: String, providerField: String!) on FIELD_DEFINITION`. See [schema.graphql](schema.graphql) for a sample.
+Leaf fields in the schema must carry `@sourceInfo(schemaId, providerField)`, with both set. The schema may declare the directive itself; if it doesn't, the OE adds `directive @sourceInfo(schemaId: String!, providerField: String!) on FIELD_DEFINITION`. See [schema.graphql](schema.graphql) for a sample.
 
 A list field with `@sourceInfo` points at a list in the provider's response, and its item fields are read from each item. An item field's `providerField` is either the full path, starting with the list's path (`vehicle.getVehicleInfos.data.make`), or just the field's name in the item (`make`).
 
@@ -103,7 +102,7 @@ GraphQL errors carry the code in `errors[].extensions.code`. Federation errors u
 | `MISSING_IDENTIFIER` | The query has no value for the `foundationalIdArgName` argument. When the schema declares that argument as required (for example `nic: String!`), a query without it fails validation with `BAD_REQUEST` instead. |
 | `AMBIGUOUS_IDENTIFIER` | The query has that argument with different values, for example on two aliased fields. The PDP isn't called. |
 | `BAD_REQUEST` | The query could not be parsed, failed validation against the schema, has invalid variables, or uses something the OE doesn't support (see [Queries](#queries)). Parse and validation errors carry `locations` in the query. |
-| `PROVIDER_ERROR` | A provider call failed: the provider was unreachable or not configured, answered with a non-2xx HTTP status, or sent a body that isn't a GraphQL response. Also used for errors a provider returned in its response, with the message prefixed by the provider key. |
+| `PROVIDER_ERROR` | A provider call failed: the provider was unreachable or not configured, answered with a non-2xx HTTP status, or sent a body that isn't a GraphQL response. Also used for errors a provider returned in its response, with the message prefixed by the provider's schema ID. |
 
 Mutations and subscriptions are rejected: with `BAD_REQUEST` when the schema has no `Mutation` or `Subscription` type, otherwise with the message `Only query operation is supported` and no code.
 

@@ -14,7 +14,7 @@ The Policy Decision Point only answers for fields it has metadata for. A field w
 
 ```bash
 ondx schemas create --profile local \
-  --schema-id drp-schema-v1 --name "DRP Person Registry" \
+  --schema-id drp-person-v1 --name "DRP Person Registry" \
   --endpoint http://localhost:9091 --member-id "$MEMBER_ID" \
   --field person.fullName:public:primary \
   --field person.profession:restricted:primary
@@ -24,13 +24,12 @@ The `--schema-id` becomes the `schemaId`, and each `--field` name becomes the PD
 
 ## 2. Add the provider to `config.json`
 
-Add an entry to `providers`. `providerKey` and `schemaId` together identify the provider.
+Add an entry to `providers`. Its `schemaId` identifies the provider. If one endpoint serves several schemas, add an entry for each.
 
 ```json
 {
-  "providerKey": "drp",
+  "schemaId": "drp-person-v1",
   "providerUrl": "http://localhost:9091",
-  "schemaId": "drp-schema-v1",
   "auth": { "type": "apiKey", "apiKeyName": "Test-Key", "apiKeyValue": "<key>" }
 }
 ```
@@ -49,8 +48,7 @@ and the provider expects `person(nic: "...") { fullName }`. The mapping is:
 
 ```json
 {
-  "providerKey": "drp",
-  "schemaId": "drp-schema-v1",
+  "schemaId": "drp-person-v1",
   "targetArgName": "nic",
   "sourceArgPath": "personInfo-nic",
   "targetArgPath": "person"
@@ -65,11 +63,11 @@ Each leaf field the consumer can query carries `@sourceInfo`:
 
 ```graphql
 type PersonInfo {
-  fullName: String @sourceInfo(providerKey: "drp", schemaId: "drp-schema-v1", providerField: "person.fullName")
+  fullName: String @sourceInfo(schemaId: "drp-person-v1", providerField: "person.fullName")
 }
 ```
 
-- `providerKey` and `schemaId` must match the provider entry in `config.json`.
+- `schemaId` must match the provider entry in `config.json`.
 - `providerField` is the path in the provider's schema and must match the `fieldName` registered in step 1.
 
 The checked-in sample is [schema.graphql](schema.graphql). To change the schema the OE serves, edit the file named by `schemaPath` in `config.json` (default the `schema.graphql` next to it) and restart the OE (see [CONFIGURATION.md](CONFIGURATION.md#schema)).

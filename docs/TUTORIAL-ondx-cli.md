@@ -154,7 +154,7 @@ unit and its users in ThunderID's console first and pass its ID here.
 ### 3.2 Register DRP's schema
 
 ```bash
-ondx schemas create --schema-id drp-schema-v1 \
+ondx schemas create --schema-id drp-person-v1 \
   --name "DRP Person Registry" --endpoint http://drp.example.gov.lk/graphql \
   --member-id <drpMemberId> \
   --field person.fullName:public:primary \
@@ -167,8 +167,8 @@ ondx schemas create --schema-id drp-schema-v1 \
 This prints each field as `schemaId:fieldName` — copy that shape directly into the next steps.
 A field must be registered here before any application can be granted it.
 
-`--schema-id drp-schema-v1` matches the ID the Orchestration Engine's unified schema already uses
-for DRP (`@sourceInfo(schemaId: "drp-schema-v1", ...)` in `cmd/oe/schema.graphql`), so the OE's
+`--schema-id drp-person-v1` matches the ID the Orchestration Engine's unified schema already uses
+for DRP (`@sourceInfo(schemaId: "drp-person-v1", ...)` in `cmd/oe/schema.graphql`), so the OE's
 policy checks find this schema's fields without editing its config. Leave `--schema-id` out and
 Portal Backend generates a UUID instead. The ID can't be changed later.
 

@@ -31,7 +31,7 @@ func TestDevelopmentConfigArgumentMappings(t *testing.T) {
 			{
 				name:      "public DRP literal",
 				request:   graphql.Request{Query: `query { personInfo(nic: "748213") { fullName } }`},
-				providers: []string{"drp"},
+				providers: []string{"drp-person-v1"},
 				want:      map[string]interface{}{"fullName": "Suresh"},
 			},
 			{
@@ -40,7 +40,7 @@ func TestDevelopmentConfigArgumentMappings(t *testing.T) {
 					Query:     `query Person($nic: String!) { personInfo(nic: $nic) { fullName } }`,
 					Variables: map[string]interface{}{"nic": "748213"},
 				},
-				providers: []string{"drp"},
+				providers: []string{"drp-person-v1"},
 				want:      map[string]interface{}{"fullName": "Suresh"},
 			},
 			{
@@ -49,13 +49,13 @@ func TestDevelopmentConfigArgumentMappings(t *testing.T) {
 					Query:     `query Person($nic: String!) { personInfo(nic: $nic) { birthInfo { district } } }`,
 					Variables: map[string]interface{}{"nic": "748213"},
 				},
-				providers: []string{"rgd"},
+				providers: []string{"rgd-person-v1"},
 				want:      map[string]interface{}{"birthInfo": map[string]interface{}{"district": "Rivertown"}},
 			},
 			{
 				name:      "both providers",
 				request:   graphql.Request{Query: `query { personInfo(nic: "748213") { fullName profession birthInfo { birthPlace district } } }`},
-				providers: []string{"drp", "rgd"},
+				providers: []string{"drp-person-v1", "rgd-person-v1"},
 				want: map[string]interface{}{
 					"fullName": "Suresh", "profession": "Software Engineer",
 					"birthInfo": map[string]interface{}{"birthPlace": "Rivertown General Hospital", "district": "Rivertown"},
@@ -72,7 +72,7 @@ func TestDevelopmentConfigArgumentMappings(t *testing.T) {
 				cfg.PdpConfig.ClientURL = pdp.URL
 				calls := make(chan string, 2)
 				for _, p := range cfg.Providers {
-					key := p.ProviderKey
+					key := p.SchemaID
 					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 						var request graphql.Request
 						if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -86,7 +86,7 @@ func TestDevelopmentConfigArgumentMappings(t *testing.T) {
 						}
 						calls <- key
 						var data map[string]interface{}
-						if key == "drp" {
+						if key == "drp-person-v1" {
 							data = map[string]interface{}{"person": map[string]interface{}{"fullName": "Suresh", "profession": "Software Engineer"}}
 						} else {
 							data = map[string]interface{}{"getPersonInfo": map[string]interface{}{"birthPlace": "Rivertown General Hospital", "district": "Rivertown"}}
