@@ -9,8 +9,7 @@ import (
 )
 
 // TestNewHandler checks that NewHandler wires the given dependencies.
-// Environment parsing is covered by idpfactory.TestNewFromEnv and
-// policy.TestNewClientFromEnv.
+// Configuration loading is covered by cmd/pb's config tests.
 func TestNewHandler(t *testing.T) {
 	db := setupSQLiteTestDB(t)
 	service := NewService(db, policy.NewClient("http://localhost:9999"), &idptest.Mock{})

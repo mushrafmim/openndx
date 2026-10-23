@@ -2,22 +2,25 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/authz"
+	"github.com/OpenNSW/core/cors"
 	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/openndx/openndx-core/internal/database"
 	"github.com/openndx/openndx-core/internal/pb/application"
 	"github.com/openndx/openndx-core/internal/pb/caller"
-	"github.com/openndx/openndx-core/internal/pb/idp/idpfactory"
+	"github.com/openndx/openndx-core/internal/pb/idp/thunderid"
 	"github.com/openndx/openndx-core/internal/pb/member"
-	"github.com/openndx/openndx-core/internal/pb/middleware"
 	"github.com/openndx/openndx-core/internal/pb/policy"
 	"github.com/openndx/openndx-core/internal/pb/schema"
 	"github.com/openndx/openndx-core/internal/utils"
@@ -31,30 +34,34 @@ var (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{AddSource: true}))
-	slog.SetDefault(logger)
+	cfg, err := loadConfig(os.Args[1:])
+	if errors.Is(err, flag.ErrHelp) {
+		return
+	}
+	if err != nil {
+		slog.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
+	}
+
+	utils.SetupLogging(cfg.Logging.Format, cfg.Logging.Level)
 
 	slog.Info("Starting Portal Backend initialization",
 		"version", Version,
 		"build_time", BuildTime,
 		"git_commit", GitCommit)
 
-	dbConfig, err := databaseConfigFromEnv()
-	if err != nil {
-		slog.Error("Invalid database configuration", "error", err)
-		os.Exit(1)
-	}
-	gormDB, sqlDB, err := database.OpenGORM(context.Background(), dbConfig, dbIdleTimeout)
+	gormDB, sqlDB, err := database.OpenGORM(context.Background(), cfg.Database.Config, cfg.Database.IdleTimeout)
 	if err != nil {
 		slog.Error("Failed to connect to database", "error", err)
 		os.Exit(1)
 	}
+	dbName := cfg.Database.Postgres.Name
 	slog.Info("Connected to PostgreSQL",
-		"host", dbConfig.Postgres.Host,
-		"port", dbConfig.Postgres.Port,
-		"database", dbConfig.Postgres.Name)
+		"host", cfg.Database.Postgres.Host,
+		"port", cfg.Database.Postgres.Port,
+		"database", dbName)
 
-	if os.Getenv("RUN_MIGRATION") == "true" {
+	if cfg.Database.RunMigration {
 		if err := member.DropLegacyColumns(gormDB); err != nil {
 			slog.Error("Failed to run database migrations", "error", err)
 			os.Exit(1)
@@ -75,29 +82,16 @@ func main() {
 	}
 
 	// Initialize external service clients
-	idpProvider, err := idpfactory.NewFromEnv()
-	if err != nil {
-		slog.Error("Failed to initialize IDP provider", "error", err)
-		os.Exit(1)
-	}
-
-	pdpClient, err := policy.NewClientFromEnv()
-	if err != nil {
-		slog.Error("Failed to initialize PDP client", "error", err)
-		os.Exit(1)
-	}
+	idpProvider := thunderid.NewClient(cfg.IDP.Management)
+	slog.Info("PDP Service URL", "url", cfg.PDP.URL)
+	pdpClient := policy.NewClient(cfg.PDP.URL)
 
 	// Initialize Audit system
-	// Services will work without auditing - gracefully degrades if disabled via ENABLE_AUDIT=false
-	// or if AUDIT_SERVICE_URL is not provided
-	auditServiceURL := os.Getenv("AUDIT_SERVICE_URL")
-	apiKey := os.Getenv("ARGUS_API_KEY")
-	if apiKey == "" {
-		apiKey = os.Getenv("ARGUS_AUTH_TOKEN")
-	}
+	// Services will work without auditing - gracefully degrades if audit.url is
+	// empty (or the audit library's ENABLE_AUDIT=false is set)
 	auditClient := audit.NewClient(audit.Config{
-		BaseURL: auditServiceURL,
-		APIKey:  apiKey,
+		BaseURL: cfg.Audit.URL,
+		APIKey:  cfg.Audit.APIKey,
 	})
 	audit.InitializeGlobalAudit(auditClient)
 
@@ -112,21 +106,8 @@ func main() {
 	applicationHandler := application.NewHandler(applicationService)
 
 	// Setup authentication: accept tokens the IdP issued for this API's
-	// audience, whichever client requested them. IDP_JWKS_URL and IDP_ISSUER
-	// default to IDP_BASE_URL's endpoints when unset.
-	idpBaseURL := os.Getenv("IDP_BASE_URL")
-	authnConfig := authn.Config{
-		JWKSURL:               utils.GetEnvOrDefault("IDP_JWKS_URL", idpBaseURL+"/oauth2/jwks"),
-		Issuer:                utils.GetEnvOrDefault("IDP_ISSUER", utils.GetEnvOrDefault("IDP_TOKEN_URL", idpBaseURL+"/oauth2/token")),
-		Audience:              os.Getenv("IDP_AUDIENCE"),
-		InsecureSkipTLSVerify: utils.GetEnvOrDefault("IDP_JWKS_INSECURE_SKIP_VERIFY", "false") == "true",
-	}
-	if err := authnConfig.Validate(); err != nil {
-		slog.Error("Invalid authentication configuration (check IDP_JWKS_URL, IDP_ISSUER and IDP_AUDIENCE)", "error", err)
-		os.Exit(1)
-	}
-
-	authnManager, err := authn.NewManager(authnConfig)
+	// audience, whichever client requested them.
+	authnManager, err := authn.NewManager(cfg.IDP.Config)
 	if err != nil {
 		slog.Error("Failed to initialize authentication", "error", err)
 		os.Exit(1)
@@ -187,24 +168,20 @@ func main() {
 	// requests, which no apiMux route matches.
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /health", healthHandler(gormDB, dbConfig.Postgres.Name))
+	mux.HandleFunc("GET /health", healthHandler(gormDB, dbName))
 	mux.HandleFunc("GET /debug", debugHandler)
-	mux.HandleFunc("GET /debug/db", debugDBHandler(gormDB, dbConfig.Postgres.Name))
+	mux.HandleFunc("GET /debug/db", debugDBHandler(gormDB, dbName))
 
-	mux.Handle("/api/v1/", middleware.NewCORSMiddleware()(authnManager.RequireAuthMiddleware()(caller.Middleware(memberService.MemberIDByOuID)(apiMux))))
+	mux.Handle("/api/v1/", cors.CORS(&cfg.CORS)(authnManager.RequireAuthMiddleware()(caller.Middleware(memberService.MemberIDByOuID)(apiMux))))
 
 	// Start server
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8083"
-	}
-
+	port := strconv.Itoa(cfg.Server.Port)
 	addr := ":" + port
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      utils.PanicRecoveryMiddleware(mux),
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  cfg.Server.Timeout,
+		WriteTimeout: cfg.Server.Timeout,
 		IdleTimeout:  60 * time.Second,
 	}
 

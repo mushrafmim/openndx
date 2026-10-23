@@ -1,0 +1,55 @@
+# Portal Backend configuration for Docker Compose (compose.yml mounts it at
+# /app/config/config.yaml). Values shared with other services come from the
+# environment that compose.yml passes in, with the defaults from .env.example.
+
+server:
+  port: 8083
+  timeout: 15s
+
+logging:
+  level: info
+  format: json
+
+cors:
+  # The member and admin portals, run natively with `pnpm dev`.
+  allowedOrigins:
+    - http://localhost:5173
+
+idp:
+  # Reached over the compose network; the issuer is ThunderID's public URL.
+  # audience is PB's resource server (thunderid/bootstrap/resource.yaml):
+  # clients request `resource=http://pb.openndx.local` at login.
+  jwksURL: http://thunderid:8090/oauth2/jwks
+  issuer: "{{env:IDP_PUBLIC_URL}}"
+  audience: "{{env:PB_AUDIENCE}}"
+  # PORTAL_BACKEND is PB's own client (thunderid/bootstrap/application.yaml).
+  # Its `system` scope belongs to ThunderID's built-in System resource server,
+  # whose identifier is fixed at https://localhost:8090/mcp whatever the
+  # public URL.
+  management:
+    baseURL: http://thunderid:8090
+    clientID: PORTAL_BACKEND
+    clientSecret: "{{env:PORTAL_BACKEND_CLIENT_SECRET}}"
+    scopes: [system]
+    resource: https://localhost:8090/mcp
+    dataConsumerRoleID: 01900000-0000-7000-8000-000000000092
+
+pdp:
+  url: http://policy-decision-point:8082
+
+# Optional: PB degrades gracefully if the audit service is unreachable.
+audit:
+  url: "{{env:AUDIT_SERVICE_URL}}"
+  apiKey: "{{env:ARGUS_API_KEY}}"
+
+database:
+  driver: postgres
+  postgres:
+    host: postgres
+    port: 5432
+    user: "{{env:DB_USER}}"
+    password: "{{env:DB_PASSWORD}}"
+    name: "{{env:DB_NAME_PB}}"
+    sslMode: disable
+  idleTimeout: 30m
+  runMigration: true

@@ -185,7 +185,7 @@ inboundAuthConfig:
 #
 # clientSecret is resolved from PORTAL_BACKEND_CLIENT_SECRET at bootstrap time;
 # the thunderid-setup service sets it, and portal-backend reads the same value
-# as IDP_CLIENT_SECRET.
+# as idp.management.clientSecret (cmd/pb/config.docker.yaml).
 resource_type: application
 id: 01900000-0000-7000-8000-0000000000d0
 name: Portal Backend

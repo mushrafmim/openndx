@@ -1,60 +1,79 @@
 # PB configuration reference
 
-Every environment variable the Portal Backend reads. The short version is in the [README](README.md#configuration); [.env.example](.env.example) is a template. PB loads no `.env` file, so export the variables or pass `--env-file` to Docker. Compose values come from [compose.yml](../../compose.yml).
+The Portal Backend reads one YAML file: the `-config` flag, else `CONFIG_PATH`, else `config.yaml` in the working directory. The short version is in the [README](README.md#configuration). Templates:
 
-"Code default" is what PB uses when the variable is unset. Several differ from the Compose values, so check which you are running with.
+- [config.example.yaml](config.example.yaml): native runs. Copy it to the git-ignored `config.yaml`.
+- [config.docker.yaml](config.docker.yaml): mounted by [compose.yml](../../compose.yml), which passes in the shared values from [.env.example](../../.env.example).
+- [config.test.yaml](config.test.yaml): mounted by [docker-compose.test.yml](docker-compose.test.yml).
 
-## Server
+A value written as `"{{env:NAME}}"` or `"{{file:/path}}"` is read from that environment variable or file at startup. The placeholder must be the whole value, and an unset or empty variable stops the service. Keys left out keep the defaults below; keys PB does not know are ignored.
 
-| Variable | Code default | Compose | Notes |
+The last column is the environment variable each key replaces, for upgrading from releases that configured PB through the environment.
+
+## Server and logging
+
+| Key | Default | Notes | Replaces |
 |---|---|---|---|
-| `PORT` | `8083` | `8083` | |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | `*` | Comma-separated. Credentials are always allowed; set explicit origins outside local development. |
+| `server.port` | `8083` | Listen port. The server binds on all interfaces. | `PORT` |
+| `server.timeout` | `15s` | Read and write timeout. | |
+| `logging.level` | `info` | `debug`, `info`, `warn` or `error`. | |
+| `logging.format` | `json` | `json` or `text`. | |
 
-## Database
+## CORS
 
-| Variable | Code default | Compose | Notes |
+Applies to `/api/v1/`. Uses [`OpenNSW/core/cors`](https://github.com/OpenNSW/core/tree/main/cors).
+
+| Key | Default | Notes | Replaces |
 |---|---|---|---|
-| `DB_HOST`, `DB_PORT` | `localhost`, `5432` | `postgres`, `5432` | |
-| `DB_USERNAME` | `postgres` | `postgres` | |
-| `DB_PASSWORD` | none | `1234` | **Required.** |
-| `DB_NAME` | none | `portal_backend` | **Required.** |
-| `DB_SSLMODE` | `require` | `disable` | |
-| `RUN_MIGRATION` | unset | `true` | Migrations run only when the value is exactly `true`. They first drop the legacy `members.idp_user_id` column, then auto-migrate `members`, `schemas`, `applications`, `schema_submissions` and `application_submissions`. There are no versioned migrations. |
-
-The connection pool is fixed: 25 open and 5 idle connections, 1 hour lifetime, 30 minute idle time.
+| `cors.allowedOrigins` | `[http://localhost:5173]` | Browser origins of the member and admin portals. `*` stops the service at startup while `allowCredentials` is true. | `CORS_ALLOWED_ORIGINS` |
+| `cors.allowedMethods`, `cors.allowedHeaders` | see [config.go](config.go) | A list in the file replaces the default list. | |
+| `cors.allowCredentials`, `cors.maxAge` | `true`, `86400` | | |
 
 ## Token validation
 
-| Variable | Code default | Notes |
-|---|---|---|
-| `IDP_AUDIENCE` | none | **Required.** PB's resource-server identifier (`http://pb.openndx.local` in the bundled stack). |
-| `IDP_BASE_URL` | none | Derives the two URLs below when they are not set. Required unless `IDP_JWKS_URL` and an issuer are set. |
-| `IDP_JWKS_URL` | `IDP_BASE_URL` + `/oauth2/jwks` | Signing keys. |
-| `IDP_ISSUER` | `IDP_TOKEN_URL`, else `IDP_BASE_URL` + `/oauth2/token` | Must equal the tokens' `iss`. Compose sets it to ThunderID's public URL. |
-| `IDP_JWKS_INSECURE_SKIP_VERIFY` | `false` | Skip TLS verification when fetching the JWKS. Development only. |
+| Key | Default | Notes | Replaces |
+|---|---|---|---|
+| `idp.jwksURL` | none | **Required.** Signing keys. | `IDP_JWKS_URL` |
+| `idp.issuer` | none | **Required.** Must equal the tokens' `iss`: ThunderID's public URL, not `/oauth2/token`. | `IDP_ISSUER`, `IDP_TOKEN_URL` |
+| `idp.audience` | none | **Required.** PB's resource-server identifier (`http://pb.openndx.local` in the bundled stack). | `IDP_AUDIENCE` |
+| `idp.insecureSkipTLSVerify` | `false` | Skip TLS verification when fetching the JWKS. Development only. | `IDP_JWKS_INSECURE_SKIP_VERIFY` |
+
+The JWKS URL and issuer are no longer derived from a base URL; set both.
 
 ## Identity provider management client
 
 PB creates and deletes each application's OAuth2 client through ThunderID's management API.
 
-| Variable | Code default | Notes |
-|---|---|---|
-| `IDP_CLIENT_ID`, `IDP_CLIENT_SECRET` | none | **Required.** PB's own client (`PORTAL_BACKEND` in the bundled stack). |
-| `IDP_BASE_URL` | none | ThunderID base URL for management calls. If unset, falls back to `IDP_ISSUER` or `IDP_TOKEN_URL` when `IDP_JWKS_URL` is set. |
-| `IDP_SCOPE` | none | Space-separated scopes for the management token (`system`). |
-| `IDP_TOKEN_RESOURCE` | none | Resource server the `system` scope belongs to. ThunderID needs it for that scope. |
-| `IDP_DATA_CONSUMER_ROLE_ID` | none | Role assigned to every created application client, which grants it `getdata`. If empty, role assignment is skipped. |
-| `IDP_TOKEN_URL` | none | Only a fallback when deriving the issuer and base URL. |
+| Key | Default | Notes | Replaces |
+|---|---|---|---|
+| `idp.management.baseURL` | none | **Required.** ThunderID base URL for management calls. | `IDP_BASE_URL` |
+| `idp.management.clientID`, `.clientSecret` | none | **Required.** PB's own client (`PORTAL_BACKEND` in the bundled stack). | `IDP_CLIENT_ID`, `IDP_CLIENT_SECRET` |
+| `idp.management.scopes` | empty | Scopes for the management token (`[system]`). | `IDP_SCOPE` (space-separated) |
+| `idp.management.resource` | empty | Resource server the `system` scope belongs to. ThunderID needs it for that scope. | `IDP_TOKEN_RESOURCE` |
+| `idp.management.dataConsumerRoleID` | empty | Role assigned to every created application client, which grants it `getdata`. If empty, role assignment is skipped. | `IDP_DATA_CONSUMER_ROLE_ID` |
 
 ## Policy Decision Point and audit
 
-| Variable | Code default | Notes |
-|---|---|---|
-| `PDP_SERVICE_URL` | none | **Required.** Must start with `http://` or `https://`. PB calls the PDP without authentication. |
-| `AUDIT_SERVICE_URL` | none | Argus URL. Auditing is off when empty. |
-| `ARGUS_API_KEY` | none | Falls back to `ARGUS_AUTH_TOKEN`. |
-| `ENABLE_AUDIT` | on | Read by the audit client library; `false` disables auditing. |
+| Key | Default | Notes | Replaces |
+|---|---|---|---|
+| `pdp.url` | none | **Required.** `http` or `https` URL. PB calls the PDP without authentication. | `PDP_SERVICE_URL` |
+| `audit.url` | empty | Argus URL. Auditing is off when empty. | `AUDIT_SERVICE_URL` |
+| `audit.apiKey` | empty | | `ARGUS_API_KEY`, `ARGUS_AUTH_TOKEN` |
+
+The audit client library still reads `ENABLE_AUDIT` itself; `false` disables auditing.
+
+## Database
+
+| Key | Default | Notes | Replaces |
+|---|---|---|---|
+| `database.driver` | `postgres` | Only `postgres` is supported. | |
+| `database.postgres.host`, `.user`, `.password` | none | **Required.** | `DB_HOST`, `DB_USERNAME`, `DB_PASSWORD` |
+| `database.postgres.port` | `5432` | | `DB_PORT` |
+| `database.postgres.name` | `portal_backend` | | `DB_NAME` |
+| `database.postgres.sslMode` | `require` | Use `disable` for a local PostgreSQL without TLS. | `DB_SSLMODE` |
+| `database.postgres.pool.maxOpenConns`, `.maxIdleConns`, `.maxConnLifetimeSeconds` | `25`, `5`, `3600` | Connection pool. | |
+| `database.idleTimeout` | `30m` | Closes connections idle this long. | |
+| `database.runMigration` | `false` | First drops the legacy `members.idp_user_id` column, then auto-migrates `members`, `schemas`, `applications`, `schema_submissions` and `application_submissions`. There are no versioned migrations. | `RUN_MIGRATION` |
 
 ## Build metadata
 
@@ -62,4 +81,4 @@ The Dockerfile sets `main.Version`, `main.BuildTime` and `main.GitCommit` with l
 
 ## Startup failures
 
-PB exits at startup if `DB_PASSWORD` or `DB_NAME` is missing, if `DB_PORT` is not a number, if it cannot connect to the database within 10 seconds, if `PDP_SERVICE_URL`, `IDP_CLIENT_ID`, `IDP_CLIENT_SECRET` or a usable IdP base URL is missing, or if `IDP_AUDIENCE`, the JWKS URL or the issuer is missing or not a valid URL.
+PB checks the file at startup and exits with an error naming the bad key: a missing required key, an unset placeholder variable, a URL that is not `http` or `https`, a port outside 1–65535, `*` in `cors.allowedOrigins` with credentials allowed, or an inconsistent pool. It also exits if it cannot connect to the database within 10 seconds.

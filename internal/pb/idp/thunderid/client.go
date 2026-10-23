@@ -27,20 +27,21 @@ const (
 	cleanupTimeout = 10 * time.Second
 )
 
-// Config configures the ThunderID client.
+// Config configures the ThunderID client. It carries yaml struct tags, so it
+// can be embedded in a service's config file.
 type Config struct {
-	BaseURL      string
-	ClientID     string
-	ClientSecret string
+	BaseURL      string `yaml:"baseURL"`
+	ClientID     string `yaml:"clientID"`
+	ClientSecret string `yaml:"clientSecret"`
 	// Scopes requested for the management API token, e.g. "system".
-	Scopes []string
+	Scopes []string `yaml:"scopes"`
 	// Resource is sent as the token request's `resource` parameter: the
 	// identifier of ThunderID's System resource server, which owns the
 	// `system` scope. ThunderID rejects the token request without it.
-	Resource string
+	Resource string `yaml:"resource"`
 	// DataConsumerRoleID is the role every created application is assigned,
 	// so it can request the `getdata` scope. Empty skips the assignment.
-	DataConsumerRoleID string
+	DataConsumerRoleID string `yaml:"dataConsumerRoleID"`
 }
 
 type Client struct {

@@ -30,37 +30,30 @@ curl http://localhost:8083/health
 
 This also starts PostgreSQL and ThunderID, and registers PB's own client (`PORTAL_BACKEND`) in ThunderID.
 
-Native, against your own PostgreSQL, PDP and identity provider. All of the variables marked required in [CONFIGURATION.md](CONFIGURATION.md) must be set, or the service exits at startup:
+Native, against your own PostgreSQL, PDP and identity provider:
 
 ```bash
-export DB_HOST=localhost DB_USERNAME=postgres DB_PASSWORD=<password> DB_NAME=portal_backend \
-       DB_SSLMODE=disable RUN_MIGRATION=true \
-       PDP_SERVICE_URL=http://localhost:8082 \
-       IDP_BASE_URL=http://localhost:8090 IDP_AUDIENCE=http://pb.openndx.local \
-       IDP_CLIENT_ID=PORTAL_BACKEND IDP_CLIENT_SECRET=<secret> IDP_SCOPE=system \
-       IDP_TOKEN_RESOURCE=https://localhost:8090/mcp IDP_DATA_CONSUMER_ROLE_ID=<role-id>
-make run portal-backend      # or: go run ./cmd/pb
+cp cmd/pb/config.example.yaml cmd/pb/config.yaml    # once; config.yaml is git-ignored
+export DB_PASSWORD=<password> IDP_CLIENT_SECRET=<secret>
+make run portal-backend    # or: go run ./cmd/pb -config cmd/pb/config.yaml
 ```
 
-No `.env` file is loaded; [.env.example](.env.example) is a template to source yourself (`set -a; source cmd/pb/.env; set +a`). Tables are created only when `RUN_MIGRATION` is exactly `true`.
+[config.example.yaml](config.example.yaml) points at `localhost:5432` as user `postgres`, a PDP on `localhost:8082` and a ThunderID on `localhost:8090`, reads the two secrets from the environment, and creates PB's tables at startup.
 
 ## Configuration
 
-| Variable | Default | Notes |
-|---|---|---|
-| `PORT` | `8083` | |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated origins; credentials are allowed. |
-| `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_SSLMODE` | `localhost`, `5432`, `postgres`, `require` | |
-| `DB_PASSWORD`, `DB_NAME` | none | **Required.** |
-| `RUN_MIGRATION` | unset | Run table migrations at startup only when exactly `true`. |
-| `PDP_SERVICE_URL` | none | **Required.** Must start with `http://` or `https://`. |
-| `IDP_AUDIENCE` | none | **Required.** PB's resource-server identifier; tokens for any other audience are rejected. |
-| `IDP_BASE_URL` | none | Required unless `IDP_JWKS_URL` and `IDP_ISSUER` are set. Derives the JWKS and issuer URLs. |
-| `IDP_CLIENT_ID`, `IDP_CLIENT_SECRET` | none | **Required.** PB's own client for ThunderID's management API. |
-| `IDP_SCOPE`, `IDP_TOKEN_RESOURCE`, `IDP_DATA_CONSUMER_ROLE_ID` | none | Management token scope and resource, and the role given to new application clients. |
-| `AUDIT_SERVICE_URL`, `ARGUS_API_KEY` | none | Optional; auditing is off without a URL. |
+PB reads one YAML file: the `-config` flag, else `CONFIG_PATH`, else `config.yaml` in the working directory. There are no other flags or environment variables. The Docker image sets `CONFIG_PATH=/app/config/config.yaml` and has no config file of its own, so mount one there. Compose mounts [config.docker.yaml](config.docker.yaml).
 
-All variables, with code defaults against the Compose values: [CONFIGURATION.md](CONFIGURATION.md).
+A value written as `"{{env:NAME}}"` or `"{{file:/path}}"` is read from that environment variable or file at startup, so secrets stay out of the file. Required keys:
+
+| Key | Notes |
+|---|---|
+| `idp.jwksURL`, `idp.issuer`, `idp.audience` | Validate incoming tokens. `audience` is PB's resource-server identifier. |
+| `idp.management.baseURL`, `.clientID`, `.clientSecret` | PB's own client for ThunderID's management API. |
+| `pdp.url` | Policy Decision Point. |
+| `database.postgres.host`, `.user`, `.password` | |
+
+Every key, its default and the environment variable it replaces: [CONFIGURATION.md](CONFIGURATION.md).
 
 ## API
 
@@ -118,7 +111,7 @@ make quality-check portal-backend
 
 Tests run without external services. `make validate-test` does not cover `internal/authn`; run `go test ./internal/authn/...` for the token validation code. Docker image: `docker build -t portal-backend -f cmd/pb/Dockerfile .` from the repo root.
 
-Code is in [`internal/pb`](../../internal/pb): `member`, `schema` and `application` (one package per resource: model, service, handler), `caller` (scopes and the caller's member), `policy` (PDP client), `idp/thunderid` (ThunderID client), `middleware` (CORS and audit), `database/dbtest` (test databases). PB connects through the shared [`internal/database`](../../internal/database), which uses `OpenNSW/core/database`. Token validation is in [`internal/authn`](../../internal/authn/README.md).
+Code is in [`internal/pb`](../../internal/pb): `member`, `schema` and `application` (one package per resource: model, service, handler), `caller` (scopes and the caller's member), `policy` (PDP client), `idp/thunderid` (ThunderID client), `middleware` (audit), `database/dbtest` (test databases). The configuration is in [`config.go`](config.go). PB connects through the shared [`internal/database`](../../internal/database), which uses `OpenNSW/core/database`; CORS is [`OpenNSW/core/cors`](https://github.com/OpenNSW/core/tree/main/cors). Token validation is in [`internal/authn`](../../internal/authn/README.md).
 
 ## Rename note
 
@@ -133,6 +126,6 @@ When PB becomes Management Server, these identifiers embed the current name:
 ## More docs
 
 - [AUTHORIZATION.md](AUTHORIZATION.md): scopes, ownership rules, roles, submission approval
-- [CONFIGURATION.md](CONFIGURATION.md): every environment variable
+- [CONFIGURATION.md](CONFIGURATION.md): every configuration key
 - [openapi.yaml](openapi.yaml): API reference
 - [`ondx` CLI](../ondx/README.md) and [Policy Decision Point](../pdp/README.md)
