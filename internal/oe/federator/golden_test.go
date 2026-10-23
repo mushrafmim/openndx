@@ -282,8 +282,10 @@ func newGoldenFederator(t *testing.T, env *goldenEnv) *federator.Federator {
 
 	schemas, err := schema.FromSDL(goldenSchemaSDL)
 	require.NoError(t, err)
+	providers, err := provider.NewProviderHandler(env.config.GetProviders())
+	require.NoError(t, err)
 	deps := federator.Deps{
-		Providers: federator.ProviderLookup(provider.NewProviderHandler(env.config.GetProviders()).GetProvider),
+		Providers: federator.ProviderLookup(providers.GetProvider),
 		Schemas:   schemas,
 		Auditor:   middleware.NewAuditor(env.audit, "SERVICE", "orchestration-engine"),
 		Consent:   consent.NewCEServiceClient(env.config.CeConfig.ClientURL),

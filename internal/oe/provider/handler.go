@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -14,8 +15,11 @@ type Handler struct {
 }
 
 // NewProviderHandler creates a new ProviderHandler with the given providers.
-func NewProviderHandler(providers []*Provider) *Handler {
+// Nil providers and providers without a schema ID are skipped; two providers
+// with the same schema ID are an error, since a schema ID routes to one provider.
+func NewProviderHandler(providers []*Provider) (*Handler, error) {
 	providerMap := make([]*Provider, 0)
+	seen := make(map[string]bool)
 
 	// Create an http client with a 10 seconds timeout
 	httpClient := &http.Client{
@@ -24,16 +28,21 @@ func NewProviderHandler(providers []*Provider) *Handler {
 	}
 
 	for _, p := range providers {
-		if p != nil && p.SchemaID != "" {
-			providerMap = append(providerMap, p)
-			p.Client = httpClient
+		if p == nil || p.SchemaID == "" {
+			continue
 		}
+		if seen[p.SchemaID] {
+			return nil, fmt.Errorf("duplicate provider for schema %q", p.SchemaID)
+		}
+		seen[p.SchemaID] = true
+		providerMap = append(providerMap, p)
+		p.Client = httpClient
 	}
 
 	return &Handler{
 		Providers:  providerMap,
 		HttpClient: httpClient,
-	}
+	}, nil
 }
 
 // GetProvider retrieves the provider that serves schemaID.

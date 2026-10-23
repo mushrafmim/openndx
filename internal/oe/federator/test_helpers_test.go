@@ -25,8 +25,10 @@ func TestMain(m *testing.M) {
 func newTestFederator(t *testing.T, cfg *configs.Config, schemas SchemaSource) *Federator {
 	t.Helper()
 
+	providers, err := provider.NewProviderHandler(cfg.GetProviders())
+	require.NoError(t, err)
 	deps := Deps{
-		Providers: ProviderLookup(provider.NewProviderHandler(cfg.GetProviders()).GetProvider),
+		Providers: ProviderLookup(providers.GetProvider),
 		Schemas:   schemas,
 	}
 	if cfg.PdpConfig.ClientURL != "" {

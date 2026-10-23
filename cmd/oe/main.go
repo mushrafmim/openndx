@@ -75,8 +75,13 @@ func main() {
 		log.Fatalf("Failed to initialize authentication: %v", err)
 	}
 
+	providers, err := provider.NewProviderHandler(config.GetProviders())
+	if err != nil {
+		log.Fatalf("Invalid provider configuration: %v", err)
+	}
+
 	deps := federator.Deps{
-		Providers: federator.ProviderLookup(provider.NewProviderHandler(config.GetProviders()).GetProvider),
+		Providers: federator.ProviderLookup(providers.GetProvider),
 		Schemas:   consumerSchema,
 		Auditor:   middleware.NewAuditor(auditClient, config.AuditConfig.ActorType, config.AuditConfig.ActorID),
 	}

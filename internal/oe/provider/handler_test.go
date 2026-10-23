@@ -7,6 +7,16 @@ import (
 	"github.com/openndx/openndx-core/internal/oe/pkg/auth"
 )
 
+// newHandler returns NewProviderHandler(providers), failing t on an error.
+func newHandler(t *testing.T, providers []*Provider) *Handler {
+	t.Helper()
+	handler, err := NewProviderHandler(providers)
+	if err != nil {
+		t.Fatalf("NewProviderHandler: %v", err)
+	}
+	return handler
+}
+
 func TestNewProviderHandler(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -65,11 +75,7 @@ func TestNewProviderHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := NewProviderHandler(tt.providers)
-
-			if handler == nil {
-				t.Fatal("NewProviderHandler returned nil")
-			}
+			handler := newHandler(t, tt.providers)
 
 			if len(handler.Providers) != tt.expectedCount {
 				t.Errorf("Expected %d providers, got %d", tt.expectedCount, len(handler.Providers))
@@ -98,12 +104,22 @@ func TestNewProviderHandler(t *testing.T) {
 	}
 }
 
+func TestNewProviderHandler_DuplicateSchemaID(t *testing.T) {
+	_, err := NewProviderHandler([]*Provider{
+		NewProvider("http://example1.com", "schema1", nil),
+		NewProvider("http://example2.com", "schema1", nil),
+	})
+	if err == nil {
+		t.Fatal("expected an error for two providers with the same schema ID")
+	}
+}
+
 func TestHandler_GetProvider(t *testing.T) {
 	providers := []*Provider{
 		NewProvider("http://example1.com", "schema1", nil),
 		NewProvider("http://example2.com", "schema2", nil),
 	}
-	handler := NewProviderHandler(providers)
+	handler := newHandler(t, providers)
 
 	tests := []struct {
 		name         string
@@ -199,7 +215,7 @@ func TestHandler_AddProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := NewProviderHandler(tt.initialProviders)
+			handler := newHandler(t, tt.initialProviders)
 			initialCount := len(handler.Providers)
 
 			handler.AddProvider(tt.providerToAdd)
@@ -228,7 +244,7 @@ func TestHandler_AddProvider(t *testing.T) {
 
 func TestHandler_ConcurrentAccess(t *testing.T) {
 	// Test concurrent reads and writes to ensure proper mutex usage
-	handler := NewProviderHandler([]*Provider{
+	handler := newHandler(t, []*Provider{
 		NewProvider("http://example1.com", "schema1", nil),
 	})
 
@@ -268,7 +284,7 @@ func TestHandler_ConcurrentAccess(t *testing.T) {
 }
 
 func TestHandler_AddProvider_NilProvider(t *testing.T) {
-	handler := NewProviderHandler([]*Provider{
+	handler := newHandler(t, []*Provider{
 		NewProvider("http://example1.com", "schema1", nil),
 	})
 	initialCount := len(handler.Providers)
@@ -280,7 +296,7 @@ func TestHandler_AddProvider_NilProvider(t *testing.T) {
 
 func TestHandler_AddProvider_Duplicate(t *testing.T) {
 	original := NewProvider("http://example1.com", "schema1", nil)
-	handler := NewProviderHandler([]*Provider{original})
+	handler := newHandler(t, []*Provider{original})
 
 	if handler.AddProvider(NewProvider("http://other.com", "schema1", nil)) {
 		t.Error("expected AddProvider to reject a duplicate schema ID")
@@ -298,7 +314,7 @@ func TestHandler_AddProvider_Duplicate(t *testing.T) {
 }
 
 func TestHandler_AddProvider_EmptySchemaID(t *testing.T) {
-	handler := NewProviderHandler([]*Provider{
+	handler := newHandler(t, []*Provider{
 		NewProvider("http://example1.com", "schema1", nil),
 	})
 	initialCount := len(handler.Providers)
