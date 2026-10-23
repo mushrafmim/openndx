@@ -16,7 +16,6 @@ func TestLoadConfigFromBytes_ValidJSON(t *testing.T) {
 		"pdpUrl": "http://pdp.example.com",
 		"providers": [
 			{
-				"providerKey": "provider1",
 				"providerUrl": "http://provider1.example.com",
 				"schemaId": "schema1"
 			}
@@ -57,8 +56,8 @@ func TestLoadConfigFromBytes_ValidJSON(t *testing.T) {
 	if len(config.Providers) != 1 {
 		t.Errorf("Expected 1 provider, got %d", len(config.Providers))
 	}
-	if config.Providers[0].ProviderKey != "provider1" {
-		t.Errorf("Expected ProviderKey to be 'provider1', got '%s'", config.Providers[0].ProviderKey)
+	if config.Providers[0].SchemaID != "schema1" {
+		t.Errorf("Expected SchemaID to be 'schema1', got '%s'", config.Providers[0].SchemaID)
 	}
 }
 
@@ -430,7 +429,6 @@ func TestGetProviders(t *testing.T) {
 	config := &Config{
 		Providers: []*ProviderConfig{
 			{
-				ProviderKey: "provider1",
 				ProviderURL: "http://provider1.example.com",
 				SchemaID:    "schema1",
 				Auth: &auth.AuthConfig{
@@ -438,7 +436,6 @@ func TestGetProviders(t *testing.T) {
 				},
 			},
 			{
-				ProviderKey: "provider2",
 				ProviderURL: "http://provider2.example.com",
 				SchemaID:    "schema2",
 			},
@@ -479,7 +476,6 @@ func TestConfig_AllFieldsUnmarshal(t *testing.T) {
 		"pdpUrl": "http://pdp.example.com",
 		"providers": [
 			{
-				"providerKey": "provider1",
 				"providerUrl": "http://provider1.example.com",
 				"schemaId": "schema1",
 				"auth": {
@@ -544,7 +540,6 @@ func TestProviderConfig_WithAuth(t *testing.T) {
 	jsonData := []byte(`{
 		"providers": [
 			{
-				"providerKey": "secure-provider",
 				"providerUrl": "http://secure.example.com",
 				"schemaId": "secure-schema",
 				"auth": {
@@ -573,7 +568,6 @@ func TestProviderConfig_WithoutAuth(t *testing.T) {
 	jsonData := []byte(`{
 		"providers": [
 			{
-				"providerKey": "public-provider",
 				"providerUrl": "http://public.example.com",
 				"schemaId": "public-schema"
 			}
@@ -596,17 +590,14 @@ func TestConfig_MultipleProviders(t *testing.T) {
 	jsonData := []byte(`{
 		"providers": [
 			{
-				"providerKey": "provider1",
 				"providerUrl": "http://provider1.example.com",
 				"schemaId": "schema1"
 			},
 			{
-				"providerKey": "provider2",
 				"providerUrl": "http://provider2.example.com",
 				"schemaId": "schema2"
 			},
 			{
-				"providerKey": "provider3",
 				"providerUrl": "http://provider3.example.com",
 				"schemaId": "schema3"
 			}

@@ -60,17 +60,17 @@ func TestCreateSchema_SchemaID(t *testing.T) {
 		h, db, pdpSchemaIDs := newSchemaIDTestHandler(t)
 		memberID := createTestMember(t, db, fmt.Sprintf("drp-%d@example.com", time.Now().UnixNano()))
 
-		w := postSchema(t, h, "drp-schema-v1", memberID)
+		w := postSchema(t, h, "drp-person-v1", memberID)
 
 		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 		var resp SchemaResponse
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-		assert.Equal(t, "drp-schema-v1", resp.SchemaID)
+		assert.Equal(t, "drp-person-v1", resp.SchemaID)
 		// The PDP's policy metadata is keyed by the same ID.
-		assert.Equal(t, []string{"drp-schema-v1"}, *pdpSchemaIDs)
+		assert.Equal(t, []string{"drp-person-v1"}, *pdpSchemaIDs)
 
 		var stored Schema
-		assert.NoError(t, db.First(&stored, "schema_id = ?", "drp-schema-v1").Error)
+		assert.NoError(t, db.First(&stored, "schema_id = ?", "drp-person-v1").Error)
 	})
 
 	t.Run("generates a UUID when schemaId is omitted", func(t *testing.T) {
@@ -90,8 +90,8 @@ func TestCreateSchema_SchemaID(t *testing.T) {
 		h, db, pdpSchemaIDs := newSchemaIDTestHandler(t)
 		memberID := createTestMember(t, db, fmt.Sprintf("drp-%d@example.com", time.Now().UnixNano()))
 
-		require.Equal(t, http.StatusCreated, postSchema(t, h, "drp-schema-v1", memberID).Code)
-		w := postSchema(t, h, "drp-schema-v1", memberID)
+		require.Equal(t, http.StatusCreated, postSchema(t, h, "drp-person-v1", memberID).Code)
+		w := postSchema(t, h, "drp-person-v1", memberID)
 
 		assert.Equal(t, http.StatusConflict, w.Code)
 		assert.Contains(t, w.Body.String(), ErrSchemaAlreadyExists.Error())
@@ -115,7 +115,7 @@ func TestCreateSchema_SchemaID(t *testing.T) {
 	})
 
 	t.Run("accepts the documented character set", func(t *testing.T) {
-		for _, id := range []string{"abc", "drp-schema-v1", "rgd.person_v2", "2024-registry", strings.Repeat("a", 64)} {
+		for _, id := range []string{"abc", "drp-person-v1", "rgd.person_v2", "2024-registry", strings.Repeat("a", 64)} {
 			assert.True(t, schemaIDPattern.MatchString(id), id)
 		}
 	})

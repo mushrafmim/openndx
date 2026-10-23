@@ -161,7 +161,6 @@ func (a *Auditor) ProviderFetch(ctx context.Context, fetch federator.ProviderFet
 		"schemaId":        fetch.SchemaID,
 		"requestedFields": requestedFields,
 		"query":           fetch.Query,
-		"serviceKey":      fetch.ServiceKey,
 	}
 	if err != nil {
 		responseMetadata["error"] = err.Error()
@@ -196,7 +195,7 @@ func (a *Auditor) ProviderFetch(ctx context.Context, fetch federator.ProviderFet
 	}
 
 	// Providers are services, so targetType is "SERVICE"
-	a.logServiceEvent(ctx, "PROVIDER_FETCH", fetch.ServiceKey, nil, responseMetadata, auditStatus)
+	a.logServiceEvent(ctx, "PROVIDER_FETCH", fetch.SchemaID, nil, responseMetadata, auditStatus)
 }
 
 // logServiceEvent logs an event in which the orchestration engine (the configured actor)

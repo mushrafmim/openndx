@@ -3,37 +3,27 @@ directive @deprecated(
 ) on FIELD_DEFINITION | ENUM_VALUE
 
 directive @sourceInfo(
-    providerKey: String!
     schemaId: String!
     providerField: String!
 ) on FIELD_DEFINITION
-
-directive @sourceInfoArgList(
-    providerArgs: [SourceInfoInput!]
-) on ARGUMENT_DEFINITION
 
 type Query {
     personInfo(nic: String!): PersonInfo
 }
 
-input SourceInfoInput {
-    providerKey: String!
-    providerField: String!
-}
-
 type PersonInfo {
-    fullName: String @sourceInfo(providerKey: "drp", schemaId: "drp-schema-v1", providerField: "person.fullName")
-    name: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.name")
-    otherNames: String @sourceInfo(providerKey: "drp", schemaId: "drp-schema-v1", providerField: "person.otherNames")
-    address: String @sourceInfo(providerKey: "drp", schemaId: "drp-schema-v1", providerField: "person.permanentAddress")
-    profession: String @sourceInfo(providerKey: "drp", schemaId: "drp-schema-v1", providerField: "person.profession")
-    dateOfBirth: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.birthDate")
-    sex: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.sex")
+    fullName: String @sourceInfo(schemaId: "drp-person-v1", providerField: "person.fullName")
+    name: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.name")
+    otherNames: String @sourceInfo(schemaId: "drp-person-v1", providerField: "person.otherNames")
+    address: String @sourceInfo(schemaId: "drp-person-v1", providerField: "person.permanentAddress")
+    profession: String @sourceInfo(schemaId: "drp-person-v1", providerField: "person.profession")
+    dateOfBirth: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.birthDate")
+    sex: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.sex")
     birthInfo: BirthInfo
 }
 
 type BirthInfo {
-    birthRegistrationNumber: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.brNo")
-    birthPlace: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.birthPlace")
-    district: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.district")
+    birthRegistrationNumber: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.brNo")
+    birthPlace: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.birthPlace")
+    district: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.district")
 }

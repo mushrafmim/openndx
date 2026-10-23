@@ -43,7 +43,6 @@ const DefaultSchemaPath = "schema.graphql"
 
 // ProviderConfig represents a provider configuration
 type ProviderConfig struct {
-	ProviderKey string           `json:"providerKey"`
 	ProviderURL string           `json:"providerUrl"`
 	Auth        *auth.AuthConfig `json:"auth,omitempty"`
 	SchemaID    string           `json:"schemaId"`
@@ -151,7 +150,6 @@ func (c *Config) GetProviders() []*provider.Provider {
 	providers := make([]*provider.Provider, len(c.Providers))
 	for i, pConfig := range c.Providers {
 		providers[i] = provider.NewProvider(
-			pConfig.ProviderKey,
 			pConfig.ProviderURL,
 			pConfig.SchemaID,
 			pConfig.Auth,

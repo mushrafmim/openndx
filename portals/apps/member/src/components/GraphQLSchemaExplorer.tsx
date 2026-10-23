@@ -21,7 +21,6 @@ interface Field {
   isArray?: boolean;
   isRequired?: boolean;
   sourceInfo?: {
-    providerKey: string;
     schemaId: string;
     providerField: string;
   };
@@ -85,14 +84,11 @@ const extractSourceInfo = (field: GraphQLField<unknown, unknown>) => {
 
   if (!sourceInfoDirective?.arguments) return undefined;
 
-  const sourceInfo: { providerKey?: string; schemaId?: string; providerField?: string } = {};
+  const sourceInfo: { schemaId?: string; providerField?: string } = {};
 
   sourceInfoDirective.arguments.forEach(arg => {
     if (arg.value.kind === 'StringValue') {
       switch (arg.name.value) {
-        case 'providerKey':
-          sourceInfo.providerKey = arg.value.value;
-          break;
         case 'schemaId':
           sourceInfo.schemaId = arg.value.value;
           break;
@@ -103,7 +99,7 @@ const extractSourceInfo = (field: GraphQLField<unknown, unknown>) => {
     }
   });
 
-  if (sourceInfo.providerKey && sourceInfo.schemaId && sourceInfo.providerField) {
+  if (sourceInfo.schemaId && sourceInfo.providerField) {
     return sourceInfo as Required<typeof sourceInfo>;
   }
 
@@ -290,8 +286,6 @@ const FieldNode: React.FC<FieldNodeProps> = ({
               {field.sourceInfo && (
                 <div className="flex items-center text-xs text-blue-700 bg-blue-100 px-2 py-1 rounded-md">
                   <Info className="w-3 h-3 mr-1 flex-shrink-0" />
-                  <span className="font-medium">{field.sourceInfo.providerKey}</span>
-                  <span className="text-blue-500 mx-1">•</span>
                   <span className="text-blue-600 font-mono text-xs">{field.sourceInfo.schemaId}</span>
                   <span className="text-blue-500 mx-1">→</span>
                   <span className="truncate max-w-32">{field.sourceInfo.providerField}</span>

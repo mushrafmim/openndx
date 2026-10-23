@@ -18,8 +18,8 @@ func TestNewProviderHandler(t *testing.T) {
 		{
 			name: "creates handler with valid providers",
 			providers: []*Provider{
-				NewProvider("provider1", "http://example.com", "schema1", nil),
-				NewProvider("provider2", "http://example2.com", "schema2", nil),
+				NewProvider("http://example.com", "schema1", nil),
+				NewProvider("http://example2.com", "schema2", nil),
 			},
 			expectedCount:    2,
 			expectHttpClient: true,
@@ -28,20 +28,20 @@ func TestNewProviderHandler(t *testing.T) {
 		{
 			name: "filters out nil providers",
 			providers: []*Provider{
-				NewProvider("provider1", "http://example.com", "schema1", nil),
+				NewProvider("http://example.com", "schema1", nil),
 				nil,
-				NewProvider("provider2", "http://example2.com", "schema2", nil),
+				NewProvider("http://example2.com", "schema2", nil),
 			},
 			expectedCount:    2,
 			expectHttpClient: true,
 			expectedTimeout:  10 * time.Second,
 		},
 		{
-			name: "filters out providers with empty service key",
+			name: "filters out providers with empty schema ID",
 			providers: []*Provider{
-				NewProvider("provider1", "http://example.com", "schema1", nil),
-				NewProvider("", "http://example2.com", "schema2", nil),
-				NewProvider("provider3", "http://example3.com", "schema3", nil),
+				NewProvider("http://example.com", "schema1", nil),
+				NewProvider("http://example2.com", "", nil),
+				NewProvider("http://example3.com", "schema3", nil),
 			},
 			expectedCount:    2,
 			expectHttpClient: true,
@@ -88,10 +88,10 @@ func TestNewProviderHandler(t *testing.T) {
 			// Verify that each valid provider has the client set
 			for _, p := range handler.Providers {
 				if p.Client == nil {
-					t.Errorf("Provider %s has nil client", p.ServiceKey)
+					t.Errorf("Provider %s has nil client", p.SchemaID)
 				}
 				if p.Client != handler.HttpClient {
-					t.Errorf("Provider %s client doesn't match handler's HttpClient", p.ServiceKey)
+					t.Errorf("Provider %s client doesn't match handler's HttpClient", p.SchemaID)
 				}
 			}
 		})
@@ -100,61 +100,36 @@ func TestNewProviderHandler(t *testing.T) {
 
 func TestHandler_GetProvider(t *testing.T) {
 	providers := []*Provider{
-		NewProvider("provider1", "http://example1.com", "schema1", nil),
-		NewProvider("provider2", "http://example2.com", "schema2", nil),
-		NewProvider("provider3", "http://example3.com", "schema1", nil),
+		NewProvider("http://example1.com", "schema1", nil),
+		NewProvider("http://example2.com", "schema2", nil),
 	}
 	handler := NewProviderHandler(providers)
 
 	tests := []struct {
 		name         string
-		serviceKey   string
 		schemaID     string
 		expectExists bool
 		expectURL    string
 	}{
 		{
-			name:         "finds existing provider by service key and schema ID",
-			serviceKey:   "provider1",
+			name:         "finds existing provider by schema ID",
 			schemaID:     "schema1",
 			expectExists: true,
 			expectURL:    "http://example1.com",
 		},
 		{
 			name:         "finds second provider",
-			serviceKey:   "provider2",
 			schemaID:     "schema2",
 			expectExists: true,
 			expectURL:    "http://example2.com",
 		},
 		{
-			name:         "finds provider with matching service key and schema ID combination",
-			serviceKey:   "provider3",
-			schemaID:     "schema1",
-			expectExists: true,
-			expectURL:    "http://example3.com",
-		},
-		{
-			name:         "returns false for non-existent service key",
-			serviceKey:   "nonexistent",
-			schemaID:     "schema1",
-			expectExists: false,
-		},
-		{
 			name:         "returns false for non-existent schema ID",
-			serviceKey:   "provider1",
 			schemaID:     "nonexistent",
 			expectExists: false,
 		},
 		{
-			name:         "returns false for empty service key",
-			serviceKey:   "",
-			schemaID:     "schema1",
-			expectExists: false,
-		},
-		{
 			name:         "returns false for empty schema ID",
-			serviceKey:   "provider1",
 			schemaID:     "",
 			expectExists: false,
 		},
@@ -162,7 +137,7 @@ func TestHandler_GetProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			provider, exists := handler.GetProvider(tt.serviceKey, tt.schemaID)
+			provider, exists := handler.GetProvider(tt.schemaID)
 
 			if exists != tt.expectExists {
 				t.Errorf("Expected exists=%v, got %v", tt.expectExists, exists)
@@ -171,9 +146,6 @@ func TestHandler_GetProvider(t *testing.T) {
 			if tt.expectExists {
 				if provider == nil {
 					t.Fatal("Expected provider to be non-nil when exists is true")
-				}
-				if provider.ServiceKey != tt.serviceKey {
-					t.Errorf("Expected service key %s, got %s", tt.serviceKey, provider.ServiceKey)
 				}
 				if provider.SchemaID != tt.schemaID {
 					t.Errorf("Expected schema ID %s, got %s", tt.schemaID, provider.SchemaID)
@@ -200,23 +172,23 @@ func TestHandler_AddProvider(t *testing.T) {
 		{
 			name: "adds provider to existing handler",
 			initialProviders: []*Provider{
-				NewProvider("provider1", "http://example1.com", "schema1", nil),
+				NewProvider("http://example1.com", "schema1", nil),
 			},
-			providerToAdd: NewProvider("provider2", "http://example2.com", "schema2", nil),
+			providerToAdd: NewProvider("http://example2.com", "schema2", nil),
 			expectedCount: 2,
 		},
 		{
 			name:             "adds provider to empty handler",
 			initialProviders: []*Provider{},
-			providerToAdd:    NewProvider("provider1", "http://example1.com", "schema1", nil),
+			providerToAdd:    NewProvider("http://example1.com", "schema1", nil),
 			expectedCount:    1,
 		},
 		{
 			name: "adds provider with auth config",
 			initialProviders: []*Provider{
-				NewProvider("provider1", "http://example1.com", "schema1", nil),
+				NewProvider("http://example1.com", "schema1", nil),
 			},
-			providerToAdd: NewProvider("provider2", "http://example2.com", "schema2", &auth.AuthConfig{
+			providerToAdd: NewProvider("http://example2.com", "schema2", &auth.AuthConfig{
 				Type:        auth.AuthTypeAPIKey,
 				APIKeyName:  "X-API-Key",
 				APIKeyValue: "test-key",
@@ -247,8 +219,8 @@ func TestHandler_AddProvider(t *testing.T) {
 			}
 
 			// Verify the added provider is the one we added
-			if addedProvider.ServiceKey != tt.providerToAdd.ServiceKey {
-				t.Errorf("Expected service key %s, got %s", tt.providerToAdd.ServiceKey, addedProvider.ServiceKey)
+			if addedProvider.SchemaID != tt.providerToAdd.SchemaID {
+				t.Errorf("Expected schema ID %s, got %s", tt.providerToAdd.SchemaID, addedProvider.SchemaID)
 			}
 		})
 	}
@@ -257,7 +229,7 @@ func TestHandler_AddProvider(t *testing.T) {
 func TestHandler_ConcurrentAccess(t *testing.T) {
 	// Test concurrent reads and writes to ensure proper mutex usage
 	handler := NewProviderHandler([]*Provider{
-		NewProvider("provider1", "http://example1.com", "schema1", nil),
+		NewProvider("http://example1.com", "schema1", nil),
 	})
 
 	done := make(chan bool)
@@ -266,7 +238,7 @@ func TestHandler_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			for j := 0; j < 100; j++ {
-				_, _ = handler.GetProvider("provider1", "schema1")
+				_, _ = handler.GetProvider("schema1")
 			}
 			done <- true
 		}()
@@ -276,7 +248,7 @@ func TestHandler_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		go func(idx int) {
 			for j := 0; j < 50; j++ {
-				p := NewProvider("test", "http://test.com", "test", nil)
+				p := NewProvider("http://test.com", "test", nil)
 				handler.AddProvider(p)
 			}
 			done <- true
@@ -289,7 +261,7 @@ func TestHandler_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Just verify the handler still works
-	_, exists := handler.GetProvider("provider1", "schema1")
+	_, exists := handler.GetProvider("schema1")
 	if !exists {
 		t.Error("Original provider should still exist after concurrent operations")
 	}
@@ -297,7 +269,7 @@ func TestHandler_ConcurrentAccess(t *testing.T) {
 
 func TestHandler_AddProvider_NilProvider(t *testing.T) {
 	handler := NewProviderHandler([]*Provider{
-		NewProvider("provider1", "http://example1.com", "schema1", nil),
+		NewProvider("http://example1.com", "schema1", nil),
 	})
 	initialCount := len(handler.Providers)
 	handler.AddProvider(nil)
@@ -307,31 +279,31 @@ func TestHandler_AddProvider_NilProvider(t *testing.T) {
 }
 
 func TestHandler_AddProvider_Duplicate(t *testing.T) {
-	original := NewProvider("provider1", "http://example1.com", "schema1", nil)
+	original := NewProvider("http://example1.com", "schema1", nil)
 	handler := NewProviderHandler([]*Provider{original})
 
-	if handler.AddProvider(NewProvider("provider1", "http://other.com", "schema1", nil)) {
-		t.Error("expected AddProvider to reject a duplicate service key and schema ID")
+	if handler.AddProvider(NewProvider("http://other.com", "schema1", nil)) {
+		t.Error("expected AddProvider to reject a duplicate schema ID")
 	}
 	if len(handler.Providers) != 1 {
 		t.Errorf("expected 1 provider after adding a duplicate, got %d", len(handler.Providers))
 	}
-	if p, _ := handler.GetProvider("provider1", "schema1"); p != original {
+	if p, _ := handler.GetProvider("schema1"); p != original {
 		t.Error("expected the original provider to be kept")
 	}
 
-	if !handler.AddProvider(NewProvider("provider1", "http://example1.com", "schema2", nil)) {
-		t.Error("expected AddProvider to accept the same service key with a different schema ID")
+	if !handler.AddProvider(NewProvider("http://example1.com", "schema2", nil)) {
+		t.Error("expected AddProvider to accept the same URL for a different schema ID")
 	}
 }
 
-func TestHandler_AddProvider_EmptyServiceKey(t *testing.T) {
+func TestHandler_AddProvider_EmptySchemaID(t *testing.T) {
 	handler := NewProviderHandler([]*Provider{
-		NewProvider("provider1", "http://example1.com", "schema1", nil),
+		NewProvider("http://example1.com", "schema1", nil),
 	})
 	initialCount := len(handler.Providers)
-	handler.AddProvider(NewProvider("", "http://example2.com", "schema2", nil))
+	handler.AddProvider(NewProvider("http://example2.com", "", nil))
 	if len(handler.Providers) != initialCount {
-		t.Errorf("expected provider count to stay %d after adding empty-key provider, got %d", initialCount, len(handler.Providers))
+		t.Errorf("expected provider count to stay %d after adding a provider without a schema ID, got %d", initialCount, len(handler.Providers))
 	}
 }

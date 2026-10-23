@@ -16,54 +16,44 @@ const sampleSDL = `directive @deprecated(
 ) on FIELD_DEFINITION | ENUM_VALUE
 
 directive @sourceInfo(
-    providerKey: String!
     schemaId: String!
     providerField: String!
 ) on FIELD_DEFINITION
-
-directive @sourceInfoArgList(
-    providerArgs: [SourceInfoInput!]
-) on ARGUMENT_DEFINITION
 
 type Query {
     personInfo(nic: String!): PersonInfo
     vehicle: VehicleInfo
 }
 
-input SourceInfoInput {
-    providerKey: String!
-    providerField: String!
-}
-
 type PersonInfo {
-    fullName: String @sourceInfo(providerKey: "drp", schemaId: "drp-schema-v1", providerField: "person.fullName")
-    name: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.name")
-    otherNames: String @sourceInfo(providerKey: "drp", schemaId: "drp-schema-v1", providerField: "person.otherNames")
-    address: String @sourceInfo(providerKey: "drp", schemaId: "drp-schema-v1", providerField: "person.permanentAddress")
-    profession: String @sourceInfo(providerKey: "drp", schemaId: "drp-schema-v1", providerField: "person.profession")
-    dateOfBirth: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.birthDate")
-    sex: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.sex")
+    fullName: String @sourceInfo(schemaId: "drp-person-v1", providerField: "person.fullName")
+    name: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.name")
+    otherNames: String @sourceInfo(schemaId: "drp-person-v1", providerField: "person.otherNames")
+    address: String @sourceInfo(schemaId: "drp-person-v1", providerField: "person.permanentAddress")
+    profession: String @sourceInfo(schemaId: "drp-person-v1", providerField: "person.profession")
+    dateOfBirth: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.birthDate")
+    sex: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.sex")
     birthInfo: BirthInfo
-    ownedVehicles: [VehicleInfo] @sourceInfo(providerKey: "dmt", schemaId: "dmt-schema-v1", providerField: "vehicles")
+    ownedVehicles: [VehicleInfo] @sourceInfo(schemaId: "dmt-vehicle-v1", providerField: "vehicles")
 }
 
 type VehicleInfo {
-    regNo: String @sourceInfo(providerKey: "dmt", schemaId: "dmt-schema-v1", providerField: "vehicle.registrationNumber")
-    make: String @sourceInfo(providerKey: "dmt", schemaId: "dmt-schema-v1", providerField: "vehicle.make")
-    model: String @sourceInfo(providerKey: "dmt", schemaId: "dmt-schema-v1", providerField: "vehicle.model")
-    year: Int @sourceInfo(providerKey: "dmt", schemaId: "dmt-schema-v1", providerField: "vehicle.yearOfManufacture")
-    class: [VehicleClass] @sourceInfo(providerKey: "dmt", schemaId: "dmt-schema-v1", providerField: "vehicle.classes")
+    regNo: String @sourceInfo(schemaId: "dmt-vehicle-v1", providerField: "vehicle.registrationNumber")
+    make: String @sourceInfo(schemaId: "dmt-vehicle-v1", providerField: "vehicle.make")
+    model: String @sourceInfo(schemaId: "dmt-vehicle-v1", providerField: "vehicle.model")
+    year: Int @sourceInfo(schemaId: "dmt-vehicle-v1", providerField: "vehicle.yearOfManufacture")
+    class: [VehicleClass] @sourceInfo(schemaId: "dmt-vehicle-v1", providerField: "vehicle.classes")
 }
 
 type VehicleClass {
-    className: String @sourceInfo(providerKey: "dmt", schemaId: "dmt-schema-v1", providerField: "vehicle.classes.className")
-    classCode: String @sourceInfo(providerKey: "dmt", schemaId: "dmt-schema-v1", providerField: "vehicle.classes.classCode")
+    className: String @sourceInfo(schemaId: "dmt-vehicle-v1", providerField: "vehicle.classes.className")
+    classCode: String @sourceInfo(schemaId: "dmt-vehicle-v1", providerField: "vehicle.classes.classCode")
 }
 
 type BirthInfo {
-    birthRegistrationNumber: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.brNo")
-    birthPlace: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.birthPlace")
-    district: String @sourceInfo(providerKey: "rgd", schemaId: "abc-212", providerField: "getPersonInfo.district")
+    birthRegistrationNumber: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.brNo")
+    birthPlace: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.birthPlace")
+    district: String @sourceInfo(schemaId: "rgd-person-v1", providerField: "getPersonInfo.district")
 }`;
 
 

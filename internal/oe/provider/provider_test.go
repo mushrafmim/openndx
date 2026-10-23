@@ -22,7 +22,6 @@ func init() {
 func TestNewProvider(t *testing.T) {
 	tests := []struct {
 		name               string
-		serviceKey         string
 		serviceUrl         string
 		schemaID           string
 		authConfig         *auth.AuthConfig
@@ -30,7 +29,6 @@ func TestNewProvider(t *testing.T) {
 	}{
 		{
 			name:               "creates provider with no auth",
-			serviceKey:         "provider1",
 			serviceUrl:         "http://example.com",
 			schemaID:           "schema1",
 			authConfig:         nil,
@@ -38,7 +36,6 @@ func TestNewProvider(t *testing.T) {
 		},
 		{
 			name:       "creates provider with API key auth",
-			serviceKey: "provider2",
 			serviceUrl: "http://example.com",
 			schemaID:   "schema2",
 			authConfig: &auth.AuthConfig{
@@ -50,7 +47,6 @@ func TestNewProvider(t *testing.T) {
 		},
 		{
 			name:       "creates provider with OAuth2 auth",
-			serviceKey: "provider3",
 			serviceUrl: "http://example.com",
 			schemaID:   "schema3",
 			authConfig: &auth.AuthConfig{
@@ -64,7 +60,6 @@ func TestNewProvider(t *testing.T) {
 		},
 		{
 			name:               "creates provider with empty values",
-			serviceKey:         "",
 			serviceUrl:         "",
 			schemaID:           "",
 			authConfig:         nil,
@@ -74,14 +69,10 @@ func TestNewProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			provider := NewProvider(tt.serviceKey, tt.serviceUrl, tt.schemaID, tt.authConfig)
+			provider := NewProvider(tt.serviceUrl, tt.schemaID, tt.authConfig)
 
 			if provider == nil {
 				t.Fatal("NewProvider returned nil")
-			}
-
-			if provider.ServiceKey != tt.serviceKey {
-				t.Errorf("Expected service key %s, got %s", tt.serviceKey, provider.ServiceKey)
 			}
 
 			if provider.ServiceUrl != tt.serviceUrl {
@@ -155,7 +146,7 @@ func TestProvider_PerformRequest_NoAuth(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewProvider("test-provider", server.URL, "schema1", nil)
+	provider := NewProvider(server.URL, "schema1", nil)
 	ctx := context.Background()
 
 	resp, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
@@ -197,7 +188,7 @@ func TestProvider_PerformRequest_APIKeyAuth(t *testing.T) {
 		APIKeyValue: apiKeyValue,
 	}
 
-	provider := NewProvider("test-provider", server.URL, "schema1", authConfig)
+	provider := NewProvider(server.URL, "schema1", authConfig)
 	ctx := context.Background()
 
 	resp, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
@@ -217,7 +208,7 @@ func TestProvider_PerformRequest_OAuth2Auth_NilConfig(t *testing.T) {
 		Type: auth.AuthTypeOAuth2,
 	}
 
-	provider := NewProvider("test-provider", "http://example.com", "schema1", nil)
+	provider := NewProvider("http://example.com", "schema1", nil)
 	provider.Auth = authConfig
 	provider.OAuth2Config = nil // Explicitly set to nil
 
@@ -261,7 +252,7 @@ func TestProvider_PerformRequest_OAuth2Auth(t *testing.T) {
 		Scopes:       []string{"read", "write"},
 	}
 
-	provider := NewProvider("test-provider", resourceServer.URL, "schema1", authConfig)
+	provider := NewProvider(resourceServer.URL, "schema1", authConfig)
 	ctx := context.Background()
 
 	resp, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
@@ -283,7 +274,7 @@ func TestProvider_PerformRequest_ContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewProvider("test-provider", server.URL, "schema1", nil)
+	provider := NewProvider(server.URL, "schema1", nil)
 
 	// Create a context that will be cancelled immediately
 	ctx, cancel := context.WithCancel(context.Background())
@@ -297,7 +288,7 @@ func TestProvider_PerformRequest_ContextCancellation(t *testing.T) {
 
 func TestProvider_PerformRequest_InvalidURL(t *testing.T) {
 	// Test with invalid URL
-	provider := NewProvider("test-provider", "://invalid-url", "schema1", nil)
+	provider := NewProvider("://invalid-url", "schema1", nil)
 	ctx := context.Background()
 
 	_, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
@@ -314,7 +305,7 @@ func TestProvider_PerformRequest_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewProvider("test-provider", server.URL, "schema1", nil)
+	provider := NewProvider(server.URL, "schema1", nil)
 	ctx := context.Background()
 
 	resp, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
@@ -341,7 +332,7 @@ func TestProvider_PerformRequest_EmptyBody(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewProvider("test-provider", server.URL, "schema1", nil)
+	provider := NewProvider(server.URL, "schema1", nil)
 	ctx := context.Background()
 
 	resp, err := provider.PerformRequest(ctx, []byte{})
@@ -373,7 +364,7 @@ func TestProvider_PerformRequest_LargePayload(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewProvider("test-provider", server.URL, "schema1", nil)
+	provider := NewProvider(server.URL, "schema1", nil)
 	ctx := context.Background()
 
 	resp, err := provider.PerformRequest(ctx, largePayload)
@@ -399,7 +390,7 @@ func TestProvider_Execute(t *testing.T) {
 		}))
 		defer server.Close()
 
-		provider := NewProvider("test-provider", server.URL, "schema1", nil)
+		provider := NewProvider(server.URL, "schema1", nil)
 
 		resp, err := provider.Execute(context.Background(), graphql.Request{Query: "query { person { name } }"})
 		if err != nil {
@@ -417,7 +408,7 @@ func TestProvider_Execute(t *testing.T) {
 		}))
 		defer server.Close()
 
-		provider := NewProvider("test-provider", server.URL, "schema1", nil)
+		provider := NewProvider(server.URL, "schema1", nil)
 
 		if _, err := provider.Execute(context.Background(), graphql.Request{Query: "query { a }"}); err == nil {
 			t.Fatal("Expected an error for a non-JSON response")
@@ -432,7 +423,7 @@ func TestProvider_Execute(t *testing.T) {
 		}))
 		defer server.Close()
 
-		provider := NewProvider("test-provider", server.URL, "schema1", nil)
+		provider := NewProvider(server.URL, "schema1", nil)
 
 		_, err := provider.Execute(context.Background(), graphql.Request{Query: "query { a }"})
 		if err == nil || !strings.Contains(err.Error(), "returned HTTP status 503") {
@@ -441,7 +432,7 @@ func TestProvider_Execute(t *testing.T) {
 	})
 
 	t.Run("returns an error when the provider is unreachable", func(t *testing.T) {
-		provider := NewProvider("test-provider", "http://127.0.0.1:0", "schema1", nil)
+		provider := NewProvider("http://127.0.0.1:0", "schema1", nil)
 
 		if _, err := provider.Execute(context.Background(), graphql.Request{Query: "query { a }"}); err == nil {
 			t.Fatal("Expected an error for an unreachable provider")

@@ -4,14 +4,12 @@
   "pdpUrl": "http://policy-decision-point:8082",
   "providers": [
     {
-      "providerKey": "mock-provider",
-      "providerUrl": "http://mock-provider:8083/graphql",
-      "schemaId": "test-schema-123"
+      "schemaId": "test-schema-123",
+      "providerUrl": "http://mock-provider:8083/graphql"
     }
   ],
   "argMappings": [
     {
-      "providerKey": "mock-provider",
       "schemaId": "test-schema-123",
       "targetArgName": "nic",
       "sourceArgPath": "personInfo-nic",

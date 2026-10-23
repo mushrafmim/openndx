@@ -20,19 +20,17 @@ type Provider struct {
 	Client       *http.Client
 	ServiceUrl   string           `json:"providerUrl,omitempty"`
 	SchemaID     string           `json:"schemaId,omitempty"`
-	ServiceKey   string           `json:"providerKey,omitempty"`
 	Auth         *auth.AuthConfig `json:"auth,omitempty"`
 	OAuth2Config *clientcredentials.Config
 	Headers      map[string]string `json:"headers,omitempty"`
 	tokenMu      sync.RWMutex
 }
 
-func NewProvider(serviceKey, serviceUrl, schemaID string, authConfig *auth.AuthConfig) *Provider {
+func NewProvider(serviceUrl, schemaID string, authConfig *auth.AuthConfig) *Provider {
 	provider := &Provider{
 		Client:     &http.Client{},
 		ServiceUrl: serviceUrl,
 		SchemaID:   schemaID,
-		ServiceKey: serviceKey,
 		Auth:       authConfig,
 		Headers:    make(map[string]string),
 	}
@@ -63,7 +61,7 @@ func (p *Provider) PerformRequest(ctx context.Context, reqBody []byte) (*http.Re
 		switch p.Auth.Type {
 		case auth.AuthTypeOAuth2:
 			if p.OAuth2Config == nil {
-				logger.Log.Error("OAuth2Config is nil", "providerKey", p.ServiceKey)
+				logger.Log.Error("OAuth2Config is nil", "schemaId", p.SchemaID)
 				return nil, fmt.Errorf("OAuth2Config is nil")
 			}
 
@@ -93,7 +91,7 @@ func (p *Provider) Execute(ctx context.Context, request graphql.Request) (graphq
 	defer response.Body.Close()
 
 	if response.StatusCode < 200 || response.StatusCode > 299 {
-		return graphql.Response{}, fmt.Errorf("provider %s returned HTTP status %d", p.ServiceKey, response.StatusCode)
+		return graphql.Response{}, fmt.Errorf("provider for schema %s returned HTTP status %d", p.SchemaID, response.StatusCode)
 	}
 
 	body, err := io.ReadAll(response.Body)

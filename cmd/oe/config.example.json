@@ -10,9 +10,8 @@
   },
   "providers": [
     {
-      "providerKey": "drp",
+      "schemaId": "drp-person-v1",
       "providerUrl": "http://localhost:9091",
-      "schemaId": "drp-schema-v1",
       "auth": {
         "type": "apiKey",
         "apiKeyName": "Test-Key",
@@ -20,9 +19,8 @@
       }
     },
     {
-      "providerKey": "rgd",
+      "schemaId": "rgd-person-v1",
       "providerUrl": "http://localhost:8080/graphql",
-      "schemaId": "abc-212",
       "auth": {
         "type": "oauth2",
         "tokenUrl": "http://localhost:8080/oauth/token",
@@ -33,15 +31,13 @@
   ],
   "argMappings": [
     {
-      "providerKey": "drp",
-      "schemaId": "drp-schema-v1",
+      "schemaId": "drp-person-v1",
       "targetArgName": "nic",
       "sourceArgPath": "personInfo-nic",
       "targetArgPath": "person"
     },
     {
-      "providerKey": "rgd",
-      "schemaId": "abc-212",
+      "schemaId": "rgd-person-v1",
       "targetArgName": "nic",
       "sourceArgPath": "personInfo-nic",
       "targetArgPath": "getPersonInfo"

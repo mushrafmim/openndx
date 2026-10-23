@@ -38,20 +38,20 @@ union Searchable = PersonInfo | Vehicle
 
 type PersonInfo implements Node {
 	id: ID
-	fullName: String @sourceInfo(providerKey: "drp", schemaId: "drp-v1", providerField: "person.fullName")
-	address: String @sourceInfo(providerKey: "drp", schemaId: "drp-v1", providerField: "person.permanentAddress")
-	ownedVehicles(year: Int): [Vehicle] @sourceInfo(providerKey: "dmt", schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data")
+	fullName: String @sourceInfo(schemaId: "drp-v1", providerField: "person.fullName")
+	address: String @sourceInfo(schemaId: "drp-v1", providerField: "person.permanentAddress")
+	ownedVehicles(year: Int): [Vehicle] @sourceInfo(schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data")
 	birthInfo: BirthInfo
 }
 
 type BirthInfo {
-	date: String @sourceInfo(providerKey: "rgd", schemaId: "rgd-v1", providerField: "getPersonInfo.birthDate")
+	date: String @sourceInfo(schemaId: "rgd-v1", providerField: "getPersonInfo.birthDate")
 }
 
 type Vehicle implements Node {
 	id: ID
-	regNo: String @sourceInfo(providerKey: "dmt", schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data.registrationNumber")
-	make: String @sourceInfo(providerKey: "dmt", schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data.make")
+	regNo: String @sourceInfo(schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data.registrationNumber")
+	make: String @sourceInfo(schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data.make")
 }
 `
 
@@ -101,7 +101,7 @@ func TestBuild(t *testing.T) {
 
 		fullName := person.Selections[0]
 		assert.Equal(t, []string{"personInfo", "fullName"}, fullName.Path)
-		assert.Equal(t, &schema.SourceInfo{ProviderKey: "drp", SchemaID: "drp-v1", ProviderField: "person.fullName"}, fullName.SourceInfo)
+		assert.Equal(t, &schema.SourceInfo{SchemaID: "drp-v1", ProviderField: "person.fullName"}, fullName.SourceInfo)
 		assert.Nil(t, fullName.Selections)
 
 		date := person.Selections[1].Selections[0]
@@ -253,8 +253,8 @@ func TestBuild(t *testing.T) {
 }
 
 func TestBindArguments(t *testing.T) {
-	drp := &graphql.ArgMapping{ProviderKey: "drp", SchemaID: "drp-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "nic"}
-	dmt := &graphql.ArgMapping{ProviderKey: "dmt", SchemaID: "dmt-v1", SourceArgPath: "personInfo-ownedVehicles-year", TargetArgPath: "vehicle.getVehicleInfos", TargetArgName: "year"}
+	drp := &graphql.ArgMapping{SchemaID: "drp-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "nic"}
+	dmt := &graphql.ArgMapping{SchemaID: "dmt-v1", SourceArgPath: "personInfo-ownedVehicles-year", TargetArgPath: "vehicle.getVehicleInfos", TargetArgName: "year"}
 
 	t.Run("binds each occurrence by the full path", func(t *testing.T) {
 		op := mustBuild(t, `
@@ -363,28 +363,28 @@ func TestBuild_SampleSchema(t *testing.T) {
 
 	assert.Equal(t, strings.TrimLeft(`
 citizen (personInfo) nic=748213
-  fullName <- drp person.fullName
-  sex <- rgd getPersonInfo.sex
-  dateOfBirth <- rgd getPersonInfo.birthDate
-  profession <- drp person.profession
+  fullName <- drp-person-v1 person.fullName
+  sex <- rgd-person-v1 getPersonInfo.sex
+  dateOfBirth <- rgd-person-v1 getPersonInfo.birthDate
+  profession <- drp-person-v1 person.profession
   birthInfo
-    place (birthPlace) <- rgd getPersonInfo.birthPlace
-    district <- rgd getPersonInfo.district
+    place (birthPlace) <- rgd-person-v1 getPersonInfo.birthPlace
+    district <- rgd-person-v1 getPersonInfo.district
 other (personInfo) nic=512346
-  fullName <- drp person.fullName
+  fullName <- drp-person-v1 person.fullName
 `, "\n"), render(op.Fields))
 
 	_, err = op.DataOwnerID("nic")
 	assert.ErrorIs(t, err, ErrAmbiguousIdentifier, "the query asks about two data owners")
 
 	// The argument mappings in cmd/oe/config.example.json.
-	drp := &graphql.ArgMapping{ProviderKey: "drp", SchemaID: "drp-schema-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "nic"}
-	rgd := &graphql.ArgMapping{ProviderKey: "rgd", SchemaID: "abc-212", SourceArgPath: "personInfo-nic", TargetArgPath: "getPersonInfo", TargetArgName: "nic"}
+	drp := &graphql.ArgMapping{SchemaID: "drp-person-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "nic"}
+	rgd := &graphql.ArgMapping{SchemaID: "rgd-person-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "getPersonInfo", TargetArgName: "nic"}
 	var bound []string
 	for _, binding := range op.BindArguments([]*graphql.ArgMapping{drp, rgd}) {
-		bound = append(bound, fmt.Sprintf("%s %s=%v", binding.Mapping.ProviderKey, strings.Join(binding.Field.Path, "."), binding.Value))
+		bound = append(bound, fmt.Sprintf("%s %s=%v", binding.Mapping.SchemaID, strings.Join(binding.Field.Path, "."), binding.Value))
 	}
-	assert.Equal(t, []string{"drp citizen=748213", "drp other=512346", "rgd citizen=748213", "rgd other=512346"}, bound)
+	assert.Equal(t, []string{"drp-person-v1 citizen=748213", "drp-person-v1 other=512346", "rgd-person-v1 citizen=748213", "rgd-person-v1 other=512346"}, bound)
 }
 
 // render prints fields one per line, indented by depth: the response key, the
@@ -402,7 +402,7 @@ func render(fields []*Field) string {
 				fmt.Fprintf(&b, " %s=%v", name, field.Arguments[name])
 			}
 			if info := field.SourceInfo; info != nil {
-				fmt.Fprintf(&b, " <- %s %s", info.ProviderKey, info.ProviderField)
+				fmt.Fprintf(&b, " <- %s %s", info.SchemaID, info.ProviderField)
 			}
 			b.WriteString("\n")
 			write(field.Selections, indent+"  ")

@@ -30,8 +30,7 @@ type plan struct {
 
 // fetch is one provider operation.
 type fetch struct {
-	providerKey string
-	schemaID    string
+	schemaID string
 	// query is the printed provider operation.
 	query string
 	// fields are the provider field paths the operation reads, in query order.
@@ -160,8 +159,8 @@ func (p *planner) field(field *operation.Field, scope *elementScope) error {
 	}
 }
 
-// fetchFor returns the fetch that serves field: the one for its provider and
-// schema with the same mapped arguments, created on first use.
+// fetchFor returns the fetch that serves field: the one for its schema with the
+// same mapped arguments, created on first use.
 func (p *planner) fetchFor(field *operation.Field) (*fetch, error) {
 	info := field.SourceInfo
 	args, err := p.arguments(field)
@@ -170,7 +169,7 @@ func (p *planner) fetchFor(field *operation.Field) (*fetch, error) {
 	}
 
 	var key strings.Builder
-	key.WriteString(info.ProviderKey + "\x00" + info.SchemaID)
+	key.WriteString(info.SchemaID)
 	for _, arg := range args {
 		key.WriteString("\x00" + arg.path + "\x00" + arg.name + "\x00" + arg.value.String())
 	}
@@ -179,11 +178,10 @@ func (p *planner) fetchFor(field *operation.Field) (*fetch, error) {
 	}
 
 	f := &fetch{
-		providerKey: info.ProviderKey,
-		schemaID:    info.SchemaID,
-		key:         key.String(),
-		root:        &selectionNode{},
-		args:        args,
+		schemaID: info.SchemaID,
+		key:      key.String(),
+		root:     &selectionNode{},
+		args:     args,
 	}
 	p.byKey[f.key] = f
 	p.plan.fetches = append(p.plan.fetches, f)
@@ -191,7 +189,7 @@ func (p *planner) fetchFor(field *operation.Field) (*fetch, error) {
 }
 
 // arguments returns the mapped arguments for the provider field that serves
-// field: the bindings for its provider and schema, carried by field or an
+// field: the bindings for its schema, carried by field or an
 // ancestor, whose targetArgPath leads to the provider field. The first binding
 // for each target path and argument wins; the result is sorted.
 func (p *planner) arguments(field *operation.Field) ([]providerArgument, error) {
@@ -200,7 +198,7 @@ func (p *planner) arguments(field *operation.Field) ([]providerArgument, error) 
 	var args []providerArgument
 	for _, binding := range p.bindings {
 		mapping := binding.Mapping
-		if mapping.ProviderKey != info.ProviderKey || mapping.SchemaID != info.SchemaID ||
+		if mapping.SchemaID != info.SchemaID ||
 			!isPathPrefix(info.ProviderField, mapping.TargetArgPath) ||
 			!hasPrefix(field.Path, binding.Field.Path) {
 			continue
@@ -244,7 +242,8 @@ func (f *fetch) addField(path string) {
 	}
 }
 
-// print returns the provider operation, named "Query" + the provider key.
+// print returns the provider operation, named "Query" + the schema ID, with
+// characters that aren't valid in a GraphQL name replaced by "_".
 func (f *fetch) print() string {
 	for _, arg := range f.args {
 		node := f.root
@@ -256,12 +255,23 @@ func (f *fetch) print() string {
 
 	doc := &ast.QueryDocument{Operations: ast.OperationList{{
 		Operation:    ast.Query,
-		Name:         "Query" + f.providerKey,
+		Name:         "Query" + operationName(f.schemaID),
 		SelectionSet: f.root.selectionSet(),
 	}}}
 	var buf bytes.Buffer
 	formatter.NewFormatter(&buf, formatter.WithIndent("  ")).FormatQueryDocument(doc)
 	return strings.TrimSpace(buf.String())
+}
+
+// operationName returns id with every character that isn't valid in a GraphQL
+// name replaced by "_".
+func operationName(id string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return '_'
+	}, id)
 }
 
 // selectionNode is a provider field in a fetch's selection tree.

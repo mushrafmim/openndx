@@ -24,39 +24,39 @@ type Query {
 }
 
 type PersonInfo {
-	fullName: String @sourceInfo(providerKey: "drp", schemaId: "drp-v1", providerField: "person.fullName")
-	tags: [String] @sourceInfo(providerKey: "drp", schemaId: "drp-v1", providerField: "person.tags")
-	ownedVehicles: [Vehicle!] @sourceInfo(providerKey: "dmt", schemaId: "dmt-v1", providerField: "vehicle.list.data")
+	fullName: String @sourceInfo(schemaId: "drp-v1", providerField: "person.fullName")
+	tags: [String] @sourceInfo(schemaId: "drp-v1", providerField: "person.tags")
+	ownedVehicles: [Vehicle!] @sourceInfo(schemaId: "dmt-v1", providerField: "vehicle.list.data")
 	untracked: String
 	contacts: [Contact]
 }
 
 type Contact {
-	phone: String @sourceInfo(providerKey: "drp", schemaId: "drp-v1", providerField: "person.phone")
+	phone: String @sourceInfo(schemaId: "drp-v1", providerField: "person.phone")
 }
 
 type Vehicle {
-	regNo: String! @sourceInfo(providerKey: "dmt", schemaId: "dmt-v1", providerField: "vehicle.list.data.registrationNumber")
-	make: String @sourceInfo(providerKey: "dmt", schemaId: "dmt-v1", providerField: "make")
+	regNo: String! @sourceInfo(schemaId: "dmt-v1", providerField: "vehicle.list.data.registrationNumber")
+	make: String @sourceInfo(schemaId: "dmt-v1", providerField: "make")
 	owner: Owner
 }
 
 type Owner {
-	name: String @sourceInfo(providerKey: "dmt", schemaId: "dmt-v1", providerField: "vehicle.list.data.owner.name")
+	name: String @sourceInfo(schemaId: "dmt-v1", providerField: "vehicle.list.data.owner.name")
 }
 
 type Required {
-	value: String! @sourceInfo(providerKey: "drp", schemaId: "drp-v1", providerField: "required.value")
-	optional: String @sourceInfo(providerKey: "drp", schemaId: "drp-v1", providerField: "required.optional")
+	value: String! @sourceInfo(schemaId: "drp-v1", providerField: "required.value")
+	optional: String @sourceInfo(schemaId: "drp-v1", providerField: "required.optional")
 }
 `
 
 var planTestMappings = []*graphql.ArgMapping{
-	{ProviderKey: "drp", SchemaID: "drp-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "nic"},
-	{ProviderKey: "drp", SchemaID: "drp-v1", SourceArgPath: "personInfo-lang", TargetArgPath: "person", TargetArgName: "lang"},
-	{ProviderKey: "drp", SchemaID: "drp-v1", SourceArgPath: "personInfo-year", TargetArgPath: "person", TargetArgName: "year"},
-	{ProviderKey: "dmt", SchemaID: "dmt-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "vehicle.list", TargetArgName: "ownerNic"},
-	{ProviderKey: "drp", SchemaID: "drp-v1", SourceArgPath: "required-nic", TargetArgPath: "required", TargetArgName: "nic"},
+	{SchemaID: "drp-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "nic"},
+	{SchemaID: "drp-v1", SourceArgPath: "personInfo-lang", TargetArgPath: "person", TargetArgName: "lang"},
+	{SchemaID: "drp-v1", SourceArgPath: "personInfo-year", TargetArgPath: "person", TargetArgName: "year"},
+	{SchemaID: "dmt-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "vehicle.list", TargetArgName: "ownerNic"},
+	{SchemaID: "drp-v1", SourceArgPath: "required-nic", TargetArgPath: "required", TargetArgName: "nic"},
 }
 
 // planFor normalizes and plans query against planTestSchema.
@@ -85,12 +85,12 @@ func TestBuildPlan(t *testing.T) {
 
 		require.Len(t, p.fetches, 2)
 		drp, dmt := p.fetches[0], p.fetches[1]
-		assert.Equal(t, "drp", drp.providerKey)
-		assert.Equal(t, `query Querydrp { person(lang: SI, nic: "1") { fullName tags } }`, compact(drp.query))
+		assert.Equal(t, "drp-v1", drp.schemaID)
+		assert.Equal(t, `query Querydrp_v1 { person(lang: SI, nic: "1") { fullName tags } }`, compact(drp.query))
 		assert.Equal(t, []string{"person.fullName", "person.tags"}, drp.fields)
 
-		assert.Equal(t, "dmt", dmt.providerKey)
-		assert.Equal(t, `query Querydmt { vehicle { list(ownerNic: "1") { data { registrationNumber make owner { name } } } } }`, compact(dmt.query),
+		assert.Equal(t, "dmt-v1", dmt.schemaID)
+		assert.Equal(t, `query Querydmt_v1 { vehicle { list(ownerNic: "1") { data { registrationNumber make owner { name } } } } }`, compact(dmt.query),
 			"a list item's field declared outside the list is read by its last segment")
 		assert.Equal(t, []string{"vehicle.list.data.registrationNumber", "vehicle.list.data.make", "vehicle.list.data.owner.name"}, dmt.fields)
 
@@ -107,7 +107,7 @@ func TestBuildPlan(t *testing.T) {
 		_, p := planFor(t, `{ a: personInfo(nic: "1") { fullName } b: personInfo(nic: "1") { name: fullName tags } }`, nil)
 
 		require.Len(t, p.fetches, 1)
-		assert.Equal(t, `query Querydrp { person(nic: "1") { fullName tags } }`, compact(p.fetches[0].query))
+		assert.Equal(t, `query Querydrp_v1 { person(nic: "1") { fullName tags } }`, compact(p.fetches[0].query))
 		assert.Equal(t, []policy.RequiredField{
 			{SchemaID: "drp-v1", FieldName: "person.fullName"},
 			{SchemaID: "drp-v1", FieldName: "person.tags"},
@@ -118,8 +118,8 @@ func TestBuildPlan(t *testing.T) {
 		_, p := planFor(t, `{ a: personInfo(nic: "1", lang: EN) { fullName } b: personInfo(nic: "1", lang: SI) { fullName } }`, nil)
 
 		require.Len(t, p.fetches, 2)
-		assert.Equal(t, `query Querydrp { person(lang: EN, nic: "1") { fullName } }`, compact(p.fetches[0].query))
-		assert.Equal(t, `query Querydrp { person(lang: SI, nic: "1") { fullName } }`, compact(p.fetches[1].query))
+		assert.Equal(t, `query Querydrp_v1 { person(lang: EN, nic: "1") { fullName } }`, compact(p.fetches[0].query))
+		assert.Equal(t, `query Querydrp_v1 { person(lang: SI, nic: "1") { fullName } }`, compact(p.fetches[1].query))
 	})
 
 	t.Run("prints variables and defaults by their consumer argument type", func(t *testing.T) {
@@ -127,7 +127,7 @@ func TestBuildPlan(t *testing.T) {
 			map[string]any{"year": float64(2024)})
 
 		require.Len(t, p.fetches, 1)
-		assert.Equal(t, `query Querydrp { person(lang: SI, nic: "1", year: 2024) { fullName } }`, compact(p.fetches[0].query),
+		assert.Equal(t, `query Querydrp_v1 { person(lang: SI, nic: "1", year: 2024) { fullName } }`, compact(p.fetches[0].query),
 			"an enum prints as an enum, and a whole JSON number for an Int as an Int")
 	})
 

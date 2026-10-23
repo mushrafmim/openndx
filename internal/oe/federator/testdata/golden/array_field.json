@@ -37,14 +37,14 @@
   ],
   "consentRequests": [],
   "providerRequests": {
-    "dmt": [
+    "dmt-v1": [
       {
-        "query": "query Querydmt { vehicle { getVehicleInfos ( ownerNic : \"199012345678\" ) { data { registrationNumber make } } } }"
+        "query": "query Querydmt_v1 { vehicle { getVehicleInfos ( ownerNic : \"199012345678\" ) { data { registrationNumber make } } } }"
       }
     ],
-    "drp": [
+    "drp-v1": [
       {
-        "query": "query Querydrp { person ( nic : \"199012345678\" ) { fullName } }"
+        "query": "query Querydrp_v1 { person ( nic : \"199012345678\" ) { fullName } }"
       }
     ]
   },
@@ -71,7 +71,7 @@
       "actorType": "SERVICE",
       "actorId": "orchestration-engine",
       "targetType": "SERVICE",
-      "targetId": "dmt"
+      "targetId": "dmt-v1"
     },
     {
       "eventType": "PROVIDER_FETCH",
@@ -79,7 +79,7 @@
       "actorType": "SERVICE",
       "actorId": "orchestration-engine",
       "targetType": "SERVICE",
-      "targetId": "drp"
+      "targetId": "drp-v1"
     }
   ]
 }

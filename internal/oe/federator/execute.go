@@ -24,10 +24,10 @@ func (f *Federator) execute(ctx context.Context, appID string, fetches []*fetch)
 	var wg sync.WaitGroup
 
 	for _, ft := range fetches {
-		client, ok := f.deps.Providers.Get(ft.providerKey, ft.schemaID)
+		client, ok := f.deps.Providers.Get(ft.schemaID)
 		if !ok {
-			logger.Log.Info("Provider not found", "Provider Key", ft.providerKey, "Schema ID", ft.schemaID)
-			results[ft] = fetchResult{err: fmt.Errorf("provider %s with schema %s is not configured", ft.providerKey, ft.schemaID)}
+			logger.Log.Info("Provider not found", "Schema ID", ft.schemaID)
+			results[ft] = fetchResult{err: fmt.Errorf("no provider is configured for schema %s", ft.schemaID)}
 			continue
 		}
 
@@ -37,14 +37,13 @@ func (f *Federator) execute(ctx context.Context, appID string, fetches []*fetch)
 
 			audit := ProviderFetch{
 				ApplicationID:   appID,
-				ServiceKey:      ft.providerKey,
 				SchemaID:        ft.schemaID,
 				Query:           ft.query,
 				RequestedFields: ft.fields,
 			}
 			response, err := client.Execute(ctx, graphql.Request{Query: ft.query})
 			if err != nil {
-				logger.Log.Info("Request failed to the Provider", "Provider Key", ft.providerKey, "Error", err)
+				logger.Log.Info("Request failed to the Provider", "Schema ID", ft.schemaID, "Error", err)
 				f.deps.Auditor.ProviderFetch(ctx, audit, nil, err)
 			} else {
 				f.deps.Auditor.ProviderFetch(ctx, audit, &response, nil)

@@ -49,7 +49,6 @@ func TestFederateQuery_WithMockSchema(t *testing.T) {
 		FoundationalIdArgName: "nic",
 		Providers: []*configs.ProviderConfig{
 			{
-				ProviderKey: "drp",
 				ProviderURL: providerServer.URL,
 				SchemaID:    "drp-schema",
 			},
@@ -59,7 +58,6 @@ func TestFederateQuery_WithMockSchema(t *testing.T) {
 		},
 		ArgMapping: []*graphql.ArgMapping{
 			{
-				ProviderKey:   "drp",
 				SchemaID:      "drp-schema",
 				TargetArgName: "nic",
 				SourceArgPath: "personInfo-nic",
@@ -70,12 +68,12 @@ func TestFederateQuery_WithMockSchema(t *testing.T) {
 
 	// 4. Setup Federator
 	schemaSDL := `
-		directive @sourceInfo(providerKey: String!, providerField: String!, schemaId: String) on FIELD_DEFINITION
+		directive @sourceInfo(providerField: String!, schemaId: String!) on FIELD_DEFINITION
 		type Query {
-			personInfo(nic: String!): PersonInfo @sourceInfo(providerKey: "drp", providerField: "person", schemaId: "drp-schema")
+			personInfo(nic: String!): PersonInfo @sourceInfo(providerField: "person", schemaId: "drp-schema")
 		}
 		type PersonInfo {
-			fullName: String @sourceInfo(providerKey: "drp", providerField: "person.fullName", schemaId: "drp-schema")
+			fullName: String @sourceInfo(providerField: "person.fullName", schemaId: "drp-schema")
 		}
 	`
 
@@ -125,22 +123,22 @@ func TestFederateQuery_DataOwnerIdentification(t *testing.T) {
 	// (one targeting "person", one targeting the "person.fullName" subfield),
 	// producing two equal foundationalIdValues from a single query argument.
 	schemaSDL := `
-		directive @sourceInfo(providerKey: String!, providerField: String!, schemaId: String) on FIELD_DEFINITION
+		directive @sourceInfo(providerField: String!, schemaId: String!) on FIELD_DEFINITION
 		type Query {
-			personInfo(nic: String!): PersonInfo @sourceInfo(providerKey: "drp", providerField: "person", schemaId: "drp-schema")
-			sessionInfo(requestId: String!): SessionInfo @sourceInfo(providerKey: "drp", providerField: "session", schemaId: "drp-schema")
+			personInfo(nic: String!): PersonInfo @sourceInfo(providerField: "person", schemaId: "drp-schema")
+			sessionInfo(requestId: String!): SessionInfo @sourceInfo(providerField: "session", schemaId: "drp-schema")
 		}
 		type PersonInfo {
-			fullName: String @sourceInfo(providerKey: "drp", providerField: "person.fullName", schemaId: "drp-schema")
+			fullName: String @sourceInfo(providerField: "person.fullName", schemaId: "drp-schema")
 		}
 		type SessionInfo {
-			status: String @sourceInfo(providerKey: "drp", providerField: "session.status", schemaId: "drp-schema")
+			status: String @sourceInfo(providerField: "session.status", schemaId: "drp-schema")
 		}
 	`
 	argMapping := []*graphql.ArgMapping{
-		{ProviderKey: "drp", SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "personInfo-nic", TargetArgPath: "person"},
-		{ProviderKey: "drp", SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "fullName-nic", TargetArgPath: "person.fullName"},
-		{ProviderKey: "drp", SchemaID: "drp-schema", TargetArgName: "requestId", SourceArgPath: "sessionInfo-requestId", TargetArgPath: "session"},
+		{SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "personInfo-nic", TargetArgPath: "person"},
+		{SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "fullName-nic", TargetArgPath: "person.fullName"},
+		{SchemaID: "drp-schema", TargetArgName: "requestId", SourceArgPath: "sessionInfo-requestId", TargetArgPath: "session"},
 	}
 
 	// setupFederator wires a Federator whose PDP mock always requires consent
@@ -245,7 +243,6 @@ func TestFederateQuery_PDPDeny(t *testing.T) {
 		},
 		ArgMapping: []*graphql.ArgMapping{
 			{
-				ProviderKey:   "drp",
 				SchemaID:      "drp-schema",
 				TargetArgName: "nic",
 				SourceArgPath: "personInfo-nic",
@@ -255,12 +252,12 @@ func TestFederateQuery_PDPDeny(t *testing.T) {
 	}
 
 	schemaSDL := `
-		directive @sourceInfo(providerKey: String!, providerField: String!, schemaId: String) on FIELD_DEFINITION
+		directive @sourceInfo(providerField: String!, schemaId: String!) on FIELD_DEFINITION
 		type Query {
-			personInfo(nic: String!): PersonInfo @sourceInfo(providerKey: "drp", providerField: "person", schemaId: "drp-schema")
+			personInfo(nic: String!): PersonInfo @sourceInfo(providerField: "person", schemaId: "drp-schema")
 		}
 		type PersonInfo {
-			fullName: String @sourceInfo(providerKey: "drp", providerField: "person.fullName", schemaId: "drp-schema")
+			fullName: String @sourceInfo(providerField: "person.fullName", schemaId: "drp-schema")
 		}
 	`
 	f := newTestFederator(t, cfg, staticSchema(schemaSDL))
@@ -356,11 +353,11 @@ func (p *fakeProvider) Execute(_ context.Context, req graphql.Request) (graphql.
 	return p.resp, p.err
 }
 
-// fakeRegistry is a ProviderRegistry keyed by service key.
+// fakeRegistry is a ProviderRegistry keyed by schema ID.
 type fakeRegistry map[string]*fakeProvider
 
-func (r fakeRegistry) Get(serviceKey, _ string) (ProviderClient, bool) {
-	p, ok := r[serviceKey]
+func (r fakeRegistry) Get(schemaID string) (ProviderClient, bool) {
+	p, ok := r[schemaID]
 	if !ok {
 		return nil, false
 	}
@@ -385,18 +382,18 @@ func (a *recordingAuditor) ProviderFetch(_ context.Context, fetch ProviderFetch,
 
 func TestFederateQuery_InjectedDeps(t *testing.T) {
 	schemaSDL := `
-		directive @sourceInfo(providerKey: String!, providerField: String!, schemaId: String) on FIELD_DEFINITION
+		directive @sourceInfo(providerField: String!, schemaId: String!) on FIELD_DEFINITION
 		type Query {
-			personInfo(nic: String!): PersonInfo @sourceInfo(providerKey: "drp", providerField: "person", schemaId: "drp-schema")
+			personInfo(nic: String!): PersonInfo @sourceInfo(providerField: "person", schemaId: "drp-schema")
 		}
 		type PersonInfo {
-			fullName: String @sourceInfo(providerKey: "drp", providerField: "person.fullName", schemaId: "drp-schema")
+			fullName: String @sourceInfo(providerField: "person.fullName", schemaId: "drp-schema")
 		}
 	`
 	opts := Options{
 		FoundationalIdArgName: "nic",
 		ArgMapping: []*graphql.ArgMapping{
-			{ProviderKey: "drp", SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "personInfo-nic", TargetArgPath: "person"},
+			{SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "personInfo-nic", TargetArgPath: "person"},
 		},
 	}
 	req := graphql.Request{Query: `query { personInfo(nic: "123") { fullName } }`}
@@ -466,7 +463,7 @@ func TestFederateQuery_InjectedDeps(t *testing.T) {
 		}}}
 		auditor := &recordingAuditor{}
 		f, err := New(Deps{
-			Providers: fakeRegistry{"drp": drp},
+			Providers: fakeRegistry{"drp-schema": drp},
 			Schemas:   staticSchema(schemaSDL),
 			Auditor:   auditor,
 		}, opts)
@@ -481,7 +478,6 @@ func TestFederateQuery_InjectedDeps(t *testing.T) {
 		require.Len(t, auditor.fetches, 1)
 		assert.Equal(t, ProviderFetch{
 			ApplicationID:   "app-123",
-			ServiceKey:      "drp",
 			SchemaID:        "drp-schema",
 			Query:           drp.got[0].Query,
 			RequestedFields: []string{"person.fullName"},
@@ -492,7 +488,7 @@ func TestFederateQuery_InjectedDeps(t *testing.T) {
 	t.Run("audits a failed provider fetch and reports its fields as null", func(t *testing.T) {
 		auditor := &recordingAuditor{}
 		f, err := New(Deps{
-			Providers: fakeRegistry{"drp": &fakeProvider{err: fmt.Errorf("connection refused")}},
+			Providers: fakeRegistry{"drp-schema": &fakeProvider{err: fmt.Errorf("connection refused")}},
 			Schemas:   staticSchema(schemaSDL),
 			Auditor:   auditor,
 		}, opts)
@@ -502,7 +498,7 @@ func TestFederateQuery_InjectedDeps(t *testing.T) {
 
 		assert.Equal(t, map[string]interface{}{"fullName": nil}, resp.Data["personInfo"])
 		assert.Equal(t, []interface{}{map[string]interface{}{
-			"message":    "Failed to fetch data from provider drp",
+			"message":    "Failed to fetch data from provider for schema drp-schema",
 			"path":       []any{"personInfo", "fullName"},
 			"extensions": map[string]interface{}{"code": errors.CodeProviderError},
 		}}, resp.Errors)
@@ -517,13 +513,13 @@ func TestFederateQuery_ValidatesAgainstSchema(t *testing.T) {
 			personInfo(nic: String!): PersonInfo
 		}
 		type PersonInfo {
-			fullName: String @sourceInfo(providerKey: "drp", providerField: "person.fullName", schemaId: "drp-schema")
+			fullName: String @sourceInfo(providerField: "person.fullName", schemaId: "drp-schema")
 		}
 	`
 	opts := Options{
 		FoundationalIdArgName: "nic",
 		ArgMapping: []*graphql.ArgMapping{
-			{ProviderKey: "drp", SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "personInfo-nic", TargetArgPath: "person"},
+			{SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "personInfo-nic", TargetArgPath: "person"},
 		},
 	}
 
@@ -542,7 +538,7 @@ func TestFederateQuery_ValidatesAgainstSchema(t *testing.T) {
 			pdp := &fakePolicy{resp: &policy.PdpResponse{AppAuthorized: true}}
 			drp := &fakeProvider{}
 			f, err := New(Deps{
-				Providers: fakeRegistry{"drp": drp},
+				Providers: fakeRegistry{"drp-schema": drp},
 				Schemas:   staticSchema(schemaSDL),
 				Policy:    pdp,
 			}, opts)
@@ -569,8 +565,8 @@ func TestFederateQuery_SharedSchemaConcurrently(t *testing.T) {
 			personInfo(nic: String!): PersonInfo
 		}
 		type PersonInfo {
-			fullName: String @sourceInfo(providerKey: "drp", providerField: "person.fullName", schemaId: "drp-schema")
-			address: String @sourceInfo(providerKey: "drp", providerField: "person.address", schemaId: "drp-schema")
+			fullName: String @sourceInfo(providerField: "person.fullName", schemaId: "drp-schema")
+			address: String @sourceInfo(providerField: "person.address", schemaId: "drp-schema")
 		}
 	`)
 	require.NoError(t, err)
@@ -578,12 +574,12 @@ func TestFederateQuery_SharedSchemaConcurrently(t *testing.T) {
 		"person": map[string]interface{}{"fullName": "Jane Doe", "address": "Colombo"},
 	}}}
 	f, err := New(Deps{
-		Providers: fakeRegistry{"drp": drp},
+		Providers: fakeRegistry{"drp-schema": drp},
 		Schemas:   fixedSchema{compiled},
 	}, Options{
 		FoundationalIdArgName: "nic",
 		ArgMapping: []*graphql.ArgMapping{
-			{ProviderKey: "drp", SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "personInfo-nic", TargetArgPath: "person"},
+			{SchemaID: "drp-schema", TargetArgName: "nic", SourceArgPath: "personInfo-nic", TargetArgPath: "person"},
 		},
 	})
 	require.NoError(t, err)
@@ -610,18 +606,18 @@ func (s fixedSchema) Active(context.Context) (*schema.CompiledSchema, error) { r
 
 func TestProviderLookup(t *testing.T) {
 	p := &fakeProvider{}
-	registry := ProviderLookup(func(serviceKey, _ string) (*fakeProvider, bool) {
-		if serviceKey == "drp" {
+	registry := ProviderLookup(func(schemaID string) (*fakeProvider, bool) {
+		if schemaID == "drp-schema" {
 			return p, true
 		}
 		return nil, false
 	})
 
-	got, ok := registry.Get("drp", "drp-schema")
+	got, ok := registry.Get("drp-schema")
 	require.True(t, ok)
 	assert.Same(t, p, got)
 
-	got, ok = registry.Get("unknown", "schema")
+	got, ok = registry.Get("unknown")
 	assert.False(t, ok)
 	assert.Nil(t, got, "a missing provider must be an untyped nil ProviderClient")
 }
