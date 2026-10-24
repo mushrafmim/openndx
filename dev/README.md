@@ -23,8 +23,8 @@ who clones just `openndx` — no sibling checkout, no path coupling.
 | `drp-api-adapter` | 9091 | GraphQL          | Subgraph in front of `drp-api` — this is what `oe` calls as the `drp` provider |
 | `rgd-api`         | 8080 | GraphQL + OAuth2 | Mock Registrar General's Department API — the `rgd` provider                   |
 
-`cmd/oe/config.docker.json` (used by the root `compose.yml` stack) and
-`cmd/oe/config.example.json` (used for `go run ./cmd/oe` outside Docker) are
+`cmd/oe/config.docker.yaml` (used by the root `compose.yml` stack) and
+`cmd/oe/config.example.yaml` (used when running `oe` outside Docker) are
 already wired to these ports.
 
 ## Usage
@@ -48,14 +48,12 @@ every change, run it natively against the same providers instead of the
 containerized `orchestration-engine` service:
 
 ```bash
-CONFIG_PATH=cmd/oe/config.example.json \
-  IDP_JWKS_URL=http://localhost:8090/oauth2/jwks IDP_ISSUER=http://localhost:8090 \
-  IDP_AUDIENCE=http://api.openndx.local \
-  go run ./cmd/oe
+go run ./cmd/oe -config cmd/oe/config.example.yaml
 ```
 
-OE exits at startup without the `IDP_*` settings, which it uses to verify consumer
-tokens; `IDP_ISSUER` must match the `iss` ThunderID stamps, its public URL.
+The example config's `idp` section points at the local ThunderID, which OE uses
+to verify consumer tokens; `idp.issuer` must match the `iss` ThunderID stamps,
+its public URL.
 
 ## Trying it
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	"github.com/openndx/openndx-core/internal/oe/federator/schema"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
@@ -90,14 +89,6 @@ type Options struct {
 	// federated query. Required.
 	FoundationalIdArgName string
 	ArgMapping            []*graphql.ArgMapping
-}
-
-// OptionsFromConfig reads the federation options from the OE configuration.
-func OptionsFromConfig(cfg *configs.Config) Options {
-	return Options{
-		FoundationalIdArgName: cfg.FoundationalIdArgName,
-		ArgMapping:            cfg.ArgMapping,
-	}
 }
 
 // New returns a Federator that uses deps and opts.

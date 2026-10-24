@@ -71,7 +71,7 @@ const (
 	testRequestID = "test-req-123"
 
 	// The issuer and audience the Orchestration Engine is started with
-	// (IDP_ISSUER and IDP_AUDIENCE in the workflow and docker-compose.test.yml).
+	// (idp.issuer and idp.audience in oe-config.yaml).
 	testTokenIssuer   = "http://mock-idp.test"
 	testTokenAudience = "http://api.openndx.local"
 )
@@ -247,7 +247,7 @@ func TestMain(m *testing.M) {
 }
 
 // consumerClaims returns the claims of a consumer token for appID that the
-// Orchestration Engine accepts: its IDP_ISSUER and IDP_AUDIENCE, with a client_id.
+// Orchestration Engine accepts: its idp.issuer and idp.audience, with a client_id.
 func consumerClaims(appID string) jwt.MapClaims {
 	now := time.Now().Unix()
 	return jwt.MapClaims{

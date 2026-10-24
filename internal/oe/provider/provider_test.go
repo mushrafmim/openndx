@@ -1,441 +1,287 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/openndx/openndx-core/internal/oe/logger"
-	"github.com/openndx/openndx-core/internal/oe/pkg/auth"
+	"github.com/OpenNSW/core/remote"
+	remoteauth "github.com/OpenNSW/core/remote/auth"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func init() {
-	// Initialize logger for tests
-	logger.Init()
+func TestNewRegistry_AndGet(t *testing.T) {
+	registry, err := NewRegistry(
+		Config{ID: "drp-v1", URL: "http://example1.com"},
+		Config{ID: "drp-v2", URL: "http://example1.com", Timeout: "5s"},
+		Config{ID: "rgd-v1", URL: "http://example3.com/graphql"},
+	)
+	require.NoError(t, err)
+
+	p1, ok := registry.Get("drp-v1")
+	require.True(t, ok)
+	assert.Equal(t, "http://example1.com", p1.url)
+
+	p2, ok := registry.Get("drp-v2")
+	require.True(t, ok, "two schemas may share an endpoint")
+	assert.Equal(t, "http://example1.com", p2.url)
+
+	p3, ok := registry.Get("rgd-v1")
+	require.True(t, ok)
+	assert.Equal(t, "http://example3.com/graphql", p3.url)
+
+	_, ok = registry.Get("unknown")
+	assert.False(t, ok)
+
+	var nilRegistry *Registry
+	_, ok = nilRegistry.Get("drp-v1")
+	assert.False(t, ok)
 }
 
-func TestNewProvider(t *testing.T) {
+func TestNewRegistry_ValidationErrors(t *testing.T) {
 	tests := []struct {
-		name               string
-		serviceUrl         string
-		schemaID           string
-		authConfig         *auth.AuthConfig
-		expectOAuth2Config bool
+		name    string
+		configs []Config
+		wantErr string
 	}{
 		{
-			name:               "creates provider with no auth",
-			serviceUrl:         "http://example.com",
-			schemaID:           "schema1",
-			authConfig:         nil,
-			expectOAuth2Config: false,
+			name:    "missing id",
+			configs: []Config{{URL: "http://example.com"}},
+			wantErr: "providers[0].id is required",
 		},
 		{
-			name:       "creates provider with API key auth",
-			serviceUrl: "http://example.com",
-			schemaID:   "schema2",
-			authConfig: &auth.AuthConfig{
-				Type:        auth.AuthTypeAPIKey,
-				APIKeyName:  "X-API-Key",
-				APIKeyValue: "test-key-123",
+			name:    "missing url",
+			configs: []Config{{ID: "drp-v1"}},
+			wantErr: "providers[0].url",
+		},
+		{
+			name:    "non-http url",
+			configs: []Config{{ID: "drp-v1", URL: "ftp://example.com"}},
+			wantErr: "providers[0].url",
+		},
+		{
+			name: "duplicate id",
+			configs: []Config{
+				{ID: "drp-v1", URL: "http://example1.com"},
+				{ID: "drp-v1", URL: "http://example2.com"},
 			},
-			expectOAuth2Config: false,
+			wantErr: `duplicate provider for schema "drp-v1"`,
 		},
 		{
-			name:       "creates provider with OAuth2 auth",
-			serviceUrl: "http://example.com",
-			schemaID:   "schema3",
-			authConfig: &auth.AuthConfig{
-				Type:         auth.AuthTypeOAuth2,
-				ClientID:     "client-id",
-				ClientSecret: "client-secret",
-				TokenURL:     "http://auth.example.com/token",
-				Scopes:       []string{"read", "write"},
-			},
-			expectOAuth2Config: true,
+			name:    "invalid timeout",
+			configs: []Config{{ID: "drp-v1", URL: "http://example.com", Timeout: "not-a-duration"}},
+			wantErr: `providers[0] (drp-v1): invalid timeout "not-a-duration"`,
 		},
 		{
-			name:               "creates provider with empty values",
-			serviceUrl:         "",
-			schemaID:           "",
-			authConfig:         nil,
-			expectOAuth2Config: false,
+			name: "invalid auth config",
+			configs: []Config{{
+				ID:   "drp-v1",
+				URL:  "http://example.com",
+				Auth: &remoteauth.Config{Type: remoteauth.TypeOAuth2},
+			}},
+			wantErr: `missing "oauth2" settings`,
+		},
+		{
+			name: "incomplete tls config",
+			configs: []Config{{
+				ID:  "drp-v1",
+				URL: "http://example.com",
+				TLS: &remote.TLSSettings{ClientCertFile: "/etc/cert.pem"},
+			}},
+			wantErr: "tls config requires both clientCertFile and clientKeyFile",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			provider := NewProvider(tt.serviceUrl, tt.schemaID, tt.authConfig)
-
-			if provider == nil {
-				t.Fatal("NewProvider returned nil")
-			}
-
-			if provider.ServiceUrl != tt.serviceUrl {
-				t.Errorf("Expected service URL %s, got %s", tt.serviceUrl, provider.ServiceUrl)
-			}
-
-			if provider.SchemaID != tt.schemaID {
-				t.Errorf("Expected schema ID %s, got %s", tt.schemaID, provider.SchemaID)
-			}
-
-			if provider.Auth != tt.authConfig {
-				t.Error("Auth config doesn't match expected value")
-			}
-
-			if provider.Client == nil {
-				t.Error("Expected Client to be initialized, got nil")
-			}
-
-			if provider.Headers == nil {
-				t.Error("Expected Headers map to be initialized, got nil")
-			}
-
-			if tt.expectOAuth2Config {
-				if provider.OAuth2Config == nil {
-					t.Error("Expected OAuth2Config to be set, got nil")
-				} else {
-					if provider.OAuth2Config.ClientID != tt.authConfig.ClientID {
-						t.Errorf("Expected client ID %s, got %s", tt.authConfig.ClientID, provider.OAuth2Config.ClientID)
-					}
-					if provider.OAuth2Config.ClientSecret != tt.authConfig.ClientSecret {
-						t.Errorf("Expected client secret %s, got %s", tt.authConfig.ClientSecret, provider.OAuth2Config.ClientSecret)
-					}
-					if provider.OAuth2Config.TokenURL != tt.authConfig.TokenURL {
-						t.Errorf("Expected token URL %s, got %s", tt.authConfig.TokenURL, provider.OAuth2Config.TokenURL)
-					}
-					if len(provider.OAuth2Config.Scopes) != len(tt.authConfig.Scopes) {
-						t.Errorf("Expected %d scopes, got %d", len(tt.authConfig.Scopes), len(provider.OAuth2Config.Scopes))
-					}
-				}
-			} else {
-				if provider.OAuth2Config != nil {
-					t.Error("Expected OAuth2Config to be nil, got non-nil value")
-				}
-			}
+			_, err := NewRegistry(tt.configs...)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
 }
 
-func TestProvider_PerformRequest_NoAuth(t *testing.T) {
-	// Create a test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request method
-		if r.Method != "POST" {
-			t.Errorf("Expected POST request, got %s", r.Method)
-		}
+func TestNewRegistry_WarnsAboutCredentialsOverPlainHTTP(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
 
-		// Verify Content-Type header
-		if r.Header.Get("Content-Type") != "application/json" {
-			t.Errorf("Expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
-		}
+	_, err := NewRegistry(
+		Config{ID: "open-v1", URL: "http://open.example"},
+		Config{
+			ID:   "drp-v1",
+			URL:  "https://drp.example",
+			Auth: &remoteauth.Config{Type: remoteauth.TypeAPIKey, APIKey: &remoteauth.APIKeyConfig{Key: "X-API-Key", Value: "k"}},
+		},
+		Config{
+			ID:  "rgd-v1",
+			URL: "http://rgd.example/graphql",
+			Auth: &remoteauth.Config{
+				Type:   remoteauth.TypeOAuth2,
+				OAuth2: &remoteauth.OAuth2Config{TokenURL: "http://rgd.example/oauth/token", ClientID: "c", ClientSecret: "s"},
+			},
+		},
+	)
+	require.NoError(t, err, "plain HTTP stays allowed")
 
-		// Read and verify body
-		body, _ := io.ReadAll(r.Body)
-		expectedBody := `{"test":"data"}`
-		if string(body) != expectedBody {
-			t.Errorf("Expected body %s, got %s", expectedBody, string(body))
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"success":true}`))
-	}))
-	defer server.Close()
-
-	provider := NewProvider(server.URL, "schema1", nil)
-	ctx := context.Background()
-
-	resp, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
-	}
-
-	respBody, _ := io.ReadAll(resp.Body)
-	expectedResp := `{"success":true}`
-	if string(respBody) != expectedResp {
-		t.Errorf("Expected response %s, got %s", expectedResp, string(respBody))
-	}
-}
-
-func TestProvider_PerformRequest_APIKeyAuth(t *testing.T) {
-	apiKeyName := "X-API-Key"
-	apiKeyValue := "test-api-key-123"
-
-	// Create a test server that validates the API key
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify API key header
-		if r.Header.Get(apiKeyName) != apiKeyValue {
-			t.Errorf("Expected API key %s, got %s", apiKeyValue, r.Header.Get(apiKeyName))
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"authenticated":true}`))
-	}))
-	defer server.Close()
-
-	authConfig := &auth.AuthConfig{
-		Type:        auth.AuthTypeAPIKey,
-		APIKeyName:  apiKeyName,
-		APIKeyValue: apiKeyValue,
-	}
-
-	provider := NewProvider(server.URL, "schema1", authConfig)
-	ctx := context.Background()
-
-	resp, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
-	}
-}
-
-func TestProvider_PerformRequest_OAuth2Auth_NilConfig(t *testing.T) {
-	// Test OAuth2 auth with nil OAuth2Config (error case)
-	authConfig := &auth.AuthConfig{
-		Type: auth.AuthTypeOAuth2,
-	}
-
-	provider := NewProvider("http://example.com", "schema1", nil)
-	provider.Auth = authConfig
-	provider.OAuth2Config = nil // Explicitly set to nil
-
-	ctx := context.Background()
-
-	_, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
-	if err == nil {
-		t.Error("Expected error when OAuth2Config is nil, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "OAuth2Config is nil") {
-		t.Errorf("Expected error message to contain 'OAuth2Config is nil', got: %v", err)
-	}
-}
-
-func TestProvider_PerformRequest_OAuth2Auth(t *testing.T) {
-	// Create a test server that simulates OAuth2 token endpoint and resource endpoint
-	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"access_token":"test-access-token","token_type":"Bearer","expires_in":3600}`))
-	}))
-	defer tokenServer.Close()
-
-	resourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify Authorization header
-		if r.Header.Get("Authorization") != "Bearer test-access-token" {
-			t.Errorf("Expected Authorization header 'Bearer test-access-token', got %s", r.Header.Get("Authorization"))
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"oauth_authenticated":true}`))
-	}))
-	defer resourceServer.Close()
-
-	authConfig := &auth.AuthConfig{
-		Type:         auth.AuthTypeOAuth2,
-		ClientID:     "client-id",
-		ClientSecret: "client-secret",
-		TokenURL:     tokenServer.URL,
-		Scopes:       []string{"read", "write"},
-	}
-
-	provider := NewProvider(resourceServer.URL, "schema1", authConfig)
-	ctx := context.Background()
-
-	resp, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
-	}
-}
-
-func TestProvider_PerformRequest_ContextCancellation(t *testing.T) {
-	// Create a slow server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(100 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	provider := NewProvider(server.URL, "schema1", nil)
-
-	// Create a context that will be cancelled immediately
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
-
-	_, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
-	if err == nil {
-		t.Error("Expected error due to cancelled context, got nil")
-	}
-}
-
-func TestProvider_PerformRequest_InvalidURL(t *testing.T) {
-	// Test with invalid URL
-	provider := NewProvider("://invalid-url", "schema1", nil)
-	ctx := context.Background()
-
-	_, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
-	if err == nil {
-		t.Error("Expected error with invalid URL, got nil")
-	}
-}
-
-func TestProvider_PerformRequest_ServerError(t *testing.T) {
-	// Create a server that returns an error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"internal server error"}`))
-	}))
-	defer server.Close()
-
-	provider := NewProvider(server.URL, "schema1", nil)
-	ctx := context.Background()
-
-	resp, err := provider.PerformRequest(ctx, []byte(`{"test":"data"}`))
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Errorf("Expected status 500, got %d", resp.StatusCode)
-	}
-}
-
-func TestProvider_PerformRequest_EmptyBody(t *testing.T) {
-	// Test with empty request body
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		if len(body) != 0 {
-			t.Errorf("Expected empty body, got %s", string(body))
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"success":true}`))
-	}))
-	defer server.Close()
-
-	provider := NewProvider(server.URL, "schema1", nil)
-	ctx := context.Background()
-
-	resp, err := provider.PerformRequest(ctx, []byte{})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
-	}
-}
-
-func TestProvider_PerformRequest_LargePayload(t *testing.T) {
-	// Test with large payload
-	largePayload := make([]byte, 1024*1024) // 1MB
-	for i := range largePayload {
-		largePayload[i] = 'A'
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		if len(body) != len(largePayload) {
-			t.Errorf("Expected body size %d, got %d", len(largePayload), len(body))
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"success":true}`))
-	}))
-	defer server.Close()
-
-	provider := NewProvider(server.URL, "schema1", nil)
-	ctx := context.Background()
-
-	resp, err := provider.PerformRequest(ctx, largePayload)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
-	}
+	out := logs.String()
+	assert.NotContains(t, out, "open-v1", "a provider without credentials isn't warned about")
+	assert.NotContains(t, out, "drp-v1", "credentials over https aren't warned about")
+	assert.Contains(t, out, "key=providers[2].url")
+	assert.Contains(t, out, "key=providers[2].auth.oauth2.tokenURL")
 }
 
 func TestProvider_Execute(t *testing.T) {
-	t.Run("sends the GraphQL request and decodes the response", func(t *testing.T) {
+	t.Run("sends the GraphQL request to the exact configured URL and decodes the response", func(t *testing.T) {
+		gotPath := make(chan string, 1)
+		gotContentType := make(chan string, 1)
+		gotBody := make(chan string, 1)
+
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, _ := io.ReadAll(r.Body)
-			expectedBody := `{"query":"query { person { name } }"}`
-			if string(body) != expectedBody {
-				t.Errorf("Expected body %s, got %s", expectedBody, string(body))
-			}
-			w.Write([]byte(`{"data":{"person":{"name":"Jane"}}}`))
+			gotPath <- r.URL.Path
+			gotContentType <- r.Header.Get("Content-Type")
+			gotBody <- string(body)
+			_, _ = w.Write([]byte(`{"data":{"person":{"name":"Jane"}}}`))
 		}))
-		defer server.Close()
+		t.Cleanup(server.Close)
 
-		provider := NewProvider(server.URL, "schema1", nil)
+		registry, err := NewRegistry(Config{ID: "drp-v1", URL: server.URL + "/graphql"})
+		require.NoError(t, err)
+		p, ok := registry.Get("drp-v1")
+		require.True(t, ok)
 
-		resp, err := provider.Execute(context.Background(), graphql.Request{Query: "query { person { name } }"})
-		if err != nil {
-			t.Fatalf("Unexpected error: %v", err)
-		}
-		person, _ := resp.Data["person"].(map[string]interface{})
-		if person["name"] != "Jane" {
-			t.Errorf("Expected name Jane, got %v", resp.Data)
-		}
+		resp, err := p.Execute(context.Background(), graphql.Request{Query: "query { person { name } }"})
+		require.NoError(t, err)
+		assert.Equal(t, "/graphql", <-gotPath)
+		assert.Equal(t, "application/json", <-gotContentType)
+		assert.Equal(t, `{"query":"query { person { name } }"}`, <-gotBody)
+		person, _ := resp.Data["person"].(map[string]any)
+		assert.Equal(t, "Jane", person["name"])
+	})
+
+	t.Run("applies API key authentication", func(t *testing.T) {
+		gotKey := make(chan string, 1)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotKey <- r.Header.Get("X-API-Key")
+			_, _ = w.Write([]byte(`{"data":{"ok":true}}`))
+		}))
+		t.Cleanup(server.Close)
+
+		registry, err := NewRegistry(Config{
+			ID:  "drp-v1",
+			URL: server.URL,
+			Auth: &remoteauth.Config{
+				Type:   remoteauth.TypeAPIKey,
+				APIKey: &remoteauth.APIKeyConfig{Key: "X-API-Key", Value: "secret-key-123"},
+			},
+		})
+		require.NoError(t, err)
+		p, _ := registry.Get("drp-v1")
+
+		_, err = p.Execute(context.Background(), graphql.Request{Query: "{ ok }"})
+		require.NoError(t, err)
+		assert.Equal(t, "secret-key-123", <-gotKey)
+	})
+
+	t.Run("applies OAuth2 client-credentials authentication", func(t *testing.T) {
+		tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"oauth-token-xyz","token_type":"Bearer","expires_in":3600}`))
+		}))
+		t.Cleanup(tokenServer.Close)
+
+		gotAuth := make(chan string, 1)
+		resourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotAuth <- r.Header.Get("Authorization")
+			_, _ = w.Write([]byte(`{"data":{"ok":true}}`))
+		}))
+		t.Cleanup(resourceServer.Close)
+
+		registry, err := NewRegistry(Config{
+			ID:  "rgd-v1",
+			URL: resourceServer.URL + "/graphql",
+			Auth: &remoteauth.Config{
+				Type: remoteauth.TypeOAuth2,
+				OAuth2: &remoteauth.OAuth2Config{
+					TokenURL:     tokenServer.URL,
+					ClientID:     "client-id",
+					ClientSecret: "client-secret",
+					Scopes:       []string{"read"},
+				},
+			},
+		})
+		require.NoError(t, err)
+		p, _ := registry.Get("rgd-v1")
+
+		_, err = p.Execute(context.Background(), graphql.Request{Query: "{ ok }"})
+		require.NoError(t, err)
+		assert.Equal(t, "Bearer oauth-token-xyz", <-gotAuth)
 	})
 
 	t.Run("returns an error when the response is not JSON", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("provider unavailable"))
+			_, _ = w.Write([]byte("provider unavailable"))
 		}))
-		defer server.Close()
+		t.Cleanup(server.Close)
 
-		provider := NewProvider(server.URL, "schema1", nil)
+		registry, err := NewRegistry(Config{ID: "drp-v1", URL: server.URL})
+		require.NoError(t, err)
+		p, _ := registry.Get("drp-v1")
 
-		if _, err := provider.Execute(context.Background(), graphql.Request{Query: "query { a }"}); err == nil {
-			t.Fatal("Expected an error for a non-JSON response")
-		}
+		_, err = p.Execute(context.Background(), graphql.Request{Query: "query { a }"})
+		require.Error(t, err)
 	})
 
 	t.Run("returns an error for a non-2xx status even with a JSON body", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte(`{"data":{"a":"stale"}}`))
+			_, _ = w.Write([]byte(`{"data":{"a":"stale"}}`))
 		}))
-		defer server.Close()
+		t.Cleanup(server.Close)
 
-		provider := NewProvider(server.URL, "schema1", nil)
+		registry, err := NewRegistry(Config{ID: "drp-v1", URL: server.URL})
+		require.NoError(t, err)
+		p, _ := registry.Get("drp-v1")
 
-		_, err := provider.Execute(context.Background(), graphql.Request{Query: "query { a }"})
-		if err == nil || !strings.Contains(err.Error(), "returned HTTP status 503") {
-			t.Fatalf("Expected an HTTP status error, got %v", err)
-		}
+		_, err = p.Execute(context.Background(), graphql.Request{Query: "query { a }"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "provider for schema drp-v1 returned HTTP status 503")
+	})
+
+	t.Run("returns an error when the context is cancelled", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(100 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(server.Close)
+
+		registry, err := NewRegistry(Config{ID: "drp-v1", URL: server.URL})
+		require.NoError(t, err)
+		p, _ := registry.Get("drp-v1")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err = p.Execute(ctx, graphql.Request{Query: "query { a }"})
+		require.Error(t, err)
 	})
 
 	t.Run("returns an error when the provider is unreachable", func(t *testing.T) {
-		provider := NewProvider("http://127.0.0.1:0", "schema1", nil)
+		registry, err := NewRegistry(Config{ID: "drp-v1", URL: "http://127.0.0.1:0"})
+		require.NoError(t, err)
+		p, _ := registry.Get("drp-v1")
 
-		if _, err := provider.Execute(context.Background(), graphql.Request{Query: "query { a }"}); err == nil {
-			t.Fatal("Expected an error for an unreachable provider")
-		}
+		_, err = p.Execute(context.Background(), graphql.Request{Query: "query { a }"})
+		require.Error(t, err)
 	})
 }

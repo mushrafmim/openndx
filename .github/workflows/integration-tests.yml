@@ -178,24 +178,14 @@ jobs:
           echo "⏳ Waiting for PDP, CE, and Mock Provider to be ready..."
           sleep 5
 
-          echo "📝 Updating config.json for CI mode (localhost URLs)..."
-          # Update config.json to use localhost instead of Docker service names
-          sed -i 's|http://consent-engine:8081|http://localhost:8081|g' config.json
-          sed -i 's|http://policy-decision-point:8082|http://localhost:8082|g' config.json
-          sed -i 's|http://mock-provider:8083|http://localhost:8083|g' config.json
-
           echo "🚀 Starting Orchestration Engine..."
-          # The mock provider signs the tests' consumer tokens and serves the JWKS
-          # the OE verifies them against.
-          PORT=4000 \
-          LOG_LEVEL=debug \
-          PDP_URL=http://localhost:8082 \
-          CONSENT_ENGINE_URL=http://localhost:8081 \
-          CONFIG_PATH=$(pwd)/config.json \
-          IDP_JWKS_URL=http://localhost:8083/jwks \
-          IDP_ISSUER=http://mock-idp.test \
-          IDP_AUDIENCE=http://api.openndx.local \
-          ./bin/orchestration-engine > logs/oe.log 2>&1 &
+          # oe-config.yaml with localhost instead of the Docker service names. It
+          # stays in this directory, next to the schema.graphql it names.
+          sed -e 's|http://consent-engine:8081|http://localhost:8081|' \
+            -e 's|http://policy-decision-point:8082|http://localhost:8082|' \
+            -e 's|http://mock-provider:8083|http://localhost:8083|' \
+            -e 's|level: info|level: debug|' oe-config.yaml > oe-config.ci.yaml
+          ./bin/orchestration-engine -config oe-config.ci.yaml > logs/oe.log 2>&1 &
           OE_PID=$!
           echo "OE PID: $OE_PID"
 

@@ -22,19 +22,34 @@ ondx schemas create --profile local \
 
 The `--schema-id` becomes the `schemaId`, and each `--field` name becomes the PDP `fieldName`. See [the walkthrough](../../dev/WALKTHROUGH.md#4-register-members-and-both-provider-schemas) for the full sequence.
 
-## 2. Add the provider to `config.json`
+## 2. Add the provider to `config.yaml`
 
-Add an entry to `providers`. Its `schemaId` identifies the provider. If one endpoint serves several schemas, add an entry for each.
+Add an entry to `providers`. Its `id` is the schema ID from step 1, which identifies the provider. If one endpoint serves several schemas, add an entry for each.
 
-```json
-{
-  "schemaId": "drp-person-v1",
-  "providerUrl": "http://localhost:9091",
-  "auth": { "type": "apiKey", "apiKeyName": "Test-Key", "apiKeyValue": "<key>" }
-}
+```yaml
+providers:
+  - id: drp-person-v1
+    url: http://localhost:9091
+    auth:
+      type: apiKey
+      apiKey:
+        key: Test-Key
+        value: "{{env:DRP_API_KEY}}"
 ```
 
-For OAuth2 use `"auth": { "type": "oauth2", "tokenUrl": "...", "clientId": "...", "clientSecret": "...", "scopes": ["..."] }`. Leave out `auth` for a provider that needs none.
+For OAuth2 client credentials use:
+
+```yaml
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: https://provider.example/oauth/token
+        clientID: openndx
+        clientSecret: "{{env:PROVIDER_CLIENT_SECRET}}"
+        scopes: [read]
+```
+
+Leave out `auth` for a provider that needs none. `timeout` (default `10s`) and `tls` are also available; see [CONFIGURATION.md](CONFIGURATION.md#providers).
 
 ## 3. Map the arguments
 
@@ -46,13 +61,12 @@ query { personInfo(nic: "748213") { fullName } }
 
 and the provider expects `person(nic: "...") { fullName }`. The mapping is:
 
-```json
-{
-  "schemaId": "drp-person-v1",
-  "targetArgName": "nic",
-  "sourceArgPath": "personInfo-nic",
-  "targetArgPath": "person"
-}
+```yaml
+argMappings:
+  - schemaId: drp-person-v1
+    targetArgName: nic
+    sourceArgPath: personInfo-nic
+    targetArgPath: person
 ```
 
 `sourceArgPath` is the consumer-side argument: the consumer field path from the root, then the argument name, joined with dashes (`personInfo-nic`). `targetArgPath` is the provider field the argument is attached to, a leading part of the provider field path: `person` for `person.fullName`. The argument goes on that field only. Add one mapping per provider argument.
@@ -67,14 +81,14 @@ type PersonInfo {
 }
 ```
 
-- `schemaId` must match the provider entry in `config.json`.
+- `schemaId` must match the provider's `id` in `config.yaml`.
 - `providerField` is the path in the provider's schema and must match the `fieldName` registered in step 1.
 
-The checked-in sample is [schema.graphql](schema.graphql). To change the schema the OE serves, edit the file named by `schemaPath` in `config.json` (default the `schema.graphql` next to it) and restart the OE (see [CONFIGURATION.md](CONFIGURATION.md#schema)).
+The checked-in sample is [schema.graphql](schema.graphql). To change the schema the OE serves, edit the file named by `schemaPath` in `config.yaml` (default the `schema.graphql` next to it) and restart the OE (see [CONFIGURATION.md](CONFIGURATION.md#schema)).
 
 ## 5. Restart and check
 
-Providers are read once at startup, so restart the OE after editing `config.json`. Then run a query as in [dev/README.md](../../dev/README.md). If it fails:
+Providers are read once at startup, so restart the OE after editing `config.yaml`. Then run a query as in [dev/README.md](../../dev/README.md). If it fails:
 
 | Error | Likely cause |
 |---|---|

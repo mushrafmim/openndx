@@ -377,7 +377,7 @@ other (personInfo) nic=512346
 	_, err = op.DataOwnerID("nic")
 	assert.ErrorIs(t, err, ErrAmbiguousIdentifier, "the query asks about two data owners")
 
-	// The argument mappings in cmd/oe/config.example.json.
+	// The argument mappings in cmd/oe/config.example.yaml.
 	drp := &graphql.ArgMapping{SchemaID: "drp-person-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "nic"}
 	rgd := &graphql.ArgMapping{SchemaID: "rgd-person-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "getPersonInfo", TargetArgName: "nic"}
 	var bound []string

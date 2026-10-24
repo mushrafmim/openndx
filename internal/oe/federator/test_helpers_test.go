@@ -5,10 +5,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	"github.com/openndx/openndx-core/internal/oe/federator/schema"
 	"github.com/openndx/openndx-core/internal/oe/logger"
+	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/policy"
 	"github.com/openndx/openndx-core/internal/oe/provider"
 	"github.com/stretchr/testify/require"
@@ -20,24 +20,36 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+type testConfig struct {
+	FoundationalIdArgName string
+	ArgMapping            []*graphql.ArgMapping
+	PdpURL                string
+	CeURL                 string
+	Providers             []provider.Config
+}
+
 // newTestFederator builds a Federator from cfg and schemas with the real PDP,
 // consent and provider clients, the way cmd/oe/main.go does.
-func newTestFederator(t *testing.T, cfg *configs.Config, schemas SchemaSource) *Federator {
+func newTestFederator(t *testing.T, cfg *testConfig, schemas SchemaSource) *Federator {
 	t.Helper()
 
-	providers, err := provider.NewProviderHandler(cfg.GetProviders())
+	registry, err := provider.NewRegistry(cfg.Providers...)
 	require.NoError(t, err)
+
 	deps := Deps{
-		Providers: ProviderLookup(providers.GetProvider),
+		Providers: ProviderLookup(registry.Get),
 		Schemas:   schemas,
 	}
-	if cfg.PdpConfig.ClientURL != "" {
-		deps.Policy = policy.NewPdpClient(cfg.PdpConfig.ClientURL)
+	if cfg.PdpURL != "" {
+		deps.Policy = policy.NewPdpClient(cfg.PdpURL)
 	}
-	if cfg.CeConfig.ClientURL != "" {
-		deps.Consent = consent.NewCEServiceClient(cfg.CeConfig.ClientURL)
+	if cfg.CeURL != "" {
+		deps.Consent = consent.NewCEServiceClient(cfg.CeURL)
 	}
-	f, err := New(deps, OptionsFromConfig(cfg))
+	f, err := New(deps, Options{
+		FoundationalIdArgName: cfg.FoundationalIdArgName,
+		ArgMapping:            cfg.ArgMapping,
+	})
 	require.NoError(t, err)
 	return f
 }

@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/LSFLK/argus/pkg/audit"
 	"github.com/openndx/openndx-core/internal/authn"
-	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	"github.com/openndx/openndx-core/internal/oe/federator"
 	"github.com/openndx/openndx-core/internal/oe/federator/schema"
@@ -22,31 +22,20 @@ import (
 )
 
 func main() {
-	logger.Init()
-
 	// Create context with signal handling for graceful shutdown
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Load configuration with proper error handling
-	config, err := configs.LoadConfig()
+	config, err := loadConfig(os.Args[1:])
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
+	utils.SetupLogging(config.Logging.Format, config.Logging.Level)
+	logger.Log = slog.Default()
 
-	// Initialize the audit client
-	// Allow environment variable override for runtime configuration
-	envAuditURL := os.Getenv("AUDIT_SERVICE_URL")
-	if envAuditURL != "" {
-		config.AuditConfig.ServiceURL = envAuditURL
-	}
-	apiKey := os.Getenv("ARGUS_API_KEY")
-	if apiKey == "" {
-		apiKey = os.Getenv("ARGUS_AUTH_TOKEN")
-	}
 	auditClient := audit.NewClient(audit.Config{
-		BaseURL: config.AuditConfig.ServiceURL,
-		APIKey:  apiKey,
+		BaseURL: config.Audit.URL,
+		APIKey:  config.Audit.APIKey,
 	})
 
 	// The consumer schema is read once at startup. To change it, deploy a new
@@ -57,49 +46,41 @@ func main() {
 	}
 	logger.Log.Info("Loaded consumer schema", "path", config.SchemaPath)
 
-	// Authenticate consumers: accept tokens the IdP issued for OE's audience, whichever
-	// client requested them. IDP_JWKS_URL and IDP_ISSUER default to IDP_BASE_URL's
-	// endpoints when unset.
-	idpBaseURL := os.Getenv("IDP_BASE_URL")
-	authnConfig := authn.Config{
-		JWKSURL:               utils.GetEnvOrDefault("IDP_JWKS_URL", idpBaseURL+"/oauth2/jwks"),
-		Issuer:                utils.GetEnvOrDefault("IDP_ISSUER", utils.GetEnvOrDefault("IDP_TOKEN_URL", idpBaseURL+"/oauth2/token")),
-		Audience:              os.Getenv("IDP_AUDIENCE"),
-		InsecureSkipTLSVerify: utils.GetEnvOrDefault("IDP_JWKS_INSECURE_SKIP_VERIFY", "false") == "true",
-	}
-	if err := authnConfig.Validate(); err != nil {
-		log.Fatalf("Invalid authentication configuration (check IDP_JWKS_URL, IDP_ISSUER and IDP_AUDIENCE): %v", err)
-	}
-	authnManager, err := authn.NewManager(authnConfig)
+	// Authenticate consumers: accept tokens the IdP issued for OE's audience,
+	// whichever client requested them.
+	authnManager, err := authn.NewManager(config.IDP)
 	if err != nil {
 		log.Fatalf("Failed to initialize authentication: %v", err)
 	}
 
-	providers, err := provider.NewProviderHandler(config.GetProviders())
+	providers, err := provider.NewRegistry(config.Providers...)
 	if err != nil {
 		log.Fatalf("Invalid provider configuration: %v", err)
 	}
 
 	deps := federator.Deps{
-		Providers: federator.ProviderLookup(providers.GetProvider),
+		Providers: federator.ProviderLookup(providers.Get),
 		Schemas:   consumerSchema,
-		Auditor:   middleware.NewAuditor(auditClient, config.AuditConfig.ActorType, config.AuditConfig.ActorID),
+		Auditor:   middleware.NewAuditor(auditClient, config.Audit.ActorType, config.Audit.ActorID),
 	}
-	if config.PdpConfig.ClientURL != "" {
-		deps.Policy = policy.NewPdpClient(config.PdpConfig.ClientURL)
+	if config.PDP.URL != "" {
+		deps.Policy = policy.NewPdpClient(config.PDP.URL)
 	}
-	if config.CeConfig.ClientURL != "" {
-		deps.Consent = consent.NewCEServiceClient(config.CeConfig.ClientURL)
+	if config.ConsentEngine.URL != "" {
+		deps.Consent = consent.NewCEServiceClient(config.ConsentEngine.URL)
 	}
 
-	federationObject, err := federator.New(deps, federator.OptionsFromConfig(config))
+	federationObject, err := federator.New(deps, federator.Options{
+		FoundationalIdArgName: config.FoundationalIDArgName,
+		ArgMapping:            config.ArgMappings,
+	})
 	if err != nil {
 		log.Fatalf("Failed to initialize federator: %v", err)
 	}
 
 	// Run server with graceful shutdown support
 	// Server will stop when ctx is cancelled (on SIGINT/SIGTERM)
-	server.RunServer(ctx, server.Deps{
+	server.RunServer(ctx, config.Server.Port, config.Server.Timeout, server.Deps{
 		Federator:    federationObject,
 		Authenticate: authnManager.RequireAuthMiddleware(),
 	})

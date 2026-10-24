@@ -1,0 +1,60 @@
+# Orchestration Engine configuration for Docker Compose (compose.yml mounts it
+# at /app/config/config.yaml, next to the schema). Values shared with other
+# services come from the environment that compose.yml passes in, with the
+# defaults from .env.example.
+
+server:
+  port: 4000
+  timeout: 30s
+
+logging:
+  level: debug
+  format: text
+
+schemaPath: schema.graphql
+
+foundationalIdArgName: nic
+
+idp:
+  # Reached over the compose network; the issuer is ThunderID's public URL.
+  jwksURL: "{{env:IDP_JWKS_URL}}"
+  issuer: "{{env:IDP_PUBLIC_URL}}"
+  audience: "{{env:IDP_AUDIENCE}}"
+
+pdp:
+  url: http://policy-decision-point:8082
+consentEngine:
+  url: http://consent-engine:8081/internal/api/v1
+
+# Optional: the OE degrades gracefully if the audit service is unreachable.
+audit:
+  url: "{{env:AUDIT_SERVICE_URL}}"
+  apiKey: "{{env:ARGUS_API_KEY}}"
+
+# The mock providers from dev/compose.yml, running on the host.
+providers:
+  - id: drp-person-v1
+    url: http://host.docker.internal:9091
+    auth:
+      type: apiKey
+      apiKey:
+        key: Test-Key
+        value: eyJraWQiOiJn
+  - id: rgd-person-v1
+    url: http://host.docker.internal:8080/graphql
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://host.docker.internal:8080/oauth/token
+        clientID: test_client
+        clientSecret: test_secret
+
+argMappings:
+  - schemaId: drp-person-v1
+    targetArgName: nic
+    sourceArgPath: personInfo-nic
+    targetArgPath: person
+  - schemaId: rgd-person-v1
+    targetArgName: nic
+    sourceArgPath: personInfo-nic
+    targetArgPath: getPersonInfo

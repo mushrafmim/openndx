@@ -25,44 +25,36 @@ docker compose up --build orchestration-engine
 curl http://localhost:4000/health
 ```
 
-Compose mounts `cmd/oe/config.docker.json` and `cmd/oe/schema.graphql` into the container. The sample providers are the mock APIs in [dev/](../../dev/README.md).
+Compose mounts `cmd/oe/config.docker.yaml` and `cmd/oe/schema.graphql` into the container. The sample providers are the mock APIs in [dev/](../../dev/README.md).
 
-Native, from the repo root:
+Native, from the repo root, with ThunderID from `docker compose up thunderid` for consumer tokens:
 
 ```bash
-cp cmd/oe/config.example.json cmd/oe/config.json     # git-ignored
-# Consumer tokens: ThunderID from `docker compose up thunderid`, whose `iss` is its base URL
-export IDP_JWKS_URL=http://localhost:8090/oauth2/jwks IDP_ISSUER=http://localhost:8090 \
-  IDP_AUDIENCE=http://api.openndx.local
+cp cmd/oe/config.example.yaml cmd/oe/config.yaml     # git-ignored
 make run orchestration-engine
 ```
 
-Use `make run`, not `go run ./cmd/oe`. `make run` starts the service from `cmd/oe`, which is where `./config.json` is read; the schema is the `schema.graphql` next to it. To run from elsewhere, set `CONFIG_PATH` (see [CONFIGURATION.md](CONFIGURATION.md#schema)).
+`make run` starts the service from `cmd/oe`, where it reads `config.yaml`; the schema is the `schema.graphql` next to it. To run from elsewhere, pass `-config path/to/config.yaml` or set `CONFIG_PATH`.
 
 To send a real query you need a consumer token, registered policy metadata and an application grant. Follow the [walkthrough](../../dev/WALKTHROUGH.md), or the token and curl example in [dev/README.md](../../dev/README.md).
 
 ## Configuration
 
-The OE reads a JSON file (`CONFIG_PATH`, default `./config.json`), the consumer schema file that config names (`schemaPath`, default the `schema.graphql` next to it), and a few environment variables. Both files are read once at startup; to change either, deploy the new file and restart.
+The OE reads one YAML file (`-config`, else `CONFIG_PATH`, else `config.yaml`) and the consumer schema file it names (`schemaPath`, default the `schema.graphql` next to it). Both are read once at startup; to change either, deploy the new file and restart. A value written as `"{{env:NAME}}"` or `"{{file:/path}}"` is read from the environment or a file, which is how secrets get in.
 
-| `config.json` key | Meaning |
+| `config.yaml` key | Meaning |
 |---|---|
-| `schemaPath` | The consumer schema file; default `schema.graphql`, resolved against the directory of `config.json`. |
-| `foundationalIdArgName` | **Required.** Name of the query argument that identifies the data owner, for example `nic`. The service exits at startup without it. |
-| `pdpUrl` | PDP base URL. If empty, the OE skips authorization and consent checks (see Security). |
-| `ceUrl` | Consent Engine URL **including** `/internal/api/v1`. |
-| `providers[]` | Data providers: `schemaId`, `providerUrl`, optional `auth`. See [PROVIDER_CONFIGURATION.md](PROVIDER_CONFIGURATION.md). |
+| `server`, `logging` | Port (default `4000`) and request timeout; log level and format. |
+| `schemaPath` | The consumer schema file; default `schema.graphql`, resolved against the directory of the config file. |
+| `foundationalIdArgName` | **Required.** Name of the query argument that identifies the data owner, for example `nic`. |
+| `idp` | **Required.** Consumer token validation: `jwksURL`, `issuer`, `audience`. See [AUTHENTICATION.md](AUTHENTICATION.md). |
+| `pdp.url` | PDP base URL. If empty, the OE skips authorization and consent checks (see Security). |
+| `consentEngine.url` | Consent Engine URL **including** `/internal/api/v1`. |
+| `audit` | Argus audit service URL, API key and actor identity. |
+| `providers[]` | Data providers: `id` (the schema ID), `url`, optional `timeout`, `auth` and `tls`. See [PROVIDER_CONFIGURATION.md](PROVIDER_CONFIGURATION.md). |
 | `argMappings[]` | How consumer arguments map to each provider's arguments. |
-| `auditConfig` | Argus audit service URL and actor identity. |
 
-| Environment variable | Default |
-|---|---|
-| `PORT` | `4000` |
-| `CONFIG_PATH` | `./config.json` |
-| `IDP_JWKS_URL`, `IDP_ISSUER`, `IDP_AUDIENCE` | Consumer token validation; `IDP_AUDIENCE` is required. See [AUTHENTICATION.md](AUTHENTICATION.md). |
-| `AUDIT_SERVICE_URL`, `ARGUS_API_KEY` | override `auditConfig.serviceUrl`; audit API key |
-
-Every key and variable, with the error codes: [CONFIGURATION.md](CONFIGURATION.md). No `.env` file is loaded; export variables or use Docker `--env-file`.
+Every key with its default, and the error codes: [CONFIGURATION.md](CONFIGURATION.md).
 
 ## API
 
@@ -105,8 +97,9 @@ sequenceDiagram
 
 > **Deployment security.** Only `/public/graphql` requires a token. `/health` is not authenticated; expose only `/public/graphql` to consumers.
 
-- Consumer tokens are always verified against the IdP's keys (`IDP_JWKS_URL`), issuer and audience ([AUTHENTICATION.md](AUTHENTICATION.md)).
-- With `pdpUrl` empty, the OE returns provider data without any authorization or consent check. Always set it.
+- Consumer tokens are always verified against the IdP's keys (`idp.jwksURL`), issuer and audience ([AUTHENTICATION.md](AUTHENTICATION.md)).
+- With `pdp.url` empty, the OE returns provider data without any authorization or consent check. Always set it.
+- Keep provider and audit secrets out of the config file with `"{{env:NAME}}"` or `"{{file:/path}}"`.
 - CORS allows every origin.
 - Audit events (`DATA_REQUEST`, `POLICY_CHECK`, `CONSENT_CHECK`, `PROVIDER_FETCH`) go to Argus. If Argus is down, batches are lost.
 
@@ -118,12 +111,12 @@ go test ./cmd/oe/... ./internal/oe/... -count=1
 make quality-check orchestration-engine
 ```
 
-[HOW_TO_TEST.md](HOW_TO_TEST.md) covers unit and golden tests, changing the schema, and trying queries. Code is in [`internal/oe`](../../internal/oe): `server` (routes), `federator` (query splitting and merging; `federator/schema` loads the schema file), `auth`, `policy` and `consent` (clients), `provider`, `configs`.
+[HOW_TO_TEST.md](HOW_TO_TEST.md) covers unit and golden tests, changing the schema, and trying queries. Code is in [`internal/oe`](../../internal/oe): `server` (routes), `federator` (query splitting and merging; `federator/schema` loads the schema file), `auth`, `policy` and `consent` (clients), `provider`. The config loader is [config.go](config.go).
 
 ## More docs
 
-- [CONFIGURATION.md](CONFIGURATION.md): all `config.json` keys, environment variables, error codes, the schema file
-- [AUTHENTICATION.md](AUTHENTICATION.md): token validation, `IDP_*` settings, JWKS handling
+- [CONFIGURATION.md](CONFIGURATION.md): all `config.yaml` keys, error codes, the schema file
+- [AUTHENTICATION.md](AUTHENTICATION.md): token validation, `idp` settings, JWKS handling
 - [PROVIDER_CONFIGURATION.md](PROVIDER_CONFIGURATION.md): adding a data provider
 - [HOW_TO_TEST.md](HOW_TO_TEST.md): testing and manual checks
 - [Policy Decision Point](../pdp/README.md) and [Consent Engine](../ce/README.md): the services the OE calls

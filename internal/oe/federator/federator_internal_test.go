@@ -10,12 +10,12 @@ import (
 	"testing"
 
 	"github.com/openndx/openndx-core/internal/oe/auth"
-	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	"github.com/openndx/openndx-core/internal/oe/federator/schema"
 	"github.com/openndx/openndx-core/internal/oe/internals/errors"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/policy"
+	"github.com/openndx/openndx-core/internal/oe/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,17 +45,15 @@ func TestFederateQuery_WithMockSchema(t *testing.T) {
 	defer pdpServer.Close()
 
 	// 3. Setup Config
-	cfg := &configs.Config{
+	cfg := &testConfig{
 		FoundationalIdArgName: "nic",
-		Providers: []*configs.ProviderConfig{
+		Providers: []provider.Config{
 			{
-				ProviderURL: providerServer.URL,
-				SchemaID:    "drp-schema",
+				ID:  "drp-schema",
+				URL: providerServer.URL,
 			},
 		},
-		PdpConfig: configs.PdpConfig{
-			ClientURL: pdpServer.URL,
-		},
+		PdpURL: pdpServer.URL,
 		ArgMapping: []*graphql.ArgMapping{
 			{
 				SchemaID:      "drp-schema",
@@ -174,10 +172,10 @@ func TestFederateQuery_DataOwnerIdentification(t *testing.T) {
 		}))
 		t.Cleanup(ceServer.Close)
 
-		cfg := &configs.Config{
+		cfg := &testConfig{
 			FoundationalIdArgName: "nic",
-			PdpConfig:             configs.PdpConfig{ClientURL: pdpServer.URL},
-			CeConfig:              configs.CeConfig{ClientURL: ceServer.URL},
+			PdpURL:                pdpServer.URL,
+			CeURL:                 ceServer.URL,
 			ArgMapping:            argMapping,
 		}
 
@@ -236,11 +234,9 @@ func TestFederateQuery_PDPDeny(t *testing.T) {
 	}))
 	defer pdpServer.Close()
 
-	cfg := &configs.Config{
+	cfg := &testConfig{
 		FoundationalIdArgName: "nic",
-		PdpConfig: configs.PdpConfig{
-			ClientURL: pdpServer.URL,
-		},
+		PdpURL:                pdpServer.URL,
 		ArgMapping: []*graphql.ArgMapping{
 			{
 				SchemaID:      "drp-schema",

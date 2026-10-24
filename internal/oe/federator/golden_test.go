@@ -30,7 +30,6 @@ import (
 
 	auditpkg "github.com/LSFLK/argus/pkg/audit"
 	"github.com/openndx/openndx-core/internal/oe/auth"
-	"github.com/openndx/openndx-core/internal/oe/configs"
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	"github.com/openndx/openndx-core/internal/oe/federator"
 	"github.com/openndx/openndx-core/internal/oe/federator/schema"
@@ -282,18 +281,18 @@ func newGoldenFederator(t *testing.T, env *goldenEnv) *federator.Federator {
 
 	schemas, err := schema.FromSDL(goldenSchemaSDL)
 	require.NoError(t, err)
-	providers, err := provider.NewProviderHandler(env.config.GetProviders())
+	providers, err := provider.NewRegistry(env.providers...)
 	require.NoError(t, err)
 	deps := federator.Deps{
-		Providers: federator.ProviderLookup(providers.GetProvider),
+		Providers: federator.ProviderLookup(providers.Get),
 		Schemas:   schemas,
 		Auditor:   middleware.NewAuditor(env.audit, "SERVICE", "orchestration-engine"),
-		Consent:   consent.NewCEServiceClient(env.config.CeConfig.ClientURL),
+		Consent:   consent.NewCEServiceClient(env.consentURL),
 	}
-	if env.config.PdpConfig.ClientURL != "" {
-		deps.Policy = policy.NewPdpClient(env.config.PdpConfig.ClientURL)
+	if env.pdpURL != "" {
+		deps.Policy = policy.NewPdpClient(env.pdpURL)
 	}
-	f, err := federator.New(deps, federator.OptionsFromConfig(env.config))
+	f, err := federator.New(deps, federator.Options{FoundationalIdArgName: "nic", ArgMapping: goldenArgMappings})
 	require.NoError(t, err)
 	return f
 }
@@ -322,8 +321,10 @@ type transcript struct {
 }
 
 type goldenEnv struct {
-	config *configs.Config
-	audit  *recordingAuditor
+	consentURL string
+	pdpURL     string
+	providers  []provider.Config
+	audit      *recordingAuditor
 
 	mu         sync.Mutex
 	transcript transcript
@@ -341,18 +342,14 @@ func newGoldenEnv(t *testing.T, tc goldenCase) *goldenEnv {
 		},
 	}
 
-	env.config = &configs.Config{
-		FoundationalIdArgName: "nic",
-		ArgMapping:            goldenArgMappings,
-		CeConfig:              configs.CeConfig{ClientURL: env.consentServer(t, tc).URL},
-	}
+	env.consentURL = env.consentServer(t, tc).URL
 	if !tc.noPDP {
-		env.config.PdpConfig = configs.PdpConfig{ClientURL: env.pdpServer(t, tc).URL}
+		env.pdpURL = env.pdpServer(t, tc).URL
 	}
 	for _, p := range goldenProviders {
-		env.config.Providers = append(env.config.Providers, &configs.ProviderConfig{
-			SchemaID:    p.schemaID,
-			ProviderURL: env.providerServer(t, p, tc.providerStatus[p.schemaID], tc.providerBody[p.schemaID]).URL,
+		env.providers = append(env.providers, provider.Config{
+			ID:  p.schemaID,
+			URL: env.providerServer(t, p, tc.providerStatus[p.schemaID], tc.providerBody[p.schemaID]).URL,
 		})
 	}
 	return env
