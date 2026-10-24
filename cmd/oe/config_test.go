@@ -205,6 +205,11 @@ func TestLoadConfigErrors(t *testing.T) {
 		{name: "invalid audit url", extra: "audit:\n  url: audit", wantErr: "audit.url"},
 		{name: "empty audit actor", extra: "audit:\n  actorId: \"\"", wantErr: "audit.actorType and audit.actorId"},
 		{name: "incomplete arg mapping", extra: "argMappings:\n  - schemaId: drp-person-v1\n    targetArgName: nic", wantErr: "argMappings[0] must set"},
+		{
+			name:    "arg mapping for an unknown provider",
+			extra:   "providers:\n  - id: drp-person-v1\n    url: http://drp.internal\nargMappings:\n  - schemaId: drp-persn-v1\n    targetArgName: nic\n    sourceArgPath: personInfo-nic\n    targetArgPath: person",
+			wantErr: `argMappings[0].schemaId "drp-persn-v1" matches no provider id`,
+		},
 		{name: "unset placeholder", extra: "audit:\n  apiKey: \"{{env:TEST_OE_UNSET_VARIABLE}}\"", wantErr: "TEST_OE_UNSET_VARIABLE"},
 	}
 

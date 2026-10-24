@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/OpenNSW/core/remote"
@@ -36,6 +38,7 @@ func NewRegistry(configs ...Config) (*Registry, error) {
 		if err := validation.HTTPURL(fmt.Sprintf("providers[%d].url", i), cfg.URL); err != nil {
 			return nil, err
 		}
+		warnPlainHTTPCredentials(i, cfg)
 		if _, exists := providers[cfg.ID]; exists {
 			return nil, fmt.Errorf("duplicate provider for schema %q", cfg.ID)
 		}
@@ -63,6 +66,23 @@ func NewRegistry(configs ...Config) (*Registry, error) {
 		}
 	}
 	return &Registry{providers: providers}, nil
+}
+
+// warnPlainHTTPCredentials logs a warning when cfg sends credentials over plain
+// HTTP: to its url when it has auth, or to its OAuth2 token URL. HTTP stays
+// allowed for local and Docker setups.
+func warnPlainHTTPCredentials(i int, cfg Config) {
+	if cfg.Auth == nil {
+		return
+	}
+	if strings.HasPrefix(strings.ToLower(cfg.URL), "http://") {
+		slog.Warn("Provider credentials are sent over plain HTTP; use https outside local development",
+			"provider", cfg.ID, "key", fmt.Sprintf("providers[%d].url", i))
+	}
+	if cfg.Auth.OAuth2 != nil && strings.HasPrefix(strings.ToLower(cfg.Auth.OAuth2.TokenURL), "http://") {
+		slog.Warn("Provider client secret is sent over plain HTTP; use https outside local development",
+			"provider", cfg.ID, "key", fmt.Sprintf("providers[%d].auth.oauth2.tokenURL", i))
+	}
 }
 
 // Get returns the provider registered for schemaID.

@@ -1,8 +1,10 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -104,6 +106,37 @@ func TestNewRegistry_ValidationErrors(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
+}
+
+func TestNewRegistry_WarnsAboutCredentialsOverPlainHTTP(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	_, err := NewRegistry(
+		Config{ID: "open-v1", URL: "http://open.example"},
+		Config{
+			ID:   "drp-v1",
+			URL:  "https://drp.example",
+			Auth: &remoteauth.Config{Type: remoteauth.TypeAPIKey, APIKey: &remoteauth.APIKeyConfig{Key: "X-API-Key", Value: "k"}},
+		},
+		Config{
+			ID:  "rgd-v1",
+			URL: "http://rgd.example/graphql",
+			Auth: &remoteauth.Config{
+				Type:   remoteauth.TypeOAuth2,
+				OAuth2: &remoteauth.OAuth2Config{TokenURL: "http://rgd.example/oauth/token", ClientID: "c", ClientSecret: "s"},
+			},
+		},
+	)
+	require.NoError(t, err, "plain HTTP stays allowed")
+
+	out := logs.String()
+	assert.NotContains(t, out, "open-v1", "a provider without credentials isn't warned about")
+	assert.NotContains(t, out, "drp-v1", "credentials over https aren't warned about")
+	assert.Contains(t, out, "key=providers[2].url")
+	assert.Contains(t, out, "key=providers[2].auth.oauth2.tokenURL")
 }
 
 func TestProvider_Execute(t *testing.T) {

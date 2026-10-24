@@ -55,7 +55,7 @@ All four keys are required.
 
 | Key | Notes |
 |---|---|
-| `schemaId` | The provider this mapping applies to, its `id` in `providers`. |
+| `schemaId` | The provider this mapping applies to, its `id` in `providers`. The OE exits at startup if no provider has that `id`. |
 | `targetArgName` | The argument name the provider expects. |
 | `sourceArgPath` | The consumer-side argument: the consumer field path from the root, then the argument name, joined with dashes. `personInfo-nic` is the `nic` argument of the root field `personInfo`; an argument with the same name on another field doesn't match. |
 | `targetArgPath` | The provider field the argument is attached to: a leading part of the provider field path, for example `person` for the field `person.fullName`. The argument is attached to that field only, not to the fields above it. |

@@ -148,10 +148,17 @@ func (c *Config) Validate() error {
 	if c.Audit.ActorType == "" || c.Audit.ActorID == "" {
 		return fmt.Errorf("audit.actorType and audit.actorId must not be empty")
 	}
+	providerIDs := make(map[string]bool, len(c.Providers))
+	for _, p := range c.Providers {
+		providerIDs[p.ID] = true
+	}
 	for i, mapping := range c.ArgMappings {
 		if mapping == nil || mapping.SchemaID == "" || mapping.TargetArgName == "" ||
 			mapping.SourceArgPath == "" || mapping.TargetArgPath == "" {
 			return fmt.Errorf("argMappings[%d] must set schemaId, targetArgName, sourceArgPath and targetArgPath", i)
+		}
+		if !providerIDs[mapping.SchemaID] {
+			return fmt.Errorf("argMappings[%d].schemaId %q matches no provider id", i, mapping.SchemaID)
 		}
 	}
 	return nil
