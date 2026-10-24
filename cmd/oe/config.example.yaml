@@ -1,0 +1,77 @@
+# Orchestration Engine configuration for running natively. Copy it to
+# config.yaml (git-ignored) and edit the copy:
+#   cp cmd/oe/config.example.yaml cmd/oe/config.yaml
+# then run `make run orchestration-engine`.
+# Keys left out keep their defaults, listed in CONFIGURATION.md.
+# A value written as "{{env:NAME}}" or "{{file:/path}}" is read from that
+# environment variable or file at startup; an unset variable stops the service.
+
+server:
+  port: 4000
+  # Covers the PDP, consent and provider calls a query makes.
+  timeout: 30s
+
+logging:
+  level: debug # debug, info, warn or error
+  format: text # text or json
+
+# The consumer GraphQL schema. A relative path is resolved against the
+# directory of this file.
+schemaPath: schema.graphql
+
+# The query argument that identifies the data owner.
+foundationalIdArgName: nic
+
+# Validates consumer access tokens. The local ThunderID's `iss` is its base URL.
+idp:
+  jwksURL: http://localhost:8090/oauth2/jwks
+  issuer: http://localhost:8090
+  audience: http://api.openndx.local
+  # Skips TLS verification of the JWKS fetch. Development only.
+  insecureSkipTLSVerify: false
+
+# The PDP and consent checks are skipped when url is empty.
+pdp:
+  url: http://localhost:8082
+consentEngine:
+  url: http://localhost:8081/internal/api/v1
+
+# Argus audit service. Auditing is off when url is empty.
+audit:
+  url: ""
+  apiKey: ""
+  actorType: SERVICE
+  actorId: orchestration-engine
+
+# Data providers. id is the provider schema's ID in Portal Backend and the PDP,
+# and matches schemaId in the schema's @sourceInfo and in argMappings. The
+# credentials below are the mock providers' in dev/; use "{{env:NAME}}" or
+# "{{file:/path}}" for real ones.
+providers:
+  - id: drp-person-v1
+    url: http://localhost:9091
+    auth:
+      type: apiKey
+      apiKey:
+        key: Test-Key
+        value: eyJraWQiOiJn
+  - id: rgd-person-v1
+    url: http://localhost:8080/graphql
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://localhost:8080/oauth/token
+        clientID: test_client
+        clientSecret: test_secret
+
+# Maps a consumer query argument to a provider query argument. See
+# PROVIDER_CONFIGURATION.md.
+argMappings:
+  - schemaId: drp-person-v1
+    targetArgName: nic
+    sourceArgPath: personInfo-nic
+    targetArgPath: person
+  - schemaId: rgd-person-v1
+    targetArgName: nic
+    sourceArgPath: personInfo-nic
+    targetArgPath: getPersonInfo

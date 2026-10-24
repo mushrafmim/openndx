@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
 
   # GraphQL subgraph in front of drp-api. This is what oe's "drp" provider
-  # entry (cmd/oe/config.docker.json / config.example.json) points at.
+  # entry (cmd/oe/config.docker.yaml / config.example.yaml) points at.
   drp-api-adapter:
     image: ${DOCKER_REGISTRY:-docker.io}/${IMAGE_PREFIX:-mushrafmim}/drp-api-adapter:${IMAGE_TAG:-v0.1.0}
     container_name: dev-drp-adapter

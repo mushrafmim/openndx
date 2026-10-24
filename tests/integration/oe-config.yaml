@@ -1,0 +1,30 @@
+# Orchestration Engine configuration for the integration tests
+# (docker-compose.test.yml mounts it at /app/config/config.yaml, next to
+# schema.graphql).
+
+logging:
+  level: info
+
+foundationalIdArgName: nic
+
+idp:
+  # The mock provider signs the tests' consumer tokens and serves the JWKS
+  # the OE verifies them against.
+  jwksURL: http://mock-provider:8083/jwks
+  issuer: http://mock-idp.test
+  audience: http://api.openndx.local
+
+pdp:
+  url: http://policy-decision-point:8082
+consentEngine:
+  url: http://consent-engine:8081
+
+providers:
+  - id: test-schema-123
+    url: http://mock-provider:8083/graphql
+
+argMappings:
+  - schemaId: test-schema-123
+    targetArgName: nic
+    sourceArgPath: personInfo-nic
+    targetArgPath: person

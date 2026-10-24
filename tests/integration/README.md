@@ -54,7 +54,7 @@ tests/integration/
 ├── go.sum                      # Go module checksums
 ├── run-local-tests.sh          # Automated test script
 ├── schema.graphql              # GraphQL schema for tests
-├── config.json                 # Orchestration Engine config
+├── oe-config.yaml              # Orchestration Engine config
 ├── init-stats.sh               # Statistics initialization script
 ├── graphql_flow_test.go        # GraphQL workflow tests
 ├── services_integration_test.go # Service health checks
@@ -105,7 +105,7 @@ the same file used by the root development stack.
 
 **`TestGraphQLFlow_RejectedTokens`** - Tests that the Orchestration Engine rejects unsigned, expired, wrong-issuer and wrong-audience tokens with `401`
 
-Consumer tokens are signed by the mock provider (`POST /token`), which also serves the JWKS the Orchestration Engine verifies them against (`GET /jwks`). The Orchestration Engine runs with `IDP_JWKS_URL` pointing at it, `IDP_ISSUER=http://mock-idp.test` and `IDP_AUDIENCE=http://api.openndx.local`.
+Consumer tokens are signed by the mock provider (`POST /token`), which also serves the JWKS the Orchestration Engine verifies them against (`GET /jwks`). The Orchestration Engine's `idp` settings in `oe-config.yaml` point `jwksURL` at it, with issuer `http://mock-idp.test` and audience `http://api.openndx.local`.
 
 ### Service Health Tests
 

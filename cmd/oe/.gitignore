@@ -1,1 +1,2 @@
-config.json
+# Local copy of config.example.yaml
+/config.yaml

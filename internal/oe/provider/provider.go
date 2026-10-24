@@ -1,106 +1,104 @@
 package provider
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"sync"
+	"time"
 
-	"github.com/openndx/openndx-core/internal/oe/logger"
-	"github.com/openndx/openndx-core/internal/oe/pkg/auth"
+	"github.com/OpenNSW/core/remote"
+	"github.com/OpenNSW/core/shared/validation"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
-	"golang.org/x/oauth2/clientcredentials"
 )
 
-// Provider struct that represents a provider attributes.
+// DefaultTimeout bounds a provider call when Config.Timeout is unset.
+const DefaultTimeout = "10s"
+
+// Config configures one data provider: id, url, timeout, auth and tls. The id
+// is the provider schema's ID in Portal Backend and the PDP, and matches
+// schemaId in the schema's @sourceInfo and in argMappings.
+type Config = remote.ServiceConfig
+
+// Registry holds the configured providers keyed by schema ID.
+type Registry struct {
+	providers map[string]*Provider
+}
+
+// NewRegistry validates configs and builds a Registry whose providers call
+// their endpoints through OpenNSW/core/remote.
+func NewRegistry(configs ...Config) (*Registry, error) {
+	providers := make(map[string]*Provider, len(configs))
+	for i, cfg := range configs {
+		if cfg.ID == "" {
+			return nil, fmt.Errorf("providers[%d].id is required", i)
+		}
+		if err := validation.HTTPURL(fmt.Sprintf("providers[%d].url", i), cfg.URL); err != nil {
+			return nil, err
+		}
+		if _, exists := providers[cfg.ID]; exists {
+			return nil, fmt.Errorf("duplicate provider for schema %q", cfg.ID)
+		}
+
+		if cfg.Timeout == "" {
+			cfg.Timeout = DefaultTimeout
+		}
+		if _, err := time.ParseDuration(cfg.Timeout); err != nil {
+			return nil, fmt.Errorf("providers[%d] (%s): invalid timeout %q: %w", i, cfg.ID, cfg.Timeout, err)
+		}
+
+		mgr := remote.NewManager()
+		if err := mgr.SetServices(cfg); err != nil {
+			return nil, err
+		}
+		client, err := mgr.GetClient(cfg.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		providers[cfg.ID] = &Provider{
+			schemaID: cfg.ID,
+			url:      cfg.URL,
+			client:   client,
+		}
+	}
+	return &Registry{providers: providers}, nil
+}
+
+// Get returns the provider registered for schemaID.
+func (r *Registry) Get(schemaID string) (*Provider, bool) {
+	if r == nil {
+		return nil, false
+	}
+	p, ok := r.providers[schemaID]
+	return p, ok
+}
+
+// Provider sends GraphQL sub-queries to one configured provider endpoint.
 type Provider struct {
-	Client       *http.Client
-	ServiceUrl   string           `json:"providerUrl,omitempty"`
-	SchemaID     string           `json:"schemaId,omitempty"`
-	Auth         *auth.AuthConfig `json:"auth,omitempty"`
-	OAuth2Config *clientcredentials.Config
-	Headers      map[string]string `json:"headers,omitempty"`
-	tokenMu      sync.RWMutex
-}
-
-func NewProvider(serviceUrl, schemaID string, authConfig *auth.AuthConfig) *Provider {
-	provider := &Provider{
-		Client:     &http.Client{},
-		ServiceUrl: serviceUrl,
-		SchemaID:   schemaID,
-		Auth:       authConfig,
-		Headers:    make(map[string]string),
-	}
-
-	if authConfig != nil && authConfig.Type == auth.AuthTypeOAuth2 {
-		provider.OAuth2Config = &clientcredentials.Config{
-			ClientID:     authConfig.ClientID,
-			ClientSecret: authConfig.ClientSecret,
-			TokenURL:     authConfig.TokenURL,
-			Scopes:       authConfig.Scopes,
-		}
-	}
-
-	return provider
-}
-
-// PerformRequest performs the HTTP request to the provider with necessary authentication.
-func (p *Provider) PerformRequest(ctx context.Context, reqBody []byte) (*http.Response, error) {
-	// 1. Create Request
-	req, err := http.NewRequestWithContext(ctx, "POST", p.ServiceUrl, bytes.NewBuffer(reqBody))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	if p.Auth != nil {
-		switch p.Auth.Type {
-		case auth.AuthTypeOAuth2:
-			if p.OAuth2Config == nil {
-				logger.Log.Error("OAuth2Config is nil", "schemaId", p.SchemaID)
-				return nil, fmt.Errorf("OAuth2Config is nil")
-			}
-
-			client := p.OAuth2Config.Client(ctx)
-			return client.Do(req) // Use context with request
-		case auth.AuthTypeAPIKey:
-			req.Header.Set(p.Auth.APIKeyName, p.Auth.APIKeyValue)
-		}
-	}
-
-	// Default client execution (for API Key or no auth)
-	return p.Client.Do(req)
+	schemaID string
+	url      string
+	client   *remote.Client
 }
 
 // Execute sends request to the provider and decodes its GraphQL response. A
 // response with a non-2xx HTTP status is an error, whatever its body.
 func (p *Provider) Execute(ctx context.Context, request graphql.Request) (graphql.Response, error) {
-	reqBody, err := json.Marshal(request)
+	resp, err := p.client.RawRequest(ctx, remote.Request{
+		Method: http.MethodPost,
+		Path:   p.url,
+		Body:   remote.JSONBody{V: request},
+	})
 	if err != nil {
 		return graphql.Response{}, err
 	}
 
-	response, err := p.PerformRequest(ctx, reqBody)
-	if err != nil {
-		return graphql.Response{}, err
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode < 200 || response.StatusCode > 299 {
-		return graphql.Response{}, fmt.Errorf("provider for schema %s returned HTTP status %d", p.SchemaID, response.StatusCode)
-	}
-
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return graphql.Response{}, err
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return graphql.Response{}, fmt.Errorf("provider for schema %s returned HTTP status %d", p.schemaID, resp.StatusCode)
 	}
 
 	var result graphql.Response
-	if err := json.Unmarshal(body, &result); err != nil {
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return graphql.Response{}, err
 	}
 	return result, nil

@@ -26,9 +26,9 @@ cmd/oe/PROVIDER_CONFIGURATION.md
 # Orchestration Engine: config provided at runtime via mount/env, never baked
 # into the image (was covered by cmd/oe/.dockerignore before the build context
 # moved to the repo root)
-cmd/oe/config.json
-cmd/oe/config.example.json
-cmd/oe/config.docker.json
+cmd/oe/config.yaml
+cmd/oe/config.example.yaml
+cmd/oe/config.docker.yaml
 
 # Local environment / secrets
 .env

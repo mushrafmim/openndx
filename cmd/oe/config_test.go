@@ -1,0 +1,357 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"flag"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	remoteauth "github.com/OpenNSW/core/remote/auth"
+	"github.com/openndx/openndx-core/internal/authn"
+	"github.com/openndx/openndx-core/internal/oe/auth"
+	"github.com/openndx/openndx-core/internal/oe/federator"
+	"github.com/openndx/openndx-core/internal/oe/federator/schema"
+	"github.com/openndx/openndx-core/internal/oe/logger"
+	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
+	"github.com/openndx/openndx-core/internal/oe/policy"
+	"github.com/openndx/openndx-core/internal/oe/provider"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestMain(m *testing.M) {
+	// The federator and its clients log through the package-level logger.
+	logger.Init()
+	os.Exit(m.Run())
+}
+
+// minimalConfig holds only the settings that have no default.
+const minimalConfig = `
+foundationalIdArgName: nic
+idp:
+  jwksURL: https://idp.example/oauth2/jwks
+  issuer: https://idp.example
+  audience: http://api.example
+`
+
+// writeConfig writes content to a config file in a temporary directory and returns its path.
+func writeConfig(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	return path
+}
+
+func TestLoadConfigAppliesDefaults(t *testing.T) {
+	path := writeConfig(t, minimalConfig)
+
+	cfg, err := loadConfig([]string{"-config", path})
+	require.NoError(t, err)
+
+	assert.Equal(t, ServerConfig{Port: 4000, Timeout: 30 * time.Second}, cfg.Server)
+	assert.Equal(t, LoggingConfig{Level: "info", Format: "text"}, cfg.Logging)
+	assert.Equal(t, filepath.Join(filepath.Dir(path), "schema.graphql"), cfg.SchemaPath,
+		"the schema defaults to the schema.graphql next to the config file")
+	assert.Equal(t, "nic", cfg.FoundationalIDArgName)
+	assert.Equal(t, authn.Config{
+		JWKSURL:  "https://idp.example/oauth2/jwks",
+		Issuer:   "https://idp.example",
+		Audience: "http://api.example",
+	}, cfg.IDP)
+	assert.Empty(t, cfg.PDP.URL, "the PDP check is off by default")
+	assert.Empty(t, cfg.ConsentEngine.URL, "the consent check is off by default")
+	assert.Equal(t, AuditConfig{ActorType: "SERVICE", ActorID: "orchestration-engine"}, cfg.Audit, "auditing is off by default")
+	assert.Empty(t, cfg.Providers)
+	assert.Empty(t, cfg.ArgMappings)
+}
+
+func TestLoadConfigReadsEverySetting(t *testing.T) {
+	t.Setenv("TEST_OE_ARGUS_API_KEY", "argus-key")
+	t.Setenv("TEST_OE_RGD_SECRET", "rgd-secret")
+
+	cfg, err := loadConfig([]string{"-config", writeConfig(t, `
+server:
+  port: 4100
+  timeout: 45s
+logging:
+  level: debug
+  format: json
+schemaPath: /etc/oe/schema.graphql
+foundationalIdArgName: nic
+idp:
+  jwksURL: https://idp.example/oauth2/jwks
+  issuer: https://idp.example
+  audience: http://api.example
+  insecureSkipTLSVerify: true
+pdp:
+  url: http://pdp.internal:8082
+consentEngine:
+  url: http://ce.internal:8081/internal/api/v1
+audit:
+  url: http://audit.internal:3001
+  apiKey: "{{env:TEST_OE_ARGUS_API_KEY}}"
+  actorType: SERVICE
+  actorId: oe-1
+providers:
+  - id: drp-person-v1
+    url: http://drp.internal/graphql
+    timeout: 5s
+    auth:
+      type: apiKey
+      apiKey:
+        key: X-API-Key
+        value: drp-key
+  - id: rgd-person-v1
+    url: http://rgd.internal/graphql
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://rgd.internal/oauth/token
+        clientID: oe
+        clientSecret: "{{env:TEST_OE_RGD_SECRET}}"
+argMappings:
+  - schemaId: drp-person-v1
+    targetArgName: nic
+    sourceArgPath: personInfo-nic
+    targetArgPath: person
+`)})
+	require.NoError(t, err)
+
+	assert.Equal(t, ServerConfig{Port: 4100, Timeout: 45 * time.Second}, cfg.Server)
+	assert.Equal(t, LoggingConfig{Level: "debug", Format: "json"}, cfg.Logging)
+	assert.Equal(t, "/etc/oe/schema.graphql", cfg.SchemaPath, "an absolute schemaPath is used as is")
+	assert.True(t, cfg.IDP.InsecureSkipTLSVerify)
+	assert.Equal(t, "http://pdp.internal:8082", cfg.PDP.URL)
+	assert.Equal(t, "http://ce.internal:8081/internal/api/v1", cfg.ConsentEngine.URL)
+	assert.Equal(t, AuditConfig{URL: "http://audit.internal:3001", APIKey: "argus-key", ActorType: "SERVICE", ActorID: "oe-1"}, cfg.Audit)
+
+	require.Len(t, cfg.Providers, 2)
+	assert.Equal(t, provider.Config{
+		ID:      "drp-person-v1",
+		URL:     "http://drp.internal/graphql",
+		Timeout: "5s",
+		Auth: &remoteauth.Config{
+			Type:   remoteauth.TypeAPIKey,
+			APIKey: &remoteauth.APIKeyConfig{Key: "X-API-Key", Value: "drp-key"},
+		},
+	}, cfg.Providers[0])
+	require.NotNil(t, cfg.Providers[1].Auth)
+	require.NotNil(t, cfg.Providers[1].Auth.OAuth2)
+	assert.Equal(t, "rgd-secret", cfg.Providers[1].Auth.OAuth2.ClientSecret, "the secret placeholder is read from the environment")
+
+	assert.Equal(t, []*graphql.ArgMapping{{
+		SchemaID:      "drp-person-v1",
+		TargetArgName: "nic",
+		SourceArgPath: "personInfo-nic",
+		TargetArgPath: "person",
+	}}, cfg.ArgMappings)
+}
+
+func TestLoadConfigPathFromEnvironment(t *testing.T) {
+	t.Setenv("CONFIG_PATH", writeConfig(t, minimalConfig))
+
+	cfg, err := loadConfig(nil)
+	require.NoError(t, err)
+	assert.Equal(t, "http://api.example", cfg.IDP.Audience)
+}
+
+func TestLoadConfigFlagOverridesEnvironment(t *testing.T) {
+	t.Setenv("CONFIG_PATH", filepath.Join(t.TempDir(), "missing.yaml"))
+
+	cfg, err := loadConfig([]string{"-config", writeConfig(t, minimalConfig)})
+	require.NoError(t, err)
+	assert.Equal(t, "http://api.example", cfg.IDP.Audience)
+}
+
+func TestLoadConfigDefaultPath(t *testing.T) {
+	t.Setenv("CONFIG_PATH", "")
+	assert.Equal(t, "config.yaml", configPathFromEnv())
+}
+
+func TestLoadConfigHelp(t *testing.T) {
+	_, err := loadConfig([]string{"-h"})
+	assert.True(t, errors.Is(err, flag.ErrHelp))
+}
+
+func TestLoadConfigMissingFile(t *testing.T) {
+	_, err := loadConfig([]string{"-config", filepath.Join(t.TempDir(), "missing.yaml")})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reading config file")
+}
+
+func TestLoadConfigErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		extra   string
+		replace [2]string
+		wantErr string
+	}{
+		{name: "port out of range", extra: "server:\n  port: 70000", wantErr: "server.port"},
+		{name: "non-positive timeout", extra: "server:\n  timeout: 0s", wantErr: "server.timeout must be positive"},
+		{name: "unknown log level", extra: "logging:\n  level: verbose", wantErr: "logging.level"},
+		{name: "unknown log format", extra: "logging:\n  format: xml", wantErr: "logging.format"},
+		{name: "empty schemaPath", extra: `schemaPath: ""`, wantErr: "schemaPath must not be empty"},
+		{name: "missing foundationalIdArgName", replace: [2]string{"foundationalIdArgName: nic", ""}, wantErr: "foundationalIdArgName is required"},
+		{name: "missing idp audience", replace: [2]string{"  audience: http://api.example", ""}, wantErr: "invalid idp configuration"},
+		{name: "invalid pdp url", extra: "pdp:\n  url: pdp.internal", wantErr: "pdp.url"},
+		{name: "invalid consent engine url", extra: "consentEngine:\n  url: ftp://ce.internal", wantErr: "consentEngine.url"},
+		{name: "invalid audit url", extra: "audit:\n  url: audit", wantErr: "audit.url"},
+		{name: "empty audit actor", extra: "audit:\n  actorId: \"\"", wantErr: "audit.actorType and audit.actorId"},
+		{name: "incomplete arg mapping", extra: "argMappings:\n  - schemaId: drp-person-v1\n    targetArgName: nic", wantErr: "argMappings[0] must set"},
+		{name: "unset placeholder", extra: "audit:\n  apiKey: \"{{env:TEST_OE_UNSET_VARIABLE}}\"", wantErr: "TEST_OE_UNSET_VARIABLE"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := minimalConfig
+			if tt.replace[0] != "" {
+				content = strings.Replace(content, tt.replace[0], tt.replace[1], 1)
+			}
+			_, err := loadConfig([]string{"-config", writeConfig(t, content+tt.extra+"\n")})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func TestCommittedConfigsLoad(t *testing.T) {
+	t.Setenv("IDP_JWKS_URL", "http://thunderid:8090/oauth2/jwks")
+	t.Setenv("IDP_PUBLIC_URL", "http://localhost:8090")
+	t.Setenv("IDP_AUDIENCE", "http://api.openndx.local")
+	t.Setenv("AUDIT_SERVICE_URL", "http://audit-service:3001")
+	t.Setenv("ARGUS_API_KEY", "1234")
+
+	for _, path := range []string{"config.example.yaml", "config.docker.yaml", "../../tests/integration/oe-config.yaml"} {
+		t.Run(path, func(t *testing.T) {
+			cfg, err := loadConfig([]string{"-config", path})
+			require.NoError(t, err)
+			_, err = provider.NewRegistry(cfg.Providers...)
+			require.NoError(t, err, "the providers are valid")
+			_, err = schema.Load(cfg.SchemaPath)
+			require.NoError(t, err, "schemaPath names the schema next to the config")
+		})
+	}
+}
+
+// TestCommittedConfigsFederate exercises the committed configs and schema so the
+// walkthrough's NIC reaches each selected provider.
+func TestCommittedConfigsFederate(t *testing.T) {
+	t.Setenv("IDP_JWKS_URL", "http://thunderid:8090/oauth2/jwks")
+	t.Setenv("IDP_PUBLIC_URL", "http://localhost:8090")
+	t.Setenv("IDP_AUDIENCE", "http://api.openndx.local")
+	t.Setenv("AUDIT_SERVICE_URL", "http://audit-service:3001")
+	t.Setenv("ARGUS_API_KEY", "1234")
+
+	for _, configFile := range []string{"config.docker.yaml", "config.example.yaml"} {
+		for _, tc := range []struct {
+			name      string
+			request   graphql.Request
+			providers []string
+			want      map[string]interface{}
+		}{
+			{
+				name:      "public DRP literal",
+				request:   graphql.Request{Query: `query { personInfo(nic: "748213") { fullName } }`},
+				providers: []string{"drp-person-v1"},
+				want:      map[string]interface{}{"fullName": "Suresh"},
+			},
+			{
+				name: "public DRP variable",
+				request: graphql.Request{
+					Query:     `query Person($nic: String!) { personInfo(nic: $nic) { fullName } }`,
+					Variables: map[string]interface{}{"nic": "748213"},
+				},
+				providers: []string{"drp-person-v1"},
+				want:      map[string]interface{}{"fullName": "Suresh"},
+			},
+			{
+				name: "RGD variable",
+				request: graphql.Request{
+					Query:     `query Person($nic: String!) { personInfo(nic: $nic) { birthInfo { district } } }`,
+					Variables: map[string]interface{}{"nic": "748213"},
+				},
+				providers: []string{"rgd-person-v1"},
+				want:      map[string]interface{}{"birthInfo": map[string]interface{}{"district": "Rivertown"}},
+			},
+			{
+				name:      "both providers",
+				request:   graphql.Request{Query: `query { personInfo(nic: "748213") { fullName profession birthInfo { birthPlace district } } }`},
+				providers: []string{"drp-person-v1", "rgd-person-v1"},
+				want: map[string]interface{}{
+					"fullName": "Suresh", "profession": "Software Engineer",
+					"birthInfo": map[string]interface{}{"birthPlace": "Rivertown General Hospital", "district": "Rivertown"},
+				},
+			},
+		} {
+			t.Run(configFile+"/"+tc.name, func(t *testing.T) {
+				cfg, err := loadConfig([]string{"-config", configFile})
+				require.NoError(t, err)
+				schemas, err := schema.Load(cfg.SchemaPath)
+				require.NoError(t, err)
+
+				pdp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_ = json.NewEncoder(w).Encode(policy.PdpResponse{AppAuthorized: true})
+				}))
+				t.Cleanup(pdp.Close)
+
+				calls := make(chan string, 2)
+				for i := range cfg.Providers {
+					p := &cfg.Providers[i]
+					id := p.ID
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						var request graphql.Request
+						if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+							t.Errorf("decode %s request: %v", id, err)
+							http.Error(w, "invalid request", http.StatusBadRequest)
+							return
+						}
+						if !assert.Contains(t, request.Query, `nic: "748213"`) {
+							http.Error(w, "missing NIC", http.StatusBadRequest)
+							return
+						}
+						calls <- id
+						var data map[string]interface{}
+						if id == "drp-person-v1" {
+							data = map[string]interface{}{"person": map[string]interface{}{"fullName": "Suresh", "profession": "Software Engineer"}}
+						} else {
+							data = map[string]interface{}{"getPersonInfo": map[string]interface{}{"birthPlace": "Rivertown General Hospital", "district": "Rivertown"}}
+						}
+						_ = json.NewEncoder(w).Encode(graphql.Response{Data: data})
+					}))
+					t.Cleanup(server.Close)
+					p.URL = server.URL
+					p.Auth = nil
+				}
+
+				registry, err := provider.NewRegistry(cfg.Providers...)
+				require.NoError(t, err)
+				f, err := federator.New(federator.Deps{
+					Providers: federator.ProviderLookup(registry.Get),
+					Schemas:   schemas,
+					Policy:    policy.NewPdpClient(pdp.URL),
+				}, federator.Options{
+					FoundationalIdArgName: cfg.FoundationalIDArgName,
+					ArgMapping:            cfg.ArgMappings,
+				})
+				require.NoError(t, err)
+
+				response := f.FederateQuery(context.Background(), tc.request, &auth.ConsumerAssertion{ApplicationID: "demo-client"})
+				require.Empty(t, response.Errors)
+				require.Equal(t, tc.want, response.Data["personInfo"])
+				require.Len(t, calls, len(tc.providers))
+				got := make([]string, 0, len(tc.providers))
+				for range tc.providers {
+					got = append(got, <-calls)
+				}
+				require.ElementsMatch(t, tc.providers, got)
+			})
+		}
+	}
+}

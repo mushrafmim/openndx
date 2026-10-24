@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"runtime/debug"
+	"strconv"
 	"time"
 
 	"github.com/openndx/openndx-core/internal/oe/auth"
@@ -18,28 +18,18 @@ type Response struct {
 	Message string `json:"message"`
 }
 
-const DefaultPort = "4000"
-
-// RunServer starts an HTTP server with graceful shutdown support.
-// The server will shut down gracefully when the context is cancelled (e.g., on SIGINT/SIGTERM).
-func RunServer(ctx context.Context, deps Deps) {
+// RunServer starts an HTTP server on port with graceful shutdown support.
+// timeout bounds reading a request and writing its response. The server will
+// shut down gracefully when the context is cancelled (e.g., on SIGINT/SIGTERM).
+func RunServer(ctx context.Context, port int, timeout time.Duration, deps Deps) {
 	mux := SetupRouter(deps)
-
-	// Get port configuration
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = DefaultPort
-	}
-
-	// Convert port to string with colon prefix
-	if port[0] != ':' {
-		port = ":" + port
-	}
 
 	// Create HTTP server with proper configuration
 	srv := &http.Server{
-		Addr:    port,
-		Handler: corsMiddleware(mux),
+		Addr:         ":" + strconv.Itoa(port),
+		Handler:      corsMiddleware(mux),
+		ReadTimeout:  timeout,
+		WriteTimeout: timeout,
 	}
 
 	// Channel to signal server errors

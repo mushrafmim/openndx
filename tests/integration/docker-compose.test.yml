@@ -58,19 +58,8 @@ services:
     build:
       context: ../..
       dockerfile: cmd/oe/Dockerfile
-    environment:
-      PORT: 4000
-      LOG_LEVEL: info
-      PDP_URL: http://policy-decision-point:8082
-      CONSENT_ENGINE_URL: http://consent-engine:8081
-      CONFIG_PATH: /app/config/config.json
-      # The mock provider signs the tests' consumer tokens and serves the JWKS
-      # the OE verifies them against.
-      IDP_JWKS_URL: http://mock-provider:8083/jwks
-      IDP_ISSUER: http://mock-idp.test
-      IDP_AUDIENCE: http://api.openndx.local
     volumes:
-      - ./config.json:/app/config/config.json:ro
+      - ./oe-config.yaml:/app/config/config.yaml:ro
       # Next to the config: the OE reads schemaPath (default schema.graphql)
       # relative to the config file's directory.
       - ./schema.graphql:/app/config/schema.graphql:ro

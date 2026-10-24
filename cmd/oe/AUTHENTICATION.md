@@ -10,27 +10,29 @@ An access token in the `Authorization: Bearer <token>` header, issued by the ide
 
 The token must:
 
-| Check | Requirement |
-|---|---|
-| Signature | `RS256`, `RS384` or `RS512`, signed by a key in the JWKS at `IDP_JWKS_URL`, with a `kid` header that names the key. |
-| `iss` | Equals `IDP_ISSUER`. |
-| `aud` | Contains `IDP_AUDIENCE`. |
-| `exp` | Present and in the future, with 30 seconds of leeway. `nbf`, when present, must not be in the future, with the same leeway. |
-| `sub` | Present. |
-| `client_id` | Present. It becomes the application's identity (`applicationId`) for the PDP and Consent Engine. |
+| Check       | Requirement                                                                                                                 |
+|-------------|-----------------------------------------------------------------------------------------------------------------------------|
+| Signature   | `RS256`, `RS384` or `RS512`, signed by a key in the JWKS at `idp.jwksURL`, with a `kid` header that names the key.          |
+| `iss`       | Equals `idp.issuer`.                                                                                                        |
+| `aud`       | Contains `idp.audience`.                                                                                                    |
+| `exp`       | Present and in the future, with 30 seconds of leeway. `nbf`, when present, must not be in the future, with the same leeway. |
+| `sub`       | Present.                                                                                                                    |
+| `client_id` | Present. It becomes the application's identity (`applicationId`) for the PDP and Consent Engine.                            |
 
 A request without a valid token gets `401` with a JSON body, for example `{"error":"unauthorized","message":"invalid authentication token"}`. The reason is logged at debug level, not returned.
 
 ## Configuration
 
-| Variable | Default | Notes |
-|---|---|---|
-| `IDP_JWKS_URL` | `$IDP_BASE_URL/oauth2/jwks` | Where the signing keys are fetched. Must be an `http` or `https` URL. |
-| `IDP_ISSUER` | `IDP_TOKEN_URL`, else `$IDP_BASE_URL/oauth2/token` | The expected `iss`. Must be an `http` or `https` URL. |
-| `IDP_AUDIENCE` | | **Required.** The expected `aud`, the OE's resource server identifier. |
-| `IDP_JWKS_INSECURE_SKIP_VERIFY` | `false` | `true` skips TLS certificate checks when fetching the JWKS. Local development only. |
+The `idp` section of [config.yaml](CONFIGURATION.md#configyaml):
 
-The service exits at startup if `IDP_JWKS_URL`, `IDP_ISSUER` or `IDP_AUDIENCE` is missing or invalid. `IDP_ISSUER` must equal the `iss` the IdP stamps into tokens. ThunderID's is its public URL (`http://localhost:8090` locally), not `/oauth2/token`, so set `IDP_ISSUER` explicitly rather than relying on the `IDP_BASE_URL` default. In Docker Compose, `IDP_ISSUER` is ThunderID's public URL (the `iss` it stamps into tokens) and `IDP_JWKS_URL` its compose-network address.
+| Key                         | Default | Notes                                                                               |
+|-----------------------------|---------|-------------------------------------------------------------------------------------|
+| `idp.jwksURL`               |         | **Required.** Where the signing keys are fetched. Must be an `http` or `https` URL. |
+| `idp.issuer`                |         | **Required.** The expected `iss`. Must be an `http` or `https` URL.                 |
+| `idp.audience`              |         | **Required.** The expected `aud`, the OE's resource server identifier.              |
+| `idp.insecureSkipTLSVerify` | `false` | `true` skips TLS certificate checks when fetching the JWKS. Local development only. |
+
+The service exits at startup if `jwksURL`, `issuer` or `audience` is missing or invalid. `issuer` must equal the `iss` the IdP stamps into tokens. ThunderID's is its public URL (`http://localhost:8090` locally), not `/oauth2/token`. In Docker Compose, [config.docker.yaml](config.docker.yaml) reads the issuer from `IDP_PUBLIC_URL`, ThunderID's public URL, and the JWKS URL from `IDP_JWKS_URL`, its compose-network address.
 
 ## JWKS handling
 
@@ -38,6 +40,6 @@ The keys are fetched on the first request, not at startup, so the OE starts even
 
 ## Production checklist
 
-- Set `IDP_JWKS_URL` and `IDP_ISSUER` to the production IdP over `https`, and `IDP_AUDIENCE` to the OE's resource server.
-- Leave `IDP_JWKS_INSECURE_SKIP_VERIFY` unset.
+- Set `idp.jwksURL` and `idp.issuer` to the production IdP over `https`, and `idp.audience` to the OE's resource server.
+- Leave `idp.insecureSkipTLSVerify` unset.
 - Terminate TLS in front of the OE, and expose only `POST /public/graphql`.

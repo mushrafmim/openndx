@@ -215,24 +215,23 @@ services:
     container_name: oe-${ENVIRONMENT:-local}
     ports:
       - "${OE_PORT:-4000}:4000"
+    # Settings are in cmd/oe/config.docker.yaml; it reads these values, shared
+    # with other services, from this environment.
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-local}
-      - PORT=4000
       - SERVICE_NAME=orchestration-engine
       - OTEL_METRICS_EXPORTER=${OTEL_METRICS_EXPORTER:-prometheus}
-      # IDP configuration for validating consumer tokens on /public/graphql.
       # IDP_AUDIENCE is OE's resource server (thunderid/bootstrap/resource.yaml):
       # consumers request `resource=http://api.openndx.local` with client_credentials.
-      - IDP_ISSUER=${IDP_PUBLIC_URL:-http://localhost:8090}
+      - IDP_PUBLIC_URL=${IDP_PUBLIC_URL:-http://localhost:8090}
       - IDP_JWKS_URL=${IDP_JWKS_URL:-http://thunderid:8090/oauth2/jwks}
       - IDP_AUDIENCE=${IDP_AUDIENCE:-http://api.openndx.local}
-      # Audit (optional, degrades gracefully if unreachable)
       - AUDIT_SERVICE_URL=${AUDIT_SERVICE_URL:-http://audit-service:3001}
       - ARGUS_API_KEY=${ARGUS_API_KEY:-1234}
     volumes:
-      - ./cmd/oe/config.docker.json:/app/config.json:ro
+      - ./cmd/oe/config.docker.yaml:/app/config/config.yaml:ro
       # The consumer schema, next to the config (its schemaPath).
-      - ./cmd/oe/schema.graphql:/app/schema.graphql:ro
+      - ./cmd/oe/schema.graphql:/app/config/schema.graphql:ro
     extra_hosts:
       # Lets the container reach the mock providers from dev/compose.yml running
       # on the host (resolves host.docker.internal on Linux too).

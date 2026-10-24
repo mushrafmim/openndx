@@ -1,46 +1,61 @@
 # OE configuration reference
 
-Every setting the Orchestration Engine reads. The overview and the short version are in the [README](README.md). Working examples: [config.example.json](config.example.json) (native run) and [config.docker.json](config.docker.json) (Docker Compose).
+Every setting the Orchestration Engine reads. The overview and the short version are in the [README](README.md). Working examples: [config.example.yaml](config.example.yaml) (native run) and [config.docker.yaml](config.docker.yaml) (Docker Compose).
 
 ## Where configuration comes from
 
-1. A JSON file at `CONFIG_PATH`, default `./config.json` relative to the working directory. The service exits at startup if the file is missing or invalid. `cmd/oe/config.json` is git-ignored.
-2. A few environment variables (below). The OE does not load `.env` files.
+All settings are in one YAML file, read once at startup. The OE looks for it at the `-config` flag, then `CONFIG_PATH`, then `config.yaml` in the working directory. It exits at startup if the file is missing or a setting is invalid. Keys left out keep the defaults below. `cmd/oe/config.yaml` is git-ignored.
 
-`make run orchestration-engine` runs from `cmd/oe`, so `./config.json` is `cmd/oe/config.json`. In Compose the file is mounted at `/app/config.json`.
+`make run orchestration-engine` runs from `cmd/oe`, so the default is `cmd/oe/config.yaml`. The image sets `CONFIG_PATH=/app/config/config.yaml`, and Compose mounts [config.docker.yaml](config.docker.yaml) there.
 
-## config.json
+A value written as `"{{env:NAME}}"` or `"{{file:/path}}"` is read from that environment variable or file at startup, and an unset variable stops the OE. Use it for secrets, such as `apiKey: "{{env:ARGUS_API_KEY}}"`. The whole value must be the placeholder.
 
-| Key | Type | Notes |
+## config.yaml
+
+| Key | Default | Notes |
 |---|---|---|
-| `schemaPath` | string | The consumer schema file. Default `schema.graphql`; a relative path is resolved against the directory of `config.json`. See [Schema](#schema). |
-| `foundationalIdArgName` | string | **Required.** The query argument that carries the data owner's ID, matched by name (for example `nic`) on every field of the query, aliases included. Startup fails if empty. If a query has none the OE returns `MISSING_IDENTIFIER`; if it has several different values, `AMBIGUOUS_IDENTIFIER`. |
-| `pdpUrl` | string | Policy Decision Point base URL. The OE appends `/api/v1/policy/decide`. If empty, the PDP and consent checks are skipped. `pdpConfig.clientUrl` overrides it. |
-| `ceUrl` | string | Consent Engine URL, which must end in `/internal/api/v1` because the OE appends `/consents`. `ceConfig.clientUrl` overrides it. If the PDP requires consent and this is empty, the request fails with `CE_ERROR`. |
-| `providers` | array | Data providers; see below and [PROVIDER_CONFIGURATION.md](PROVIDER_CONFIGURATION.md). Loaded once at startup, so changes need a restart. |
-| `argMappings` | array | Argument mappings; see below. |
-| `auditConfig.serviceUrl` | string | Argus audit service URL. Overridden by `AUDIT_SERVICE_URL`. Auditing is off when this is empty. |
-| `auditConfig.actorType`, `auditConfig.actorId` | string | Default `SERVICE` and `orchestration-engine`. |
+| `server.port` | `4000` | |
+| `server.timeout` | `30s` | Bounds reading a request and writing its response, so it must cover the PDP, consent and provider calls a query makes. |
+| `logging.level` | `info` | `debug`, `info`, `warn` or `error`. |
+| `logging.format` | `text` | `text` or `json`. |
+| `schemaPath` | `schema.graphql` | The consumer schema file. A relative path is resolved against the directory of the config file. See [Schema](#schema). |
+| `foundationalIdArgName` | | **Required.** The query argument that carries the data owner's ID, matched by name (for example `nic`) on every field of the query, aliases included. If a query has none the OE returns `MISSING_IDENTIFIER`; if it has several different values, `AMBIGUOUS_IDENTIFIER`. |
+| `idp.jwksURL`, `idp.issuer`, `idp.audience` | | **Required.** Consumer token validation. See [AUTHENTICATION.md](AUTHENTICATION.md#configuration). |
+| `idp.insecureSkipTLSVerify` | `false` | Skips TLS checks on the JWKS fetch. Local development only. |
+| `pdp.url` | | Policy Decision Point base URL. The OE appends `/api/v1/policy/decide`. If empty, the PDP and consent checks are skipped. |
+| `consentEngine.url` | | Consent Engine URL, which must end in `/internal/api/v1` because the OE appends `/consents`. If the PDP requires consent and this is empty, the request fails with `CE_ERROR`. |
+| `audit.url` | | Argus audit service URL. Auditing is off when this is empty. |
+| `audit.apiKey` | | Sent as `X-API-Key` to Argus. |
+| `audit.actorType`, `audit.actorId` | `SERVICE`, `orchestration-engine` | The actor recorded on audit events. |
+| `providers` | | Data providers; see below and [PROVIDER_CONFIGURATION.md](PROVIDER_CONFIGURATION.md). |
+| `argMappings` | | Argument mappings; see below. |
 
-Keys that are accepted but ignored: `server.port`, `log.level`, `services.pdp_url`, the removed inline schema keys `schema` and `sdl` (the schema comes from the `schemaPath` file), and the removed token settings `trustUpstream`, `jwt` and `environment`. Consumer tokens are configured with the `IDP_*` environment variables below.
+Unknown keys are ignored, so check the spelling of a key whose setting doesn't seem to take effect.
 
 ### providers[]
 
+Each entry is an [`OpenNSW/core/remote`](https://github.com/OpenNSW/core/tree/main/remote) service.
+
 | Key | Notes |
 |---|---|
-| `schemaId` | The provider schema's ID, as registered in Portal Backend and the PDP. Unique; identifies the provider and must match `schemaId` in the schema's `@sourceInfo`. |
-| `providerUrl` | The provider's GraphQL endpoint. The OE sends the sub-query as a `POST` to it. |
-| `auth.type` | `apiKey` or `oauth2`. Omit `auth` for an open provider. |
-| `auth.apiKeyName`, `auth.apiKeyValue` | For `apiKey`: the header name and value sent with each request. |
-| `auth.tokenUrl`, `auth.clientId`, `auth.clientSecret`, `auth.scopes` | For `oauth2`: client-credentials flow. `scopes` is a string array. |
+| `id` | **Required.** The provider schema's ID, as registered in Portal Backend and the PDP. Unique; identifies the provider and must match `schemaId` in the schema's `@sourceInfo` and in `argMappings`. If one endpoint serves several schemas, add an entry for each. |
+| `url` | **Required.** The provider's GraphQL endpoint, `http` or `https`. The OE sends the sub-query as a `POST` to it. |
+| `timeout` | Bounds each call, as a Go duration. Default `10s`. |
+| `auth.type` | `apiKey`, `bearer` or `oauth2`. Omit `auth` for an open provider. |
+| `auth.apiKey.key`, `auth.apiKey.value` | For `apiKey`: the header name and value sent with each request. |
+| `auth.bearer.token` | For `bearer`: sent as `Authorization: Bearer <token>`. |
+| `auth.oauth2.tokenURL`, `auth.oauth2.clientID`, `auth.oauth2.clientSecret`, `auth.oauth2.scopes` | For `oauth2`: client-credentials flow, with the client credentials sent as HTTP Basic auth. `scopes` is a string list. |
+| `tls.clientCertFile`, `tls.clientKeyFile` | Client certificate for mutual TLS. Both are required when `tls` is set. |
 
 ### argMappings[]
 
 Each entry maps an argument in the consumer's query to an argument of one provider's query.
 
+All four keys are required.
+
 | Key | Notes |
 |---|---|
-| `schemaId` | The provider this mapping applies to. |
+| `schemaId` | The provider this mapping applies to, its `id` in `providers`. |
 | `targetArgName` | The argument name the provider expects. |
 | `sourceArgPath` | The consumer-side argument: the consumer field path from the root, then the argument name, joined with dashes. `personInfo-nic` is the `nic` argument of the root field `personInfo`; an argument with the same name on another field doesn't match. |
 | `targetArgPath` | The provider field the argument is attached to: a leading part of the provider field path, for example `person` for the field `person.fullName`. The argument is attached to that field only, not to the fields above it. |
@@ -49,25 +64,13 @@ A mapped argument is sent with every provider field under its `targetArgPath` th
 
 ## Environment variables
 
-| Variable | Default | Notes |
-|---|---|---|
-| `PORT` | `4000` | |
-| `CONFIG_PATH` | `./config.json` | |
-| `IDP_JWKS_URL` | `$IDP_BASE_URL/oauth2/jwks` | Consumer token signing keys. See [AUTHENTICATION.md](AUTHENTICATION.md#configuration). |
-| `IDP_ISSUER` | `IDP_TOKEN_URL`, else `$IDP_BASE_URL/oauth2/token` | Expected token `iss`. |
-| `IDP_AUDIENCE` | | **Required.** Expected token `aud`. |
-| `IDP_JWKS_INSECURE_SKIP_VERIFY` | `false` | Skips TLS checks on the JWKS fetch. Local development only. |
-| `AUDIT_SERVICE_URL` | | Overrides `auditConfig.serviceUrl`. |
-| `ARGUS_API_KEY` | | Sent as `X-API-Key` to Argus. Falls back to `ARGUS_AUTH_TOKEN`. |
-| `ENABLE_AUDIT` | on | Read by the audit client library. Audit is on when a URL is set and this is not `false`. |
-
-[.env.example](.env.example) also lists `SERVICE_NAME`, `SERVICE_VERSION` and `OTEL_*`. The OE does not read them, and it does not serve `/metrics`. Compose passes some of them to every Go service.
+Apart from the placeholders in the config file, the OE reads only `CONFIG_PATH`. The audit client library also reads `ENABLE_AUDIT`: auditing is on when `audit.url` is set and `ENABLE_AUDIT` isn't `false`. The OE does not load `.env` files. Compose passes `SERVICE_NAME` and `OTEL_*` to every Go service, but the OE does not read them and does not serve `/metrics`.
 
 ## Schema
 
-The OE reads the consumer GraphQL schema from the file named by `schemaPath` in `config.json` once at startup. The default is `schema.graphql`, and a relative path is resolved against the directory that contains `config.json`, so by default the schema sits next to the config. An absolute path is used as is. The OE exits at startup if the file is missing or isn't a valid schema (see below). In Compose both files are mounted in `/app`.
+The OE reads the consumer GraphQL schema from the file named by `schemaPath` once at startup. The default is `schema.graphql`, and a relative path is resolved against the directory that contains the config file, so by default the schema sits next to the config. An absolute path is used as is. The OE exits at startup if the file is missing or isn't a valid schema (see below). In Compose both files are mounted in `/app/config`.
 
-The image contains only the binary, so the schema, like `config.json`, is mounted into the container. To change the schema, mount the new file (for example from a Kubernetes ConfigMap) and restart the OE or roll out the pods. Every OE instance then serves the same schema. There is no API for changing the schema at runtime, and the OE uses no database.
+The image contains only the binary, so the schema, like the config file, is mounted into the container. To change the schema, mount the new file (for example from a Kubernetes ConfigMap) and restart the OE or roll out the pods. Every OE instance then serves the same schema. There is no API for changing the schema at runtime, and the OE uses no database.
 
 At startup the OE validates the schema against the GraphQL spec (with [gqlparser](https://github.com/vektah/gqlparser)) and compiles it once.
 

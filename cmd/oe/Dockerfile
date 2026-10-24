@@ -42,5 +42,9 @@ USER appuser
 # Expose port
 EXPOSE 4000
 
+# The image has no config file or schema: mount them here, or point CONFIG_PATH
+# elsewhere. schemaPath is resolved against the config file's directory.
+ENV CONFIG_PATH=/app/config/config.yaml
+
 # Run the server
 CMD ["./orchestration-engine"]
