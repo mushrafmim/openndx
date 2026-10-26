@@ -33,7 +33,6 @@ import (
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	"github.com/openndx/openndx-core/internal/oe/federator"
 	"github.com/openndx/openndx-core/internal/oe/federator/schema"
-	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/middleware"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/policy"
@@ -252,8 +251,6 @@ var goldenCases = []goldenCase{
 }
 
 func TestFederateQueryGolden(t *testing.T) {
-	logger.Init()
-
 	for _, tc := range goldenCases {
 		t.Run(tc.name, func(t *testing.T) {
 			env := newGoldenEnv(t, tc)

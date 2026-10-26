@@ -3,13 +3,13 @@ package federator
 import (
 	"context"
 	stderrors "errors"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/openndx/openndx-core/internal/monitoring"
 	"github.com/openndx/openndx-core/internal/oe/auth"
 	"github.com/openndx/openndx-core/internal/oe/federator/operation"
 	"github.com/openndx/openndx-core/internal/oe/internals/errors"
-	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
@@ -59,13 +59,13 @@ func (f *Federator) FederateQuery(ctx context.Context, request graphql.Request, 
 
 	query, invalid := parseQuery(request.Query)
 	if invalid != nil {
-		logger.Log.Info("Failed to parse query", "errors", invalid.Errors)
+		slog.Info("Failed to parse query", "errors", invalid.Errors)
 		return *invalid
 	}
 
 	compiled, err := f.deps.Schemas.Active(ctx)
 	if err != nil {
-		logger.Log.Error("Failed to load the active schema", "Error", err)
+		slog.Error("Failed to load the active schema", "Error", err)
 		return graphql.Response{
 			Data: nil,
 			Errors: []interface{}{
@@ -77,13 +77,13 @@ func (f *Federator) FederateQuery(ctx context.Context, request graphql.Request, 
 	}
 
 	if invalid := validateQuery(compiled.Schema, query); invalid != nil {
-		logger.Log.Info("Query failed validation against the schema", "errors", invalid.Errors)
+		slog.Info("Query failed validation against the schema", "errors", invalid.Errors)
 		return *invalid
 	}
 
 	op, err := operation.Build(compiled, query, request.OperationName, request.Variables)
 	if err != nil {
-		logger.Log.Info("Failed to normalize query", "Error", err)
+		slog.Info("Failed to normalize query", "Error", err)
 		return operationErrorResponse(err)
 	}
 
@@ -94,7 +94,7 @@ func (f *Federator) FederateQuery(ctx context.Context, request graphql.Request, 
 
 	queryPlan, err := buildPlan(compiled.Schema, op, f.opts.ArgMapping)
 	if err != nil {
-		logger.Log.Info("Failed to plan query", "Error", err)
+		slog.Info("Failed to plan query", "Error", err)
 		return createErrorResponseWithCode(err.Error(), errors.CodeBadRequest)
 	}
 
@@ -104,7 +104,7 @@ func (f *Federator) FederateQuery(ctx context.Context, request graphql.Request, 
 	}
 
 	if len(queryPlan.fetches) == 0 {
-		logger.Log.Info("No valid service queries found in the request")
+		slog.Info("No valid service queries found in the request")
 		return createErrorResponse("No valid service queries found in the request", nil)
 	}
 

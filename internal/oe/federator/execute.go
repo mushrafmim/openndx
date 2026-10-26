@@ -3,9 +3,9 @@ package federator
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
-	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 )
 
@@ -26,7 +26,7 @@ func (f *Federator) execute(ctx context.Context, appID string, fetches []*fetch)
 	for _, ft := range fetches {
 		client, ok := f.deps.Providers.Get(ft.schemaID)
 		if !ok {
-			logger.Log.Info("Provider not found", "Schema ID", ft.schemaID)
+			slog.Info("Provider not found", "Schema ID", ft.schemaID)
 			results[ft] = fetchResult{err: fmt.Errorf("no provider is configured for schema %s", ft.schemaID)}
 			continue
 		}
@@ -43,7 +43,7 @@ func (f *Federator) execute(ctx context.Context, appID string, fetches []*fetch)
 			}
 			response, err := client.Execute(ctx, graphql.Request{Query: ft.query})
 			if err != nil {
-				logger.Log.Info("Request failed to the Provider", "Schema ID", ft.schemaID, "Error", err)
+				slog.Info("Request failed to the Provider", "Schema ID", ft.schemaID, "Error", err)
 				f.deps.Auditor.ProviderFetch(ctx, audit, nil, err)
 			} else {
 				f.deps.Auditor.ProviderFetch(ctx, audit, &response, nil)

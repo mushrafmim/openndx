@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,12 +16,6 @@ import (
 // ErrorResponse represents a standard error response structure
 type ErrorResponse struct {
 	Error string `json:"error"`
-}
-
-// SuccessResponse represents a standard success response structure
-type SuccessResponse struct {
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
 }
 
 // RespondWithJSON sends a JSON response with the given status code and data
@@ -69,138 +62,12 @@ func PanicRecoveryMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// JSONHandler handles JSON request/response with error handling
-func JSONHandler(w http.ResponseWriter, r *http.Request, req interface{}, handler func() (interface{}, int, error)) {
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-		slog.Error("Failed to decode request body", "error", err)
-		RespondWithError(w, http.StatusBadRequest, "Invalid JSON input")
-		return
-	}
-
-	data, statusCode, err := handler()
-	if err != nil {
-		slog.Error("Handler failed", "error", err)
-		RespondWithError(w, statusCode, err.Error())
-		return
-	}
-
-	RespondWithJSON(w, statusCode, data)
-}
-
-// PathHandler handles path-based requests with parameter extraction
-func PathHandler(w http.ResponseWriter, r *http.Request, prefix string, handler func(string) (interface{}, int, error)) {
-	param := r.URL.Path[len(prefix):]
-	if param == "" {
-		RespondWithError(w, http.StatusBadRequest, "Parameter is required")
-		return
-	}
-
-	data, statusCode, err := handler(param)
-	if err != nil {
-		slog.Error("Handler failed", "error", err)
-		RespondWithError(w, statusCode, err.Error())
-		return
-	}
-
-	RespondWithJSON(w, statusCode, data)
-}
-
-// GenericHandler handles generic requests without specific parameter extraction
-func GenericHandler(w http.ResponseWriter, r *http.Request, handler func() (interface{}, int, error)) {
-	data, statusCode, err := handler()
-	if err != nil {
-		slog.Error("Handler failed", "error", err)
-		RespondWithError(w, statusCode, err.Error())
-		return
-	}
-
-	RespondWithJSON(w, statusCode, data)
-}
-
-// Helper functions for common patterns
-func HandleError(w http.ResponseWriter, err error, statusCode int, operation string) {
-	slog.Error("Operation failed", "operation", operation, "error", err)
-	RespondWithError(w, statusCode, fmt.Sprintf("failed to %s: %v", operation, err))
-}
-
-func HandleSuccess(w http.ResponseWriter, data interface{}, statusCode int, operation string, logData map[string]interface{}) {
-	// Convert map to key-value pairs for slog
-	args := make([]interface{}, 0, len(logData)*2+2)
-	args = append(args, "operation", operation)
-	for k, v := range logData {
-		args = append(args, k, v)
-	}
-	slog.Info("Operation successful", args...)
-	RespondWithSuccess(w, statusCode, data)
-}
-
-func ValidateMethod(w http.ResponseWriter, r *http.Request, allowedMethod string) bool {
-	if r.Method != allowedMethod {
-		w.Header().Set("Allow", allowedMethod)
-		RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return false
-	}
-	return true
-}
-
-func ExtractIDFromPath(r *http.Request, prefix string) (string, error) {
-	id := r.URL.Path[len(prefix):]
-	if id == "" {
-		return "", fmt.Errorf("ID is required")
-	}
-	return id, nil
-}
-
-func ExtractQueryParam(r *http.Request, param string) (string, error) {
-	value := r.URL.Query().Get(param)
-	if value == "" {
-		return "", fmt.Errorf("%s is required", param)
-	}
-	return value, nil
-}
-
-// Additional utility functions from individual utils packages
-
-// ExtractIDFromPathString extracts the ID from a URL path by taking the last segment
-func ExtractIDFromPathString(path string) string {
-	path = strings.TrimSuffix(path, "/")
-	parts := strings.Split(path, "/")
-	if len(parts) > 0 {
-		return parts[len(parts)-1]
-	}
-	return ""
-}
-
-// ParseJSONRequest parses a JSON request body into the target struct
-func ParseJSONRequest(r *http.Request, target interface{}) error {
-	defer r.Body.Close()
-	return json.NewDecoder(r.Body).Decode(target)
-}
-
-// CreateCollectionResponse creates a standardized collection response with count
-func CreateCollectionResponse(items interface{}, count int) map[string]interface{} {
-	return map[string]interface{}{
-		"items": items,
-		"count": count,
-	}
-}
-
 // ServerConfig holds configuration for HTTP servers
 type ServerConfig struct {
 	Port         string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
-}
-
-// DefaultServerConfig returns a default server configuration
-func DefaultServerConfig() *ServerConfig {
-	return &ServerConfig{
-		Port:         GetEnvOrDefault("PORT", "8080"),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
 }
 
 // StartServerWithGracefulShutdown starts an HTTP server and blocks until it
@@ -247,14 +114,6 @@ func CreateServer(config *ServerConfig, handler http.Handler) *http.Server {
 	}
 }
 
-// GetEnvOrDefault returns the environment variable value or a default
-func GetEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
 // SetupLogging configures logging based on the configuration
 func SetupLogging(format, level string) {
 	var handler slog.Handler
@@ -287,10 +146,4 @@ func getLogLevel(level string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
-}
-
-// ReadRequestBody reads the entire request body as bytes
-func ReadRequestBody(r *http.Request) ([]byte, error) {
-	defer r.Body.Close()
-	return io.ReadAll(r.Body)
 }

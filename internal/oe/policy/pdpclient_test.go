@@ -6,13 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/openndx/openndx-core/internal/oe/logger"
 )
-
-func init() {
-	logger.Init()
-}
 
 func TestNewPdpClient(t *testing.T) {
 	baseUrl := "http://localhost:8080"

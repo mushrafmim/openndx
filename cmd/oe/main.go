@@ -13,7 +13,6 @@ import (
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	"github.com/openndx/openndx-core/internal/oe/federator"
 	"github.com/openndx/openndx-core/internal/oe/federator/schema"
-	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/middleware"
 	"github.com/openndx/openndx-core/internal/oe/policy"
 	"github.com/openndx/openndx-core/internal/oe/provider"
@@ -26,7 +25,6 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 	utils.SetupLogging(config.Logging.Format, config.Logging.Level)
-	logger.Log = slog.Default()
 
 	auditClient := audit.NewClient(audit.Config{
 		BaseURL: config.Audit.URL,
@@ -39,7 +37,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load the consumer schema (check schemaPath in the config file): %v", err)
 	}
-	logger.Log.Info("Loaded consumer schema", "path", config.SchemaPath)
+	slog.Info("Loaded consumer schema", "path", config.SchemaPath)
 
 	// Authenticate consumers: accept tokens the IdP issued for OE's audience,
 	// whichever client requested them.

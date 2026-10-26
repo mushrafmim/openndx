@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"runtime/debug"
 
 	"github.com/openndx/openndx-core/internal/oe/auth"
-	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 )
 
@@ -26,14 +26,14 @@ func Handler(f QueryFederator) http.Handler {
 		consumerAssertion := auth.ConsumerFromContext(r.Context())
 		if consumerAssertion == nil {
 			// Authentication always sets the consumer; fail closed if it did not.
-			logger.Log.Error("Consumer identity missing from an authenticated request")
+			slog.Error("Consumer identity missing from an authenticated request")
 			http.Error(w, "Unauthorized: authentication required", http.StatusUnauthorized)
 			return
 		}
 
 		var req graphql.Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			logger.Log.Error("Failed to decode request body", "error", err)
+			slog.Error("Failed to decode request body", "error", err)
 			http.Error(w, "Bad request: invalid JSON", http.StatusBadRequest)
 			return
 		}
@@ -42,7 +42,7 @@ func Handler(f QueryFederator) http.Handler {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					logger.Log.Error("Panic in FederateQuery", "panic", r, "stack", string(debug.Stack()))
+					slog.Error("Panic in FederateQuery", "panic", r, "stack", string(debug.Stack()))
 					response = graphql.Response{
 						Errors: []any{
 							map[string]any{
@@ -58,7 +58,7 @@ func Handler(f QueryFederator) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(response); err != nil {
-			logger.Log.Error("Failed to write response", "error", err)
+			slog.Error("Failed to write response", "error", err)
 		}
 	})
 }
