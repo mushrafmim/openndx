@@ -203,26 +203,34 @@ func DefaultServerConfig() *ServerConfig {
 	}
 }
 
-// StartServerWithGracefulShutdown starts an HTTP server with graceful shutdown
+// StartServerWithGracefulShutdown starts an HTTP server and blocks until it
+// stops. On SIGINT or SIGTERM it waits up to 30 seconds for active requests to
+// finish before returning.
 func StartServerWithGracefulShutdown(server *http.Server, serviceName string) error {
-	// Graceful shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	serverErr := make(chan error, 1)
 	go func() {
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-		<-sigChan
-
-		slog.Info("Shutting down server...", "service", serviceName)
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer shutdownCancel()
-
-		if err := server.Shutdown(shutdownCtx); err != nil {
-			slog.Error("Server shutdown error", "error", err, "service", serviceName)
-		}
+		slog.Info("Server starting", "service", serviceName, "address", server.Addr)
+		serverErr <- server.ListenAndServe()
 	}()
 
-	slog.Info("Server starting", "service", serviceName, "address", server.Addr)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	select {
+	case err := <-serverErr:
+		// ListenAndServe returned before any signal, so this is always an error.
 		slog.Error("Server failed to start", "error", err, "service", serviceName)
+		return err
+	case <-ctx.Done():
+	}
+
+	slog.Info("Shutting down server...", "service", serviceName)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	// Shutdown returns once active requests finish or shutdownCtx expires.
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("Server shutdown error", "error", err, "service", serviceName)
 		return err
 	}
 	return nil
