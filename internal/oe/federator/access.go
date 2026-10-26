@@ -4,11 +4,11 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	"github.com/openndx/openndx-core/internal/oe/federator/operation"
 	"github.com/openndx/openndx-core/internal/oe/internals/errors"
-	"github.com/openndx/openndx-core/internal/oe/logger"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/policy"
 )
@@ -44,7 +44,7 @@ func rejectWithCode(message, code string) *graphql.Response {
 // skipped and the returned PDP response is nil.
 func (f *Federator) checkPolicy(ctx context.Context, appID string, fields []policy.RequiredField) (context.Context, *policy.PdpResponse, *graphql.Response) {
 	if f.deps.Policy == nil {
-		logger.Log.Warn("PDP client not available, skipping policy check")
+		slog.Warn("PDP client not available, skipping policy check")
 		// Continue without PDP check - this allows the system to work without PDP
 		return ctx, nil, nil
 	}
@@ -58,24 +58,24 @@ func (f *Federator) checkPolicy(ctx context.Context, appID string, fields []poli
 	ctx = f.deps.Auditor.PolicyCheck(ctx, appID, pdpRequest, pdpResponse, err)
 
 	if err != nil {
-		logger.Log.Error("PDP request failed", "error", err)
+		slog.Error("PDP request failed", "error", err)
 		return ctx, nil, rejectWithCode(fmt.Sprintf("Authorization check failed: %v", err), errors.CodePDPError)
 	}
 
 	if pdpResponse == nil {
-		logger.Log.Error("Failed to get response from PDP")
+		slog.Error("Failed to get response from PDP")
 		return ctx, nil, rejectWithCode("No response from authorization service", errors.CodePDPNoResponse)
 	}
 
 	// Log PDP decision for audit trail
-	logger.Log.Info("PDP decision received",
+	slog.Info("PDP decision received",
 		"authorized", pdpResponse.AppAuthorized,
 		"consentRequired", pdpResponse.AppRequiresOwnerConsent,
 		"unauthorizedFieldsCount", len(pdpResponse.UnauthorizedFields),
 		"expiredFieldsCount", len(pdpResponse.ExpiredFields))
 
 	if !pdpResponse.AppAuthorized {
-		logger.Log.Info("Request not authorized by PDP",
+		slog.Info("Request not authorized by PDP",
 			"unauthorizedFields", pdpResponse.UnauthorizedFields)
 		return ctx, nil, reject("Access denied", map[string]interface{}{
 			"code":               errors.CodePDPNotAllowed,
@@ -84,7 +84,7 @@ func (f *Federator) checkPolicy(ctx context.Context, appID string, fields []poli
 	}
 
 	if pdpResponse.AppAccessExpired {
-		logger.Log.Info("Application access expired",
+		slog.Info("Application access expired",
 			"expiredFields", pdpResponse.ExpiredFields)
 		return ctx, nil, reject("Access expired", map[string]interface{}{
 			"code":          errors.CodePDPNotAllowed,
@@ -101,11 +101,11 @@ func (f *Federator) dataOwnerID(op *operation.Operation) (string, *graphql.Respo
 	id, err := op.DataOwnerID(f.opts.FoundationalIdArgName)
 	switch {
 	case stderrors.Is(err, operation.ErrMissingIdentifier):
-		logger.Log.Info("Data Owner ID argument is missing or invalid",
+		slog.Info("Data Owner ID argument is missing or invalid",
 			"foundationalIdArgName", f.opts.FoundationalIdArgName)
 		return "", rejectWithCode("Data Owner ID argument is missing or invalid", errors.CodeMissingEntityIdentifier)
 	case stderrors.Is(err, operation.ErrAmbiguousIdentifier):
-		logger.Log.Info("Conflicting Data Owner ID values found in query",
+		slog.Info("Conflicting Data Owner ID values found in query",
 			"foundationalIdArgName", f.opts.FoundationalIdArgName)
 		return "", rejectWithCode("Conflicting Data Owner ID values in query", errors.CodeAmbiguousEntityIdentifier)
 	}
@@ -115,17 +115,17 @@ func (f *Federator) dataOwnerID(op *operation.Operation) (string, *graphql.Respo
 // checkConsent asks the Consent Engine for dataOwnerID's consent to the fields the
 // PDP marked as requiring it, and rejects the query unless consent is approved.
 func (f *Federator) checkConsent(ctx context.Context, appID, dataOwnerID string, pdpResponse *policy.PdpResponse) (context.Context, *graphql.Response) {
-	logger.Log.Info("Consent required for fields",
+	slog.Info("Consent required for fields",
 		"fieldsCount", len(pdpResponse.ConsentRequiredFields),
 		"fields", pdpResponse.ConsentRequiredFields)
 
 	if len(pdpResponse.ConsentRequiredFields) == 0 {
-		logger.Log.Error("PDP indicates consent required but no fields specified")
+		slog.Error("PDP indicates consent required but no fields specified")
 		return ctx, rejectWithCode("Invalid PDP response: consent required but no fields specified", errors.CodePDPError)
 	}
 
 	if f.deps.Consent == nil {
-		logger.Log.Warn("CE client not available, skipping consent check")
+		slog.Warn("CE client not available, skipping consent check")
 		return ctx, rejectWithCode("Consent required but consent engine not available", errors.CodeCEError)
 	}
 
@@ -160,19 +160,19 @@ func (f *Federator) checkConsent(ctx context.Context, appID, dataOwnerID string,
 	ctx = f.deps.Auditor.ConsentCheck(ctx, appID, dataOwnerID, ceRequest, ceResp, err)
 
 	if err != nil {
-		logger.Log.Info("CE request failed", "error", err)
+		slog.Info("CE request failed", "error", err)
 		return ctx, rejectWithCode("CE request failed", errors.CodeCEError)
 	}
 	if ceResp == nil {
-		logger.Log.Error("Failed to get response from CE")
+		slog.Error("Failed to get response from CE")
 		return ctx, rejectWithCode("Failed to get response from CE", errors.CodeCENoResponse)
 	}
 
-	logger.Log.Info("Consent Response", "response", ceResp)
+	slog.Info("Consent Response", "response", ceResp)
 
 	if ceResp.Status != consent.StatusApproved {
 		// Status is pending or any other non-approved status
-		logger.Log.Info("Consent not approved", "status", ceResp.Status)
+		slog.Info("Consent not approved", "status", ceResp.Status)
 		return ctx, reject("Consent not approved", map[string]interface{}{
 			"code":             errors.CodeCENotApproved,
 			"consentPortalUrl": ceResp.ConsentPortalURL,
@@ -180,6 +180,6 @@ func (f *Federator) checkConsent(ctx context.Context, appID, dataOwnerID string,
 		})
 	}
 
-	logger.Log.Info("Consent approved, proceeding with query execution")
+	slog.Info("Consent approved, proceeding with query execution")
 	return ctx, nil
 }

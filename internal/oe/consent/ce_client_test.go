@@ -7,13 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"github.com/openndx/openndx-core/internal/oe/logger"
 )
-
-func init() {
-	logger.Init()
-}
 
 func TestNewCEServiceClient(t *testing.T) {
 	baseURL := "http://localhost:8080"
