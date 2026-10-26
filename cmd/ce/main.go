@@ -15,7 +15,6 @@ import (
 	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/openndx/openndx-core/internal/ce/handlers"
 	"github.com/openndx/openndx-core/internal/ce/middleware"
-	"github.com/openndx/openndx-core/internal/ce/router"
 	"github.com/openndx/openndx-core/internal/ce/services"
 	"github.com/openndx/openndx-core/internal/database"
 	"github.com/openndx/openndx-core/internal/monitoring"
@@ -100,16 +99,17 @@ func run() error {
 		return requireAuth(ownerSubject(next))
 	}
 
-	// Initialize router and register all routes
-	apiRouter := router.NewRouter(internalHandler, portalHandler, authenticate)
 	mux := http.NewServeMux()
+	// Internal endpoints: called by other services inside the deployment, no token.
+	mux.HandleFunc("GET /internal/api/v1/consents", internalHandler.GetConsent)
+	mux.HandleFunc("POST /internal/api/v1/consents", internalHandler.CreateConsent)
 
-	slog.Info("Registering API routes")
-	apiRouter.RegisterRoutes(mux)
-	slog.Info("API routes registered successfully")
+	// Consent portal endpoints: require a token that identifies the data owner.
+	mux.Handle("GET /api/v1/consents", authenticate(http.HandlerFunc(portalHandler.ListConsents)))
+	mux.Handle("GET /api/v1/consents/{consentId}", authenticate(http.HandlerFunc(portalHandler.GetConsent)))
+	mux.Handle("PUT /api/v1/consents/{consentId}", authenticate(http.HandlerFunc(portalHandler.UpdateConsent)))
 
-	// Register legacy /health endpoint for compatibility with health checks
-	mux.Handle("/health", utils.PanicRecoveryMiddleware(utils.HealthHandler("consent-engine")))
+	mux.Handle("GET /health", utils.HealthHandler("consent-engine"))
 
 	// Register /metrics endpoint for Prometheus scraping
 	mux.Handle("/metrics", monitoring.Handler())
@@ -122,9 +122,10 @@ func run() error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Wrap the mux with metrics (outermost) and then CORS
-	// Metrics must be outermost to capture all requests, including CORS-blocked ones
-	handler := monitoring.HTTPMetricsMiddleware(cors.CORS(&cfg.CORS)(mux))
+	// Wrap the mux with metrics (outermost), then CORS, then panic recovery.
+	// Metrics must be outermost to capture all requests, including CORS-blocked ones;
+	// recovery is innermost so a panic's 500 is counted and carries CORS headers.
+	handler := monitoring.HTTPMetricsMiddleware(cors.CORS(&cfg.CORS)(utils.PanicRecoveryMiddleware(mux)))
 	httpServer := utils.CreateServer(serverConfig, handler)
 
 	// Start server with graceful shutdown

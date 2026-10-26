@@ -320,12 +320,40 @@ func TestConsent_StatusUpdate(t *testing.T) {
 // TestConsent_HealthCheck tests the health check endpoint
 func TestConsent_HealthCheck(t *testing.T) {
 	// Health check endpoint exists
-	resp, err := http.Get(consentBaseURL + "/internal/api/v1/health")
+	resp, err := http.Get(consentBaseURL + "/health")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	// Health check should return 200 OK
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Health check should return 200 OK")
+}
+
+// TestConsent_PortalRoutesRequireAuthentication checks that every consent
+// portal route rejects a request without a valid token.
+func TestConsent_PortalRoutesRequireAuthentication(t *testing.T) {
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/consents"},
+		{http.MethodGet, "/api/v1/consents/consent-1"},
+		{http.MethodPut, "/api/v1/consents/consent-1"},
+	} {
+		for name, authorization := range map[string]string{
+			"missing token": "",
+			"invalid token": "Bearer not-a-jwt",
+		} {
+			t.Run(route.method+" "+route.path+"/"+name, func(t *testing.T) {
+				req, err := http.NewRequest(route.method, consentBaseURL+route.path, nil)
+				require.NoError(t, err)
+				if authorization != "" {
+					req.Header.Set("Authorization", authorization)
+				}
+				resp, err := http.DefaultClient.Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
+
+				assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+			})
+		}
+	}
 }
 
 // TestConsent_DatabaseVerification tests consent creation with database verification

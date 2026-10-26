@@ -24,19 +24,6 @@ func NewInternalHandler(consentService *services.ConsentService) *InternalHandle
 	}
 }
 
-// HealthCheck handles GET /internal/api/v1/health
-func (h *InternalHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		utils.RespondWithError(w, http.StatusMethodNotAllowed, models.ErrorCodeMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	response := map[string]string{
-		"status": "healthy",
-	}
-	utils.RespondWithJSON(w, http.StatusOK, response)
-}
-
 // GetConsent handles GET /internal/api/v1/consents
 // Query parameters: ownerId & appId
 // Returns: models.ConsentResponseInternalView
