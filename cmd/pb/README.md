@@ -30,15 +30,18 @@ curl http://localhost:8083/health
 
 This also starts PostgreSQL and ThunderID, and registers PB's own client (`PORTAL_BACKEND`) in ThunderID.
 
-Native, against your own PostgreSQL, PDP and identity provider:
+Native, against your own PostgreSQL, PDP and identity provider. The service does not create tables, so load the schema into an empty `portal_backend` database first:
 
 ```bash
+PGPASSWORD=<password> psql -h localhost -U postgres -d portal_backend \
+  -v ON_ERROR_STOP=1 -f cmd/pb/schema.sql
+
 cp cmd/pb/config.example.yaml cmd/pb/config.yaml    # once; config.yaml is git-ignored
 export DB_PASSWORD=<password> IDP_CLIENT_SECRET=<secret>
 make run portal-backend    # or: go run ./cmd/pb -config cmd/pb/config.yaml
 ```
 
-[config.example.yaml](config.example.yaml) points at `localhost:5432` as user `postgres`, a PDP on `localhost:8082` and a ThunderID on `localhost:8090`, reads the two secrets from the environment, and creates PB's tables at startup.
+[config.example.yaml](config.example.yaml) points at `localhost:5432` as user `postgres`, a PDP on `localhost:8082` and a ThunderID on `localhost:8090`, and reads the two secrets from the environment. Schema changes go directly into [schema.sql](schema.sql); there is no versioned upgrade path.
 
 ## Configuration
 

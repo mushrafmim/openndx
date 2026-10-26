@@ -65,7 +65,6 @@ func TestLoadConfigAppliesDefaults(t *testing.T) {
 	assert.Empty(t, cfg.IDP.Management.Scopes)
 	assert.Equal(t, AuditConfig{}, cfg.Audit, "auditing is off by default")
 	assert.Equal(t, 30*time.Minute, cfg.Database.IdleTimeout)
-	assert.False(t, cfg.Database.RunMigration)
 
 	pg := cfg.Database.Postgres
 	require.NotNil(t, pg)
@@ -127,7 +126,6 @@ database:
       maxIdleConns: 10
       maxConnLifetimeSeconds: 600
   idleTimeout: 5m
-  runMigration: true
 `)
 
 	cfg, err := loadConfig([]string{"-config", path})
@@ -161,7 +159,6 @@ database:
 	assert.Equal(t, PDPConfig{URL: "https://pdp.example"}, cfg.PDP)
 	assert.Equal(t, AuditConfig{URL: "http://audit.internal:3001", APIKey: "audit-key"}, cfg.Audit)
 	assert.Equal(t, 5*time.Minute, cfg.Database.IdleTimeout)
-	assert.True(t, cfg.Database.RunMigration)
 
 	pg := cfg.Database.Postgres
 	assert.Equal(t, 6543, pg.Port)
@@ -396,9 +393,8 @@ func TestCommittedConfigsLoad(t *testing.T) {
 
 	for _, path := range []string{"config.example.yaml", "config.docker.yaml", "config.test.yaml"} {
 		t.Run(path, func(t *testing.T) {
-			cfg, err := loadConfig([]string{"-config", path})
+			_, err := loadConfig([]string{"-config", path})
 			require.NoError(t, err)
-			assert.True(t, cfg.Database.RunMigration)
 		})
 	}
 }

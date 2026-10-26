@@ -66,8 +66,6 @@ type DatabaseConfig struct {
 	database.Config `yaml:",inline"`
 	// IdleTimeout closes pooled connections that stay idle this long.
 	IdleTimeout time.Duration `yaml:"idleTimeout"`
-	// RunMigration drops legacy columns and auto-migrates PB's tables at startup.
-	RunMigration bool `yaml:"runMigration"`
 }
 
 // defaultConfig returns the values used for any key the config file leaves out.

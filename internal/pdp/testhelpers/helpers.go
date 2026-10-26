@@ -3,7 +3,9 @@ package testhelpers
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -180,14 +182,16 @@ func isDBNotExistError(err error) bool {
 	return strings.Contains(err.Error(), "does not exist") || strings.Contains(err.Error(), "3D000")
 }
 
-// setupDatabase performs migration and cleanup for the test database
+// setupDatabase applies the PDP schema and cleans up the test database
 func setupDatabase(t *testing.T, db *gorm.DB) *gorm.DB {
-	// Auto-migrate all models
-	err := db.AutoMigrate(
-		&models.PolicyMetadata{},
-	)
+	// Apply the same schema file deployments use
+	_, thisFile, _, _ := runtime.Caller(0)
+	schema, err := os.ReadFile(filepath.Join(filepath.Dir(thisFile), "../../../cmd/pdp/schema.sql"))
 	if err != nil {
-		t.Skipf("Skipping test: could not migrate test database: %v", err)
+		t.Fatalf("Failed to read PDP schema: %v", err)
+	}
+	if err := db.Exec(string(schema)).Error; err != nil {
+		t.Skipf("Skipping test: could not apply schema to test database: %v", err)
 		return nil
 	}
 

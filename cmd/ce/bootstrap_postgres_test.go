@@ -31,10 +31,28 @@ func TestBootstrapConsentDatabase(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, admin.Close()) })
 	script, err := os.ReadFile("../../init-db.sql")
 	require.NoError(t, err)
-	schemaPath, err := filepath.Abs("schema.sql")
-	require.NoError(t, err)
-	// Substitute the host path for the schema's container mount location.
-	bootstrap := strings.ReplaceAll(string(script), "/opt/openndx/ce-schema.sql", schemaPath)
+	// Substitute the host paths for the schemas' container mount locations.
+	bootstrap := string(script)
+	for mount, file := range map[string]string{
+		"/opt/openndx/ce-schema.sql":  "schema.sql",
+		"/opt/openndx/pdp-schema.sql": "../pdp/schema.sql",
+		"/opt/openndx/pb-schema.sql":  "../pb/schema.sql",
+	} {
+		schemaPath, err := filepath.Abs(file)
+		require.NoError(t, err)
+		bootstrap = strings.ReplaceAll(bootstrap, mount, schemaPath)
+	}
+	// The script also creates and fills the PDP and PB databases; drop those it creates.
+	for _, name := range []string{"pdp", "portal_backend"} {
+		var existed bool
+		require.NoError(t, admin.QueryRow("SELECT EXISTS (SELECT FROM pg_database WHERE datname = $1)", name).Scan(&existed))
+		if !existed {
+			t.Cleanup(func() {
+				_, err := admin.Exec("DROP DATABASE IF EXISTS " + pgx.Identifier{name}.Sanitize())
+				require.NoError(t, err)
+			})
+		}
+	}
 
 	for _, tc := range []struct {
 		name, value, want string
@@ -98,5 +116,17 @@ func TestBootstrapConsentDatabase(t *testing.T) {
 				require.Equal(t, defaultExisted, defaultExists, "custom bootstrap must not create the default CE database")
 			}
 		})
+	}
+
+	// The other services' databases get their schemas too.
+	for database, table := range map[string]string{"pdp": "policy_metadata", "portal_backend": "members"} {
+		targetCfg := adminCfg.Copy()
+		targetCfg.Database = database
+		target := stdlib.OpenDB(*targetCfg)
+		var found sql.NullString
+		err := target.QueryRow("SELECT to_regclass($1)::text", "public."+table).Scan(&found)
+		require.NoError(t, target.Close())
+		require.NoError(t, err)
+		require.True(t, found.Valid, "%s database must contain the %s table", database, table)
 	}
 }

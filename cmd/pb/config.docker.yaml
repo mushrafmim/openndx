@@ -52,4 +52,3 @@ database:
     name: "{{env:DB_NAME_PB}}"
     sslMode: disable
   idleTimeout: 30m
-  runMigration: true

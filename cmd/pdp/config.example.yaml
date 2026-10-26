@@ -28,6 +28,3 @@ database:
       maxIdleConns: 5
       maxConnLifetimeSeconds: 3600
   idleTimeout: 30m
-  # Creates the enum types and the policy_metadata table. Needed on a fresh
-  # database, and safe to leave on.
-  runMigration: true

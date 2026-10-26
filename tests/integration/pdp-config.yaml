@@ -16,4 +16,3 @@ database:
     password: password
     name: policy_db
     sslMode: disable
-  runMigration: true

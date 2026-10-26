@@ -73,7 +73,8 @@ The audit client library still reads `ENABLE_AUDIT` itself; `false` disables aud
 | `database.postgres.sslMode` | `require` | Use `disable` for a local PostgreSQL without TLS. | `DB_SSLMODE` |
 | `database.postgres.pool.maxOpenConns`, `.maxIdleConns`, `.maxConnLifetimeSeconds` | `25`, `5`, `3600` | Connection pool. | |
 | `database.idleTimeout` | `30m` | Closes connections idle this long. | |
-| `database.runMigration` | `false` | First drops the legacy `members.idp_user_id` column, then auto-migrates `members`, `schemas`, `applications`, `schema_submissions` and `application_submissions`. There are no versioned migrations. | `RUN_MIGRATION` |
+
+PB does not create or migrate tables. Load [schema.sql](schema.sql) into the database before the first start; Compose does this through [init-db.sql](../../init-db.sql). The v0.6 `database.runMigration` key is no longer read.
 
 ## Build metadata
 

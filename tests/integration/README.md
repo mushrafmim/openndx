@@ -81,8 +81,9 @@ tests/integration/
 
 ## Test Scenarios
 
-The CE database container initializes its schema from `../../cmd/ce/schema.sql`,
-the same file used by the root development stack.
+The PDP and CE database containers initialize their schemas from
+`../../cmd/pdp/schema.sql` and `../../cmd/ce/schema.sql`, the same files used by
+the root development stack.
 
 ### GraphQL Flow Tests
 

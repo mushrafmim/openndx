@@ -11,6 +11,10 @@ on:
       - "internal/constants/**"
       - "internal/monitoring/**"
       - "internal/utils/**"
+      # init-db.sql loads every service's schema; the bootstrap test applies it
+      - "init-db.sql"
+      - "cmd/pdp/schema.sql"
+      - "cmd/pb/schema.sql"
       - "go.mod"
       - "go.sum"
       - ".dockerignore"

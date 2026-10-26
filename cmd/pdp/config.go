@@ -38,8 +38,6 @@ type DatabaseConfig struct {
 	database.Config `yaml:",inline"`
 	// IdleTimeout closes pooled connections that stay idle this long.
 	IdleTimeout time.Duration `yaml:"idleTimeout"`
-	// RunMigration creates the enum types and the policy_metadata table at startup.
-	RunMigration bool `yaml:"runMigration"`
 }
 
 // defaultConfig returns the values used for any key the config file leaves out.
