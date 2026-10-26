@@ -42,6 +42,9 @@ changelog:
 
 release:
   prerelease: auto
+  # Hand-written notes in a draft release created before the tag push are
+  # kept; the generated changelog and the footer are appended below them.
+  mode: append
   footer: |
     ## Docker images
 
