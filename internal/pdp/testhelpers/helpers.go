@@ -191,7 +191,7 @@ func setupDatabase(t *testing.T, db *gorm.DB) *gorm.DB {
 		t.Fatalf("Failed to read PDP schema: %v", err)
 	}
 	if err := db.Exec(string(schema)).Error; err != nil {
-		t.Skipf("Skipping test: could not apply schema to test database: %v", err)
+		t.Fatalf("Could not apply PDP schema to test database: %v", err)
 		return nil
 	}
 

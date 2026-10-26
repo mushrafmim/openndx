@@ -76,6 +76,12 @@ The audit client library still reads `ENABLE_AUDIT` itself; `false` disables aud
 
 PB does not create or migrate tables. Load [schema.sql](schema.sql) into the database before the first start; Compose does this through [init-db.sql](../../init-db.sql). The v0.6 `database.runMigration` key is no longer read.
 
+A database that v0.6 migrated already matches `schema.sql` and needs no change. A database created before v0.5 keeps the legacy `members.idp_user_id` column unless v0.5 or v0.6 ran with `runMigration` on, and `schema.sql` does not remove it. Drop it once:
+
+```sql
+ALTER TABLE members DROP COLUMN IF EXISTS idp_user_id;
+```
+
 ## Build metadata
 
 The Dockerfile sets `main.Version`, `main.BuildTime` and `main.GitCommit` with linker flags from the `BUILD_VERSION`, `BUILD_TIME` and `GIT_COMMIT` build arguments. They appear in the startup log and in `GET /debug`.

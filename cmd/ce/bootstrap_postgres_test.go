@@ -84,7 +84,8 @@ func TestBootstrapConsentDatabase(t *testing.T) {
 			require.NoError(t, admin.QueryRowContext(ctx, "SELECT EXISTS (SELECT FROM pg_database WHERE datname = 'consent_engine')").Scan(&defaultExisted))
 			var env []string
 			for _, entry := range os.Environ() {
-				if !strings.HasPrefix(entry, "DB_NAME_CE=") {
+				// Drop DB_NAME_PB too, so the PB schema lands in portal_backend, which this test checks.
+				if !strings.HasPrefix(entry, "DB_NAME_CE=") && !strings.HasPrefix(entry, "DB_NAME_PB=") {
 					env = append(env, entry)
 				}
 			}
