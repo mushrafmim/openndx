@@ -61,26 +61,6 @@ func main() {
 		"port", cfg.Database.Postgres.Port,
 		"database", dbName)
 
-	if cfg.Database.RunMigration {
-		if err := member.DropLegacyColumns(gormDB); err != nil {
-			slog.Error("Failed to run database migrations", "error", err)
-			os.Exit(1)
-		}
-		err = autoMigrate(gormDB,
-			&member.Member{},
-			&schema.Schema{},
-			&application.Application{},
-			&schema.SchemaSubmission{},
-			&application.ApplicationSubmission{},
-		)
-		if err != nil {
-			slog.Error("Failed to run database migrations", "error", err)
-			os.Exit(1)
-		}
-	} else {
-		slog.Info("Database connected (migration skipped)")
-	}
-
 	// Initialize external service clients
 	idpProvider := thunderid.NewClient(cfg.IDP.Management)
 	slog.Info("PDP Service URL", "url", cfg.PDP.URL)

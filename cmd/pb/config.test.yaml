@@ -30,4 +30,3 @@ database:
     password: test_password
     name: portal_backend_test
     sslMode: disable
-  runMigration: true

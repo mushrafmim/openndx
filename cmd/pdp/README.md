@@ -29,15 +29,18 @@ docker compose up --build policy-decision-point
 curl http://localhost:8082/health
 ```
 
-Native, against a local PostgreSQL that already has an empty `pdp` database:
+Native, against a local PostgreSQL with an empty `pdp` database. The service does not create tables, so load the schema first:
 
 ```bash
+PGPASSWORD=<password> psql -h localhost -U postgres -d pdp \
+  -v ON_ERROR_STOP=1 -f cmd/pdp/schema.sql
+
 cp cmd/pdp/config.example.yaml cmd/pdp/config.yaml    # once; config.yaml is git-ignored
 export DB_PASSWORD=<password>
 make run policy-decision-point    # or: go run ./cmd/pdp -config cmd/pdp/config.yaml
 ```
 
-[config.example.yaml](config.example.yaml) points at `localhost:5432` as user `postgres` and reads the password from `DB_PASSWORD`. It sets `runMigration: true`, which creates the enum types and the `policy_metadata` table; a fresh database has no table without it.
+[config.example.yaml](config.example.yaml) points at `localhost:5432` as user `postgres` and reads the password from `DB_PASSWORD`. Schema changes go directly into [schema.sql](schema.sql); there is no versioned upgrade path.
 
 ## Configuration
 
@@ -58,7 +61,6 @@ A value written as `"{{env:NAME}}"` or `"{{file:/path}}"` is read from that envi
 | `database.postgres.sslMode` | `require` | Use `disable` for a local PostgreSQL without TLS. |
 | `database.postgres.pool.maxOpenConns`, `.maxIdleConns`, `.maxConnLifetimeSeconds` | `25`, `5`, `3600` | Connection pool. |
 | `database.idleTimeout` | `30m` | Closes connections idle this long. |
-| `database.runMigration` | `false` | Creates the enum types and the `policy_metadata` table at startup. Safe to leave on. |
 
 The service checks the file at startup and exits with an error naming the bad key. Keys it does not know are ignored, so check the spelling of any key that seems to have no effect.
 
@@ -116,7 +118,7 @@ go test ./cmd/pdp/... ./internal/pdp/... -count=1
 make quality-check policy-decision-point    # format, vet, lint, security
 ```
 
-Tests use an in-memory SQLite database, so no PostgreSQL is needed. The configuration is in [`config.go`](config.go). Code is in [`internal/pdp`](../../internal/pdp): `handler` (HTTP), `services` (decision and metadata logic), `models`, `db` (migration).
+Tests use an in-memory SQLite database, so no PostgreSQL is needed. The configuration is in [`config.go`](config.go). Code is in [`internal/pdp`](../../internal/pdp): `handler` (HTTP), `services` (decision and metadata logic), `models`.
 
 ## More docs
 

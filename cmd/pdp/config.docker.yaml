@@ -20,4 +20,3 @@ database:
     name: pdp
     sslMode: disable
   idleTimeout: 30m
-  runMigration: true

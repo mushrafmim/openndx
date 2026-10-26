@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/openndx/openndx-core/internal/database"
-	"github.com/openndx/openndx-core/internal/pdp/db"
 	"github.com/openndx/openndx-core/internal/pdp/handler"
 	"github.com/openndx/openndx-core/internal/utils"
 )
@@ -62,14 +61,6 @@ func run() error {
 			slog.Info("Database connection closed successfully")
 		}
 	}()
-
-	if cfg.Database.RunMigration {
-		if err := db.Migrate(gormDB); err != nil {
-			return fmt.Errorf("migrate database: %w", err)
-		}
-	} else {
-		slog.Info("Database migration skipped (database.runMigration is false)")
-	}
 
 	// Initialize V1 handlers
 	v1Handler := handler.NewHandler(gormDB)

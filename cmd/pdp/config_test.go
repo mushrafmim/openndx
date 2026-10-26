@@ -41,7 +41,6 @@ func TestLoadConfigAppliesDefaults(t *testing.T) {
 	assert.Equal(t, "info", cfg.Logging.Level)
 	assert.Equal(t, "text", cfg.Logging.Format)
 	assert.Equal(t, 30*time.Minute, cfg.Database.IdleTimeout)
-	assert.False(t, cfg.Database.RunMigration)
 
 	pg := cfg.Database.Postgres
 	require.NotNil(t, pg)
@@ -78,7 +77,6 @@ database:
       maxIdleConns: 10
       maxConnLifetimeSeconds: 600
   idleTimeout: 5m
-  runMigration: true
 `)
 
 	cfg, err := loadConfig([]string{"-config", path})
@@ -87,7 +85,6 @@ database:
 	assert.Equal(t, ServerConfig{Port: 9090, Timeout: 3 * time.Second}, cfg.Server)
 	assert.Equal(t, LoggingConfig{Level: "warn", Format: "json"}, cfg.Logging)
 	assert.Equal(t, 5*time.Minute, cfg.Database.IdleTimeout)
-	assert.True(t, cfg.Database.RunMigration)
 
 	pg := cfg.Database.Postgres
 	assert.Equal(t, 6543, pg.Port)
@@ -237,9 +234,8 @@ func TestCommittedConfigsLoad(t *testing.T) {
 
 	for _, path := range []string{"config.example.yaml", "config.docker.yaml", "../../tests/integration/pdp-config.yaml"} {
 		t.Run(path, func(t *testing.T) {
-			cfg, err := loadConfig([]string{"-config", path})
+			_, err := loadConfig([]string{"-config", path})
 			require.NoError(t, err)
-			assert.True(t, cfg.Database.RunMigration)
 		})
 	}
 }

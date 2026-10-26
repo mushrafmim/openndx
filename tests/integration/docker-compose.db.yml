@@ -6,6 +6,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
       POSTGRES_DB: policy_db
+    volumes:
+      - ../../cmd/pdp/schema.sql:/docker-entrypoint-initdb.d/pdp-schema.sql:ro
     ports:
       - "5433:5432"
     healthcheck:

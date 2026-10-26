@@ -63,5 +63,3 @@ database:
       maxIdleConns: 5
       maxConnLifetimeSeconds: 3600
   idleTimeout: 30m
-  # Drops legacy columns and auto-migrates PB's tables at startup.
-  runMigration: true
