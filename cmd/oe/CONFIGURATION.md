@@ -67,12 +67,12 @@ The OE sends each mapped argument as a variable in the [GraphQL over HTTP](https
 
 ```json
 {
-  "query": "query Querydrp_person_v1($nic: String!) { person(nic: $nic) { fullName } }",
+  "query": "query Querydrp_person_v1($nic: ID!) { person(nic: $nic) { fullName } }",
   "variables": {"nic": "748213"}
 }
 ```
 
-The variable is named after `targetArgName`, with a suffix such as `_2` when two mapped arguments in one query share a name. It is declared with `targetArgType` when set. Otherwise it is declared with the consumer argument's type, made non-null when the value isn't null. The provider rejects the query when that type doesn't fit its argument, so set `targetArgType` when the types differ.
+The variable is named after `targetArgName`, with a suffix such as `_2` when two mapped arguments in one query share a name. It is declared with `targetArgType` when set. Otherwise it is declared with the consumer argument's type, made non-null when the value isn't null. The provider rejects the query when that type doesn't fit its argument, so set `targetArgType` when the types differ. The example above is declared `ID!` because the DRP mapping sets `targetArgType: "ID!"`: the consumer schema declares `nic: String!`, and a `String!` variable can't be passed to the provider's `ID!` argument, even though an inlined string literal could.
 
 ## Environment variables
 
