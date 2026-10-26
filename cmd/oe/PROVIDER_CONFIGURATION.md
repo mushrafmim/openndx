@@ -71,6 +71,8 @@ argMappings:
 
 `sourceArgPath` is the consumer-side argument: the consumer field path from the root, then the argument name, joined with dashes (`personInfo-nic`). `targetArgPath` is the provider field the argument is attached to, a leading part of the provider field path: `person` for `person.fullName`. The argument goes on that field only. Add one mapping per provider argument.
 
+The OE sends the value as a GraphQL variable, `person(nic: $nic)` with `{"variables": {"nic": "748213"}}`, declared with the consumer argument's type (`String!` here). If the provider's argument has a different type, such as `ID!`, set `targetArgType: "ID!"` on the mapping (see [CONFIGURATION.md](CONFIGURATION.md#argmappings)).
+
 ## 4. Declare the fields in the GraphQL schema
 
 Each leaf field the consumer can query carries `@sourceInfo`:

@@ -11,6 +11,7 @@ import (
 	"github.com/openndx/openndx-core/internal/oe/federator/operation"
 	"github.com/openndx/openndx-core/internal/oe/internals/errors"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
+	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
@@ -19,6 +20,8 @@ import (
 type Federator struct {
 	deps Deps
 	opts Options
+	// targetTypes are the parsed targetArgTypes of opts.ArgMapping.
+	targetTypes map[*graphql.ArgMapping]*ast.Type
 }
 
 // createErrorResponse creates a GraphQL error response with the given message and optional extensions
@@ -92,7 +95,7 @@ func (f *Federator) FederateQuery(ctx context.Context, request graphql.Request, 
 		return *denied
 	}
 
-	queryPlan, err := buildPlan(compiled.Schema, op, f.opts.ArgMapping)
+	queryPlan, err := buildPlan(op, f.opts.ArgMapping, f.targetTypes)
 	if err != nil {
 		slog.Info("Failed to plan query", "Error", err)
 		return createErrorResponseWithCode(err.Error(), errors.CodeBadRequest)

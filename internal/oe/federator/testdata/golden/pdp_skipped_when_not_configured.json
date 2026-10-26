@@ -11,7 +11,10 @@
   "providerRequests": {
     "drp-v1": [
       {
-        "query": "query Querydrp_v1 { person ( nic : \"199012345678\" ) { fullName } }"
+        "query": "query Querydrp_v1 ( $nic : String ! ) { person ( nic : $nic ) { fullName } }",
+        "variables": {
+          "nic": "199012345678"
+        }
       }
     ]
   },

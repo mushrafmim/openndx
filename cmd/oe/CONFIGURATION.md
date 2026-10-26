@@ -51,7 +51,7 @@ Each entry is an [`OpenNSW/core/remote`](https://github.com/OpenNSW/core/tree/ma
 
 Each entry maps an argument in the consumer's query to an argument of one provider's query.
 
-All four keys are required.
+The first four keys are required.
 
 | Key | Notes |
 |---|---|
@@ -59,8 +59,20 @@ All four keys are required.
 | `targetArgName` | The argument name the provider expects. |
 | `sourceArgPath` | The consumer-side argument: the consumer field path from the root, then the argument name, joined with dashes. `personInfo-nic` is the `nic` argument of the root field `personInfo`; an argument with the same name on another field doesn't match. |
 | `targetArgPath` | The provider field the argument is attached to: a leading part of the provider field path, for example `person` for the field `person.fullName`. The argument is attached to that field only, not to the fields above it. |
+| `targetArgType` | Optional. The type of the provider's argument in the provider's schema, written as in GraphQL, for example `ID!` or `[String!]`. Set it when the provider's type differs from the consumer's: a different scalar, enum or input type name. The OE exits at startup if it isn't a GraphQL type. |
 
 A mapped argument is sent with every provider field under its `targetArgPath` that is selected below the consumer field carrying the argument. When aliases give the same mapped argument different values, the OE sends a separate provider query for each value.
+
+The OE sends each mapped argument as a variable in the [GraphQL over HTTP](https://graphql.github.io/graphql-over-http/draft/) `variables` member, not written into the query text. The value is the consumer's, after variable defaults and schema defaults are applied, and it may be a list or an input object. For example, with the mapping above, the DRP provider receives:
+
+```json
+{
+  "query": "query Querydrp_person_v1($nic: String!) { person(nic: $nic) { fullName } }",
+  "variables": {"nic": "748213"}
+}
+```
+
+The variable is named after `targetArgName`, with a suffix such as `_2` when two mapped arguments in one query share a name. It is declared with `targetArgType` when set. Otherwise it is declared with the consumer argument's type, made non-null when the value isn't null. The provider rejects the query when that type doesn't fit its argument, so set `targetArgType` when the types differ.
 
 ## Environment variables
 

@@ -49,7 +49,7 @@ directive @sourceInfo(
 ) on FIELD_DEFINITION
 
 type Query {
-	personInfo(nic: String!): PersonInfo
+	personInfo(nic: String!, vehicleFilter: VehicleFilter): PersonInfo
 }
 
 type PersonInfo {
@@ -68,12 +68,18 @@ type VehicleInfo {
 	regNo: String @sourceInfo(schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data.registrationNumber")
 	make: String @sourceInfo(schemaId: "dmt-v1", providerField: "vehicle.getVehicleInfos.data.make")
 }
+
+input VehicleFilter {
+	makes: [String!]
+	registeredAfter: Int
+}
 `
 
 var goldenArgMappings = []*graphql.ArgMapping{
 	{SchemaID: "drp-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "nic"},
 	{SchemaID: "rgd-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "getPersonInfo", TargetArgName: "nic"},
 	{SchemaID: "dmt-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "vehicle.getVehicleInfos", TargetArgName: "ownerNic"},
+	{SchemaID: "dmt-v1", SourceArgPath: "personInfo-vehicleFilter", TargetArgPath: "vehicle.getVehicleInfos", TargetArgName: "filter", TargetArgType: "VehicleFilterInput"},
 }
 
 type goldenProvider struct {
@@ -142,6 +148,26 @@ var goldenCases = []goldenCase{
 		request: graphql.Request{
 			Query:     `query GetPerson($nic: String!) { personInfo(nic: $nic) { fullName birthInfo { place } } }`,
 			Variables: map[string]interface{}{"nic": "199012345678"},
+		},
+	},
+	{
+		// The object and its list are forwarded as they are, with the mapping's targetArgType.
+		name: "variables_object_and_list",
+		request: graphql.Request{
+			Query: `query Vehicles($nic: String!, $filter: VehicleFilter) {
+				personInfo(nic: $nic, vehicleFilter: $filter) { ownedVehicles { regNo make } }
+			}`,
+			Variables: map[string]interface{}{
+				"nic":    "199012345678",
+				"filter": map[string]interface{}{"makes": []interface{}{"Toyota", "Honda"}, "registeredAfter": 2020},
+			},
+		},
+	},
+	{
+		// A variable the request leaves out is forwarded with its default.
+		name: "variable_default",
+		request: graphql.Request{
+			Query: `query GetPerson($nic: String = "199012345678") { personInfo(nic: $nic) { fullName } }`,
 		},
 	},
 	{
@@ -512,7 +538,7 @@ func canonicalQuery(q string) string {
 			}
 			tokens = append(tokens, q[i:j])
 			i = j
-		case c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'):
+		case c == '$' || c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'):
 			j := i + 1
 			for j < len(q) && (q[j] == '_' || (q[j] >= 'a' && q[j] <= 'z') || (q[j] >= 'A' && q[j] <= 'Z') || (q[j] >= '0' && q[j] <= '9')) {
 				j++

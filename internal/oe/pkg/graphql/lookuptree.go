@@ -5,4 +5,7 @@ type ArgMapping struct {
 	SchemaID      string `json:"schemaId" yaml:"schemaId"`
 	SourceArgPath string `json:"sourceArgPath" yaml:"sourceArgPath"`
 	TargetArgPath string `json:"targetArgPath" yaml:"targetArgPath"`
+	// TargetArgType is the provider argument's GraphQL type, such as "ID!". When
+	// empty, the consumer argument's type is used.
+	TargetArgType string `json:"targetArgType,omitempty" yaml:"targetArgType,omitempty"`
 }

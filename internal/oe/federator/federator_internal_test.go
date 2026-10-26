@@ -297,6 +297,14 @@ func TestNew(t *testing.T) {
 		assert.Contains(t, err.Error(), "foundationalIdArgName is not configured")
 	})
 
+	t.Run("fails when a targetArgType isn't a GraphQL type", func(t *testing.T) {
+		_, err := New(Deps{Providers: providers, Schemas: schemas}, Options{
+			FoundationalIdArgName: "nic",
+			ArgMapping:            []*graphql.ArgMapping{{SchemaID: "drp", SourceArgPath: "a-nic", TargetArgPath: "person", TargetArgName: "nic", TargetArgType: "[ID"}},
+		})
+		assert.EqualError(t, err, `fatal configuration error: argMappings[0].targetArgType: "[ID" is not a GraphQL type`)
+	})
+
 	t.Run("succeeds without optional dependencies", func(t *testing.T) {
 		f, err := New(Deps{Providers: providers, Schemas: schemas}, Options{FoundationalIdArgName: "nic"})
 		require.NoError(t, err)
@@ -470,7 +478,8 @@ func TestFederateQuery_InjectedDeps(t *testing.T) {
 		require.Empty(t, resp.Errors)
 		assert.Equal(t, map[string]interface{}{"fullName": "Jane Doe"}, resp.Data["personInfo"])
 		require.Len(t, drp.got, 1)
-		assert.Contains(t, drp.got[0].Query, `nic: "123"`)
+		assert.Contains(t, drp.got[0].Query, `person(nic: $nic)`)
+		assert.Equal(t, map[string]interface{}{"nic": "123"}, drp.got[0].Variables)
 		require.Len(t, auditor.fetches, 1)
 		assert.Equal(t, ProviderFetch{
 			ApplicationID:   "app-123",

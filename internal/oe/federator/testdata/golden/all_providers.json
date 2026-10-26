@@ -45,17 +45,26 @@
   "providerRequests": {
     "dmt-v1": [
       {
-        "query": "query Querydmt_v1 { vehicle { getVehicleInfos ( ownerNic : \"199012345678\" ) { data { registrationNumber } } } }"
+        "query": "query Querydmt_v1 ( $ownerNic : String ! ) { vehicle { getVehicleInfos ( ownerNic : $ownerNic ) { data { registrationNumber } } } }",
+        "variables": {
+          "ownerNic": "199012345678"
+        }
       }
     ],
     "drp-v1": [
       {
-        "query": "query Querydrp_v1 { person ( nic : \"199012345678\" ) { fullName permanentAddress } }"
+        "query": "query Querydrp_v1 ( $nic : String ! ) { person ( nic : $nic ) { fullName permanentAddress } }",
+        "variables": {
+          "nic": "199012345678"
+        }
       }
     ],
     "rgd-v1": [
       {
-        "query": "query Queryrgd_v1 { getPersonInfo ( nic : \"199012345678\" ) { birthDate } }"
+        "query": "query Queryrgd_v1 ( $nic : String ! ) { getPersonInfo ( nic : $nic ) { birthDate } }",
+        "variables": {
+          "nic": "199012345678"
+        }
       }
     ]
   },

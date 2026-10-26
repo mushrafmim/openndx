@@ -41,7 +41,7 @@ func (f *Federator) execute(ctx context.Context, appID string, fetches []*fetch)
 				Query:           ft.query,
 				RequestedFields: ft.fields,
 			}
-			response, err := client.Execute(ctx, graphql.Request{Query: ft.query})
+			response, err := client.Execute(ctx, graphql.Request{Query: ft.query, Variables: ft.variables})
 			if err != nil {
 				slog.Info("Request failed to the Provider", "Schema ID", ft.schemaID, "Error", err)
 				f.deps.Auditor.ProviderFetch(ctx, audit, nil, err)
