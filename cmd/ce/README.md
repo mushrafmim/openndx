@@ -25,7 +25,7 @@ With Docker Compose (from the repo root; starts PostgreSQL and ThunderID first, 
 
 ```bash
 docker compose up --build consent-engine
-curl http://localhost:8081/internal/api/v1/health
+curl http://localhost:8081/health
 ```
 
 Native, against a PostgreSQL with an empty database. The service does not create tables, so load the schema first:
@@ -81,7 +81,6 @@ Full schemas: [openapi.yaml](openapi.yaml). Errors are `{"error": {"code": "..."
 |-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
 | `POST /internal/api/v1/consents`                | Create a consent (`201`). Body: `appId`, `consentRequirement {owner, ownerId, fields[]}`, optional `appName`, `grantDuration`, `consentType`. |
 | `GET /internal/api/v1/consents?ownerId=&appId=` | Latest consent for the pair. Both parameters are required (`400`); `404` if none.                                                             |
-| `GET /internal/api/v1/health`                   | `{"status": "healthy"}`                                                                                                                       |
 
 **Portal API** (Bearer access token; the token's subject claim must equal the consent's `ownerId`):
 
@@ -90,9 +89,8 @@ Full schemas: [openapi.yaml](openapi.yaml). Errors are `{"error": {"code": "..."
 | `GET /api/v1/consents`             | The caller's consents, newest first. `status` (repeatable or comma-separated), `limit` (1-100, default 20), `offset`. |
 | `GET /api/v1/consents/{consentId}` | One consent. `403` if it belongs to someone else.                                                                     |
 | `PUT /api/v1/consents/{consentId}` | Body `{"action": "approve" \| "reject" \| "revoke"}`. `409` if the consent is not in a state that allows the action.  |
-| `GET /api/v1/health`               | Public, no token needed.                                                                                              |
 
-**System:** `GET /health` and `GET /metrics` (Prometheus), both unauthenticated.
+**System:** `GET /health` (`{"service": "consent-engine", "status": "healthy"}`) and `GET /metrics` (Prometheus), both unauthenticated.
 
 ## How it works
 
@@ -122,7 +120,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5432/consent_test?sslm
   go test ./cmd/ce/... ./internal/database -count=1 -v
 ```
 
-Docker image: `docker build -t consent-engine -f cmd/ce/Dockerfile .` from the repo root. The configuration is in [`config.go`](config.go). Code is in [`internal/ce`](../../internal/ce): `router`, `middleware`, `handlers`, `services`, `models`. CORS is [`OpenNSW/core/cors`](https://github.com/OpenNSW/core/tree/main/cors).
+Docker image: `docker build -t consent-engine -f cmd/ce/Dockerfile .` from the repo root. The configuration is in [`config.go`](config.go). Routes are registered in [`main.go`](main.go); the code is in [`internal/ce`](../../internal/ce): `middleware`, `handlers`, `services`, `models`. CORS is [`OpenNSW/core/cors`](https://github.com/OpenNSW/core/tree/main/cors).
 
 ## More docs
 

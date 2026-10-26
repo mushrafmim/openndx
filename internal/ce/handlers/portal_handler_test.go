@@ -28,21 +28,6 @@ func setOwnerSubjectInContext(ctx context.Context, subject string) context.Conte
 	return context.WithValue(ctx, ownerSubjectKey, subject)
 }
 
-func TestPortalHandler_HealthCheck(t *testing.T) {
-	handler := &PortalHandler{consentService: nil}
-
-	req := httptest.NewRequest("GET", "/api/v1/health", nil)
-	w := httptest.NewRecorder()
-
-	handler.HealthCheck(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Equal(t, "healthy", response["status"])
-}
-
 func TestPortalHandler_GetConsent_MissingConsentId(t *testing.T) {
 	handler := &PortalHandler{consentService: nil}
 
@@ -169,17 +154,6 @@ func TestPortalHandler_NewPortalHandler(t *testing.T) {
 	handler := NewPortalHandler(nil)
 	assert.NotNil(t, handler)
 	assert.Nil(t, handler.consentService)
-}
-
-func TestPortalHandler_HealthCheck_MethodNotAllowed(t *testing.T) {
-	handler := &PortalHandler{consentService: nil}
-
-	req := httptest.NewRequest("POST", "/api/v1/health", nil)
-	w := httptest.NewRecorder()
-
-	handler.HealthCheck(w, req)
-
-	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 }
 
 func TestPortalHandler_ListConsents_MethodNotAllowed(t *testing.T) {

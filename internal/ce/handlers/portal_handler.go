@@ -28,19 +28,6 @@ func NewPortalHandler(consentService *services.ConsentService) *PortalHandler {
 	}
 }
 
-// HealthCheck handles GET /api/v1/health
-func (h *PortalHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		utils.RespondWithError(w, http.StatusMethodNotAllowed, models.ErrorCodeMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	response := map[string]string{
-		"status": "healthy",
-	}
-	utils.RespondWithJSON(w, http.StatusOK, response)
-}
-
 // ListConsents handles GET /api/v1/consents
 // Authorization: Bearer Token
 // Lists the consents owned by the authenticated user's subject (UID), newest first.

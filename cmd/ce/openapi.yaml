@@ -36,36 +36,39 @@ servers:
     description: Local Development Environment
 
 tags:
+  - name: Health
+    description: Health check endpoints
   - name: External
     description: External API endpoints (authentication required)
   - name: Internal
     description: Internal API endpoints (no authentication required)
 
 paths:
-  # External APIs (Authorization Required)
-  /api/v1/health:
+  /health:
     get:
-      summary: Health Check (External)
-      description: Check if the external API service is running and healthy.
-      operationId: externalHealthCheck
+      summary: Health check
+      description: Reports that the service is up.
+      operationId: healthCheck
       tags:
-        - External
-      security:
-        - bearerAuth: []
+        - Health
+      security: []
       responses:
         '200':
-          description: Service is healthy
+          description: Successful health response
           content:
             application/json:
               schema:
                 type: object
                 properties:
+                  service:
+                    type: string
                   status:
                     type: string
-                    example: healthy
-                required:
-                  - status
+                example:
+                  service: consent-engine
+                  status: healthy
 
+  # External APIs (Authorization Required)
   /api/v1/consents:
     get:
       summary: List My Consents
@@ -394,28 +397,6 @@ paths:
                   message: "An unexpected error occurred"
 
   # Internal APIs (No Authorization Required)
-  /internal/api/v1/health:
-    get:
-      summary: Health Check (Internal)
-      description: Check if the internal API service is running and healthy.
-      operationId: internalHealthCheck
-      tags:
-        - Internal
-      security: []
-      responses:
-        '200':
-          description: Service is healthy
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: healthy
-                required:
-                  - status
-
   /internal/api/v1/consents:
     get:
       summary: Get Consent by Owner and App
