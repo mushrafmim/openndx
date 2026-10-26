@@ -52,7 +52,7 @@ func PanicRecoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				slog.Error("Handler panicked", "error", err, "path", r.URL.Path)
+				slog.ErrorContext(r.Context(), "Handler panicked", "error", err, "path", r.URL.Path)
 				RespondWithError(w, http.StatusInternalServerError, "Internal server error")
 			}
 		}()

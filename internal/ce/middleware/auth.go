@@ -38,12 +38,13 @@ func OwnerSubject(claim string) func(http.Handler) http.Handler {
 				subject = authCtx.ExtraClaims().String(claim)
 			}
 			if subject == "" {
-				slog.Warn("Token has no owner subject claim", "claim", claim)
+				slog.WarnContext(r.Context(), "Token has no owner subject claim", "claim", claim)
 				utils.RespondWithError(w, http.StatusUnauthorized, models.ErrorCodeUnauthorized, "Token does not identify the data owner")
 				return
 			}
 
-			slog.Debug("User authenticated", "subject", subject)
+			// The subject identifies the data owner (e.g. a NIC), so it stays out of logs.
+			slog.DebugContext(r.Context(), "Data owner authenticated", "claim", claim)
 			next.ServeHTTP(w, r.WithContext(WithOwnerSubject(r.Context(), subject)))
 		})
 	}

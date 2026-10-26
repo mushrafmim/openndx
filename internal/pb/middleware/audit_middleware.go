@@ -25,7 +25,7 @@ func LogAudit(client audit.Auditor, r *http.Request, resource string, resourceID
 	actorType, actorIDPtr, _ := extractActorInfoFromRequest(r)
 	if actorIDPtr == nil {
 		// If no actor ID, we can't log the event (required field)
-		slog.Warn("Cannot log audit event: no actor ID found")
+		slog.WarnContext(r.Context(), "Cannot log audit event: no actor ID found")
 		return
 	}
 	actorID := *actorIDPtr
@@ -79,7 +79,7 @@ func extractActorInfoFromRequest(r *http.Request) (actorType string, actorID *st
 		// This prevents misclassification and ensures unauthenticated actions are clearly marked
 		systemActorID := "unauthenticated-request"
 		systemActorType := string(ActorTypeSystem)
-		slog.Warn("Audit log for unauthenticated request - using SYSTEM actor type",
+		slog.WarnContext(r.Context(), "Audit log for unauthenticated request - using SYSTEM actor type",
 			"path", r.URL.Path,
 			"method", r.Method,
 			"remote_addr", r.RemoteAddr)
@@ -116,7 +116,7 @@ func LogAuditEvent(r *http.Request, resource string, resourceID *string, status 
 	if globalMiddleware != nil {
 		LogAudit(globalMiddleware.Client(), r, resource, resourceID, status)
 	} else {
-		slog.Warn("Audit logging skipped: globalAuditMiddleware is not initialized")
+		slog.WarnContext(r.Context(), "Audit logging skipped: globalAuditMiddleware is not initialized")
 	}
 }
 

@@ -62,13 +62,13 @@ func (f *Federator) FederateQuery(ctx context.Context, request graphql.Request, 
 
 	query, invalid := parseQuery(request.Query)
 	if invalid != nil {
-		slog.Info("Failed to parse query", "errors", invalid.Errors)
+		slog.InfoContext(ctx, "Failed to parse query", "errors", invalid.Errors)
 		return *invalid
 	}
 
 	compiled, err := f.deps.Schemas.Active(ctx)
 	if err != nil {
-		slog.Error("Failed to load the active schema", "Error", err)
+		slog.ErrorContext(ctx, "Failed to load the active schema", "Error", err)
 		return graphql.Response{
 			Data: nil,
 			Errors: []interface{}{
@@ -80,24 +80,24 @@ func (f *Federator) FederateQuery(ctx context.Context, request graphql.Request, 
 	}
 
 	if invalid := validateQuery(compiled.Schema, query); invalid != nil {
-		slog.Info("Query failed validation against the schema", "errors", invalid.Errors)
+		slog.InfoContext(ctx, "Query failed validation against the schema", "errors", invalid.Errors)
 		return *invalid
 	}
 
 	op, err := operation.Build(compiled, query, request.OperationName, request.Variables)
 	if err != nil {
-		slog.Info("Failed to normalize query", "Error", err)
+		slog.InfoContext(ctx, "Failed to normalize query", "Error", err)
 		return operationErrorResponse(err)
 	}
 
-	dataOwnerID, denied := f.dataOwnerID(op)
+	dataOwnerID, denied := f.dataOwnerID(ctx, op)
 	if denied != nil {
 		return *denied
 	}
 
 	queryPlan, err := buildPlan(op, f.opts.ArgMapping, f.targetTypes)
 	if err != nil {
-		slog.Info("Failed to plan query", "Error", err)
+		slog.InfoContext(ctx, "Failed to plan query", "Error", err)
 		return createErrorResponseWithCode(err.Error(), errors.CodeBadRequest)
 	}
 
@@ -107,7 +107,7 @@ func (f *Federator) FederateQuery(ctx context.Context, request graphql.Request, 
 	}
 
 	if len(queryPlan.fetches) == 0 {
-		slog.Info("No valid service queries found in the request")
+		slog.InfoContext(ctx, "No valid service queries found in the request")
 		return createErrorResponse("No valid service queries found in the request", nil)
 	}
 

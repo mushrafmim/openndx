@@ -31,14 +31,14 @@ func (c *CEServiceClient) CreateConsent(ctx context.Context, request *CreateCons
 	// Implementation of the method to send HTTP request to create consent
 	requestBody, err := json.Marshal(request)
 	if err != nil {
-		slog.Error("Failed to marshal CreateConsentRequest", "error", err)
+		slog.ErrorContext(ctx, "Failed to marshal CreateConsentRequest", "error", err)
 		return nil, err
 	}
 
-	slog.Info("Making Create Consent Request to Consent Engine", "url", c.baseURL+consentEndpointPath)
+	slog.InfoContext(ctx, "Making Create Consent Request to Consent Engine", "url", c.baseURL+consentEndpointPath)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+consentEndpointPath, bytes.NewBuffer(requestBody))
 	if err != nil {
-		slog.Error("Failed to create HTTP request for CreateConsent", "error", err)
+		slog.ErrorContext(ctx, "Failed to create HTTP request for CreateConsent", "error", err)
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -51,7 +51,7 @@ func (c *CEServiceClient) CreateConsent(ctx context.Context, request *CreateCons
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		slog.Error("Failed to send HTTP request for CreateConsent", "error", err)
+		slog.ErrorContext(ctx, "Failed to send HTTP request for CreateConsent", "error", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -59,16 +59,16 @@ func (c *CEServiceClient) CreateConsent(ctx context.Context, request *CreateCons
 	if resp.StatusCode != http.StatusCreated {
 		var errorBody bytes.Buffer
 		if _, err := errorBody.ReadFrom(resp.Body); err != nil {
-			slog.Error("Failed to read error response body", "error", err)
+			slog.ErrorContext(ctx, "Failed to read error response body", "error", err)
 		}
 		errorMsg := errorBody.String()
-		slog.Error("Failed to create consent", "status", resp.StatusCode, "response", errorMsg)
+		slog.ErrorContext(ctx, "Failed to create consent", "status", resp.StatusCode, "response", errorMsg)
 		return nil, fmt.Errorf("failed to create consent, status code: %d, response: %s", resp.StatusCode, errorMsg)
 	}
 
 	var consentResponse ConsentResponseInternalView
 	if err := json.NewDecoder(resp.Body).Decode(&consentResponse); err != nil {
-		slog.Error("Failed to decode CreateConsent response", "error", err)
+		slog.ErrorContext(ctx, "Failed to decode CreateConsent response", "error", err)
 		return nil, err
 	}
 

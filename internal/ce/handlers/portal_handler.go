@@ -69,11 +69,11 @@ func (h *PortalHandler) ListConsents(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Check if error is due to context cancellation or timeout
 		if r.Context().Err() != nil {
-			slog.Warn("Request context cancelled during service call", "error", r.Context().Err())
+			slog.WarnContext(r.Context(), "Request context cancelled during service call", "error", r.Context().Err())
 			utils.RespondWithError(w, http.StatusRequestTimeout, models.ErrorCodeInternalError, "Request timeout or cancelled")
 			return
 		}
-		slog.Error("Failed to list consents", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to list consents", "error", err)
 		utils.RespondWithError(w, http.StatusInternalServerError, models.ErrorCodeInternalError, "An unexpected error occurred")
 		return
 	}
@@ -147,7 +147,7 @@ func (h *PortalHandler) GetConsent(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Check if error is due to context cancellation or timeout
 		if r.Context().Err() != nil {
-			slog.Warn("Request context cancelled during service call", "error", r.Context().Err())
+			slog.WarnContext(r.Context(), "Request context cancelled during service call", "error", r.Context().Err())
 			utils.RespondWithError(w, http.StatusRequestTimeout, models.ErrorCodeInternalError, "Request timeout or cancelled")
 			return
 		}
@@ -159,7 +159,7 @@ func (h *PortalHandler) GetConsent(w http.ResponseWriter, r *http.Request) {
 			utils.RespondWithError(w, http.StatusForbidden, models.ErrorCodeForbidden, "Access denied: consent belongs to a different user")
 			return
 		}
-		slog.Error("Failed to get consent", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to get consent", "error", err)
 		utils.RespondWithError(w, http.StatusInternalServerError, models.ErrorCodeInternalError, "An unexpected error occurred")
 		return
 	}
@@ -231,7 +231,7 @@ func (h *PortalHandler) UpdateConsent(w http.ResponseWriter, r *http.Request) {
 	if err := h.consentService.UpdateConsentStatusByPortalAction(r.Context(), updateReq); err != nil {
 		// Check if error is due to context cancellation or timeout
 		if r.Context().Err() != nil {
-			slog.Warn("Request context cancelled during update operation", "error", r.Context().Err())
+			slog.WarnContext(r.Context(), "Request context cancelled during update operation", "error", r.Context().Err())
 			utils.RespondWithError(w, http.StatusRequestTimeout, models.ErrorCodeInternalError, "Request timeout or cancelled")
 			return
 		}
@@ -255,7 +255,7 @@ func (h *PortalHandler) UpdateConsent(w http.ResponseWriter, r *http.Request) {
 			utils.RespondWithError(w, http.StatusBadRequest, models.ErrorCodeBadRequest, "Invalid consent update request")
 			return
 		}
-		slog.Error("Failed to update consent", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to update consent", "error", err)
 		utils.RespondWithError(w, http.StatusInternalServerError, models.ErrorCodeInternalError, "An unexpected error occurred")
 		return
 	}

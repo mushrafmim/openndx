@@ -54,7 +54,7 @@ func (h *InternalHandler) GetConsent(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Check if error is due to context cancellation or timeout
 		if r.Context().Err() != nil {
-			slog.Warn("Request context cancelled during service call", "error", r.Context().Err())
+			slog.WarnContext(r.Context(), "Request context cancelled during service call", "error", r.Context().Err())
 			utils.RespondWithError(w, http.StatusRequestTimeout, models.ErrorCodeInternalError, "Request timeout or cancelled")
 			return
 		}
@@ -62,7 +62,7 @@ func (h *InternalHandler) GetConsent(w http.ResponseWriter, r *http.Request) {
 			utils.RespondWithError(w, http.StatusNotFound, models.ErrorCodeConsentNotFound, err.Error())
 			return
 		}
-		slog.Error("Failed to get consent", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to get consent", "error", err)
 		utils.RespondWithError(w, http.StatusInternalServerError, models.ErrorCodeInternalError, "An unexpected error occurred")
 		return
 	}
@@ -92,16 +92,16 @@ func (h *InternalHandler) CreateConsent(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		// Check if error is due to context cancellation or timeout
 		if r.Context().Err() != nil {
-			slog.Warn("Request context cancelled during service call", "error", r.Context().Err())
+			slog.WarnContext(r.Context(), "Request context cancelled during service call", "error", r.Context().Err())
 			utils.RespondWithError(w, http.StatusRequestTimeout, models.ErrorCodeInternalError, "Request timeout or cancelled")
 			return
 		}
 		if errors.Is(err, models.ErrConsentCreateFailed) {
-			slog.Error("Failed to create consent", "error", err)
+			slog.ErrorContext(r.Context(), "Failed to create consent", "error", err)
 			utils.RespondWithError(w, http.StatusBadRequest, models.ErrorCodeBadRequest, err.Error())
 			return
 		}
-		slog.Error("Failed to create consent", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to create consent", "error", err)
 		utils.RespondWithError(w, http.StatusInternalServerError, models.ErrorCodeInternalError, "An unexpected error occurred")
 		return
 	}
