@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openndx/openndx-core/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,8 +39,8 @@ func TestLoadConfigAppliesDefaults(t *testing.T) {
 
 	assert.Equal(t, 8082, cfg.Server.Port)
 	assert.Equal(t, 10*time.Second, cfg.Server.Timeout)
-	assert.Equal(t, "info", cfg.Logging.Level)
-	assert.Equal(t, "text", cfg.Logging.Format)
+	assert.Empty(t, cfg.Environment)
+	assert.Equal(t, logging.Config{Level: "info", Format: "json"}, cfg.Logging)
 	assert.Equal(t, 30*time.Minute, cfg.Database.IdleTimeout)
 
 	pg := cfg.Database.Postgres
@@ -60,9 +61,10 @@ func TestLoadConfigReadsEverySetting(t *testing.T) {
 server:
   port: 9090
   timeout: 3s
+environment: staging
 logging:
   level: warn
-  format: json
+  format: text
 database:
   driver: postgres
   postgres:
@@ -83,7 +85,8 @@ database:
 	require.NoError(t, err)
 
 	assert.Equal(t, ServerConfig{Port: 9090, Timeout: 3 * time.Second}, cfg.Server)
-	assert.Equal(t, LoggingConfig{Level: "warn", Format: "json"}, cfg.Logging)
+	assert.Equal(t, "staging", cfg.Environment)
+	assert.Equal(t, logging.Config{Level: "warn", Format: "text"}, cfg.Logging)
 	assert.Equal(t, 5*time.Minute, cfg.Database.IdleTimeout)
 
 	pg := cfg.Database.Postgres

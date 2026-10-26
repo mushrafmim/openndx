@@ -6,6 +6,8 @@ server:
   port: 8083
   timeout: 15s
 
+environment: local
+
 logging:
   level: info
   format: json

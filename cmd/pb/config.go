@@ -11,6 +11,7 @@ import (
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/shared/validation"
 	"github.com/openndx/openndx-core/internal/authn"
+	"github.com/openndx/openndx-core/internal/logging"
 	"github.com/openndx/openndx-core/internal/pb/idp/thunderid"
 )
 
@@ -19,13 +20,16 @@ const defaultConfigPath = "config.yaml"
 
 // Config is PB's configuration, loaded from a single YAML file.
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Logging  LoggingConfig  `yaml:"logging"`
-	CORS     cors.Config    `yaml:"cors"`
-	IDP      IDPConfig      `yaml:"idp"`
-	PDP      PDPConfig      `yaml:"pdp"`
-	Audit    AuditConfig    `yaml:"audit"`
-	Database DatabaseConfig `yaml:"database"`
+	Server ServerConfig `yaml:"server"`
+	// Environment names the deployment (e.g. local, staging, production). Log
+	// lines carry it when it is set.
+	Environment string         `yaml:"environment"`
+	Logging     logging.Config `yaml:"logging"`
+	CORS        cors.Config    `yaml:"cors"`
+	IDP         IDPConfig      `yaml:"idp"`
+	PDP         PDPConfig      `yaml:"pdp"`
+	Audit       AuditConfig    `yaml:"audit"`
+	Database    DatabaseConfig `yaml:"database"`
 }
 
 // ServerConfig holds the HTTP server settings.
@@ -33,12 +37,6 @@ type ServerConfig struct {
 	Port int `yaml:"port"`
 	// Timeout bounds reading a request and writing its response.
 	Timeout time.Duration `yaml:"timeout"`
-}
-
-// LoggingConfig holds the log level (debug, info, warn, error) and format (text, json).
-type LoggingConfig struct {
-	Level  string `yaml:"level"`
-	Format string `yaml:"format"`
 }
 
 // IDPConfig holds PB's two uses of the identity provider.
@@ -72,7 +70,7 @@ type DatabaseConfig struct {
 func defaultConfig() Config {
 	return Config{
 		Server:  ServerConfig{Port: 8083, Timeout: 15 * time.Second},
-		Logging: LoggingConfig{Level: "info", Format: "json"},
+		Logging: logging.DefaultConfig(),
 		CORS: cors.Config{
 			AllowedOrigins: []string{"http://localhost:5173"},
 			AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
@@ -133,15 +131,8 @@ func (c *Config) Validate() error {
 	if c.Server.Timeout <= 0 {
 		return fmt.Errorf("server.timeout must be positive")
 	}
-	switch c.Logging.Level {
-	case "debug", "info", "warn", "error":
-	default:
-		return fmt.Errorf("logging.level must be debug, info, warn or error")
-	}
-	switch c.Logging.Format {
-	case "text", "json":
-	default:
-		return fmt.Errorf("logging.format must be text or json")
+	if err := c.Logging.Validate(); err != nil {
+		return err
 	}
 	if err := c.CORS.Validate(); err != nil {
 		return fmt.Errorf("invalid cors configuration: %w", err)

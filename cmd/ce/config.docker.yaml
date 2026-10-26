@@ -6,9 +6,11 @@ server:
   port: 8081
   timeout: 10s
 
+environment: local
+
 logging:
-  level: debug
-  format: text
+  level: info
+  format: json
 
 consentPortalURL: "{{env:CONSENT_PORTAL_URL}}"
 

@@ -5,8 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
-	"os"
+	"log/slog"
 	"time"
 
 	coredb "github.com/OpenNSW/core/database"
@@ -62,7 +61,9 @@ func wrapGORM(sqlDB *sql.DB) (*gorm.DB, error) {
 		// Translate driver errors (e.g. unique violations) into gorm.Err*
 		// sentinels, so callers can map them without inspecting driver errors.
 		TranslateError: true,
-		Logger: logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
+		// Log through the service's slog logger, so GORM's lines share its
+		// format and fields.
+		Logger: logger.NewSlogLogger(slog.Default(), logger.Config{
 			SlowThreshold: 200 * time.Millisecond, LogLevel: logger.Warn,
 			IgnoreRecordNotFoundError: true, ParameterizedQueries: true,
 		}),

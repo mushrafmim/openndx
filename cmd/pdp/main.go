@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/openndx/openndx-core/internal/database"
+	"github.com/openndx/openndx-core/internal/logging"
 	"github.com/openndx/openndx-core/internal/pdp/handler"
 	"github.com/openndx/openndx-core/internal/utils"
 )
@@ -41,12 +42,10 @@ func run() error {
 		return fmt.Errorf("load configuration: %w", err)
 	}
 
-	// Setup logging
-	utils.SetupLogging(cfg.Logging.Format, cfg.Logging.Level)
+	logging.Setup(cfg.Logging, "policy-decision-point", cfg.Environment, Version)
 
 	slog.Info("Starting policy decision point",
 		"port", cfg.Server.Port,
-		"version", Version,
 		"build_time", BuildTime,
 		"git_commit", GitCommit)
 
@@ -163,7 +162,7 @@ func run() error {
 	server := utils.CreateServer(serverConfig, utils.PanicRecoveryMiddleware(mux))
 
 	// Start server with graceful shutdown
-	if err := utils.StartServerWithGracefulShutdown(server, "policy-decision-point"); err != nil {
+	if err := utils.StartServerWithGracefulShutdown(server); err != nil {
 		return fmt.Errorf("server failed: %w", err)
 	}
 	return nil

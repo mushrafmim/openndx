@@ -44,7 +44,7 @@ The OE reads one YAML file (`-config`, else `CONFIG_PATH`, else `config.yaml`) a
 
 | `config.yaml` key | Meaning |
 |---|---|
-| `server`, `logging` | Port (default `4000`) and request timeout; log level and format. |
+| `server`, `environment`, `logging` | Port (default `4000`) and request timeout; deployment name on log lines; log level and format. |
 | `schemaPath` | The consumer schema file; default `schema.graphql`, resolved against the directory of the config file. |
 | `foundationalIdArgName` | **Required.** Name of the query argument that identifies the data owner, for example `nic`. |
 | `idp` | **Required.** Consumer token validation: `jwksURL`, `issuer`, `audience`. See [AUTHENTICATION.md](AUTHENTICATION.md). |

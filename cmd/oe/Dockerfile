@@ -7,6 +7,11 @@ RUN apk add --no-cache git ca-certificates
 # Set working directory
 WORKDIR /app
 
+# Build arguments
+ARG BUILD_VERSION=latest
+ARG BUILD_TIME
+ARG GIT_COMMIT
+
 # Copy go mod files first for better layer caching
 COPY go.mod go.sum ./
 RUN go mod download
@@ -14,8 +19,10 @@ RUN go mod download
 # Copy source code (this layer is invalidated only on code changes)
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/orchestration-engine ./cmd/oe
+# Build the application with build info
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags="-X main.Version=${BUILD_VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
+    -o /app/orchestration-engine ./cmd/oe
 
 # Final stage
 FROM alpine:latest

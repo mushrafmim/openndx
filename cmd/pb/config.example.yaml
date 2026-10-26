@@ -10,9 +10,12 @@ server:
   port: 8083
   timeout: 15s
 
+# Names the deployment on every log line; leave it out to omit the field.
+environment: local
+
 logging:
   level: debug # debug, info, warn or error
-  format: text # text or json
+  format: text # json (the default) or text
 
 cors:
   # Browser origins of the member and admin portals. "*" is rejected while

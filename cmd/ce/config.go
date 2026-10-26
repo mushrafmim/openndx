@@ -12,6 +12,7 @@ import (
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/openndx/openndx-core/internal/authn"
+	"github.com/openndx/openndx-core/internal/logging"
 )
 
 // defaultConfigPath is used when neither -config nor CONFIG_PATH is set.
@@ -19,8 +20,11 @@ const defaultConfigPath = "config.yaml"
 
 // Config is the CE's configuration, loaded from a single YAML file.
 type Config struct {
-	Server  ServerConfig  `yaml:"server"`
-	Logging LoggingConfig `yaml:"logging"`
+	Server ServerConfig `yaml:"server"`
+	// Environment names the deployment (e.g. local, staging, production). Log
+	// lines carry it when it is set.
+	Environment string         `yaml:"environment"`
+	Logging     logging.Config `yaml:"logging"`
 	// ConsentPortalURL is where data owners decide on consents. Consent links
 	// are <url>?consentId=<uuid>, and its origin is always an allowed CORS origin.
 	ConsentPortalURL string         `yaml:"consentPortalURL"`
@@ -34,12 +38,6 @@ type ServerConfig struct {
 	Port int `yaml:"port"`
 	// Timeout bounds reading a request and writing its response.
 	Timeout time.Duration `yaml:"timeout"`
-}
-
-// LoggingConfig holds the log level (debug, info, warn, error) and format (text, json).
-type LoggingConfig struct {
-	Level  string `yaml:"level"`
-	Format string `yaml:"format"`
 }
 
 // IDPConfig holds the configuration for validating consent-portal tokens.
@@ -62,7 +60,7 @@ type DatabaseConfig struct {
 func defaultConfig() Config {
 	return Config{
 		Server:  ServerConfig{Port: 8081, Timeout: 10 * time.Second},
-		Logging: LoggingConfig{Level: "info", Format: "text"},
+		Logging: logging.DefaultConfig(),
 		CORS: cors.Config{
 			AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
 			AllowedHeaders: []string{
@@ -136,15 +134,8 @@ func (c *Config) Validate() error {
 	if c.Server.Timeout <= 0 {
 		return fmt.Errorf("server.timeout must be positive")
 	}
-	switch c.Logging.Level {
-	case "debug", "info", "warn", "error":
-	default:
-		return fmt.Errorf("logging.level must be debug, info, warn or error")
-	}
-	switch c.Logging.Format {
-	case "text", "json":
-	default:
-		return fmt.Errorf("logging.format must be text or json")
+	if err := c.Logging.Validate(); err != nil {
+		return err
 	}
 	portal, err := url.Parse(c.ConsentPortalURL)
 	if err != nil || portal.Scheme == "" || portal.Host == "" {
