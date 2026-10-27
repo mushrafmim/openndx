@@ -4,11 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"maps"
-	"math"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/openndx/openndx-core/internal/oe/federator/operation"
@@ -16,6 +13,7 @@ import (
 	"github.com/openndx/openndx-core/internal/oe/policy"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/formatter"
+	"github.com/vektah/gqlparser/v2/parser"
 )
 
 // plan is the set of provider operations that answer a normalized consumer
@@ -31,8 +29,11 @@ type plan struct {
 // fetch is one provider operation.
 type fetch struct {
 	schemaID string
-	// query is the printed provider operation.
+	// query is the printed provider operation. It declares one variable per
+	// mapped argument, so its text doesn't depend on the argument values.
 	query string
+	// variables are the values of the operation's variables.
+	variables map[string]any
 	// fields are the provider field paths the operation reads, in query order.
 	fields []string
 	// consumerFields are the consumer fields served directly by this fetch, used
@@ -44,11 +45,13 @@ type fetch struct {
 	args []providerArgument
 }
 
-// providerArgument is a mapped argument attached to the provider field at path.
+// providerArgument is a mapped argument attached to the provider field at path,
+// sent as a variable of type typ.
 type providerArgument struct {
 	path  string
 	name  string
-	value *ast.Value
+	typ   *ast.Type
+	value any
 }
 
 // elementScope is the provider list whose items the fields inside a consumer list
@@ -64,21 +67,50 @@ type elementScope struct {
 
 // buildPlan plans the provider operations for op. Each argument mapping is
 // attached only at its targetArgPath, with the value bound from the consumer
-// field that carries it or one of its ancestors.
-func buildPlan(compiled *ast.Schema, op *operation.Operation, mappings []*graphql.ArgMapping) (*plan, error) {
+// field that carries it or one of its ancestors. targetTypes holds the parsed
+// targetArgType of the mappings that set one.
+func buildPlan(op *operation.Operation, mappings []*graphql.ArgMapping, targetTypes map[*graphql.ArgMapping]*ast.Type) (*plan, error) {
 	p := &planner{
-		schema:   compiled,
-		bindings: op.BindArguments(mappings),
-		plan:     &plan{sources: map[*operation.Field]*fetch{}},
-		byKey:    map[string]*fetch{},
+		targetTypes: targetTypes,
+		bindings:    op.BindArguments(mappings),
+		plan:        &plan{sources: map[*operation.Field]*fetch{}},
+		byKey:       map[string]*fetch{},
 	}
 	if err := p.fields(op.Fields, nil); err != nil {
 		return nil, err
 	}
 	for _, f := range p.plan.fetches {
-		f.query = f.print()
+		f.query, f.variables = f.print()
 	}
 	return p.plan, nil
+}
+
+// targetArgTypes parses the targetArgType of each mapping that sets one.
+func targetArgTypes(mappings []*graphql.ArgMapping) (map[*graphql.ArgMapping]*ast.Type, error) {
+	types := map[*graphql.ArgMapping]*ast.Type{}
+	for i, mapping := range mappings {
+		if mapping == nil || mapping.TargetArgType == "" {
+			continue
+		}
+		typ, err := parseType(mapping.TargetArgType)
+		if err != nil {
+			return nil, fmt.Errorf("argMappings[%d].targetArgType: %w", i, err)
+		}
+		types[mapping] = typ
+	}
+	return types, nil
+}
+
+// parseType parses a GraphQL type reference such as "[String!]!".
+func parseType(s string) (*ast.Type, error) {
+	doc, err := parser.ParseQuery(&ast.Source{Input: "query($v: " + s + ") { __typename }"})
+	if err == nil && len(doc.Operations) == 1 && len(doc.Operations[0].VariableDefinitions) == 1 {
+		// The round trip rejects anything after the type, such as a default value.
+		if typ := doc.Operations[0].VariableDefinitions[0].Type; typ.String() == strings.Join(strings.Fields(s), "") {
+			return typ, nil
+		}
+	}
+	return nil, fmt.Errorf("%q is not a GraphQL type", s)
 }
 
 // requiredFields returns the provider fields the PDP must authorize: every leaf
@@ -99,10 +131,10 @@ func (p *plan) requiredFields() []policy.RequiredField {
 }
 
 type planner struct {
-	schema   *ast.Schema
-	bindings []operation.ArgumentBinding
-	plan     *plan
-	byKey    map[string]*fetch
+	targetTypes map[*graphql.ArgMapping]*ast.Type
+	bindings    []operation.ArgumentBinding
+	plan        *plan
+	byKey       map[string]*fetch
 }
 
 // fields plans fields. scope is nil outside a provider list.
@@ -171,7 +203,11 @@ func (p *planner) fetchFor(field *operation.Field) (*fetch, error) {
 	var key strings.Builder
 	key.WriteString(info.SchemaID)
 	for _, arg := range args {
-		key.WriteString("\x00" + arg.path + "\x00" + arg.name + "\x00" + arg.value.String())
+		value, err := json.Marshal(arg.value)
+		if err != nil {
+			return nil, fmt.Errorf("argument %s of %s: %w", arg.name, arg.path, err)
+		}
+		key.WriteString("\x00" + arg.path + "\x00" + arg.name + "\x00" + arg.typ.String() + "\x00" + string(value))
 	}
 	if f, ok := p.byKey[key.String()]; ok {
 		return f, nil
@@ -209,17 +245,14 @@ func (p *planner) arguments(field *operation.Field) ([]providerArgument, error) 
 		}
 		seen[id] = true
 
-		segments := strings.Split(mapping.SourceArgPath, "-")
-		argDef := binding.Field.Definition.Arguments.ForName(segments[len(segments)-1])
-		var argType *ast.Type
-		if argDef != nil {
-			argType = argDef.Type
+		typ := p.targetTypes[mapping]
+		if typ == nil {
+			var err error
+			if typ, err = consumerArgType(binding); err != nil {
+				return nil, err
+			}
 		}
-		value, err := astValue(binding.Value, argType, p.schema)
-		if err != nil {
-			return nil, fmt.Errorf("argument %s of %s: %w", mapping.TargetArgName, mapping.TargetArgPath, err)
-		}
-		args = append(args, providerArgument{path: mapping.TargetArgPath, name: mapping.TargetArgName, value: value})
+		args = append(args, providerArgument{path: mapping.TargetArgPath, name: mapping.TargetArgName, typ: typ, value: binding.Value})
 	}
 	sort.Slice(args, func(i, j int) bool {
 		if args[i].path != args[j].path {
@@ -228,6 +261,24 @@ func (p *planner) arguments(field *operation.Field) ([]providerArgument, error) 
 		return args[i].name < args[j].name
 	})
 	return args, nil
+}
+
+// consumerArgType returns the type to declare for a mapping without a
+// targetArgType: the consumer argument's type, made non-null when the value
+// isn't null so that it also fits a non-null provider argument.
+func consumerArgType(binding operation.ArgumentBinding) (*ast.Type, error) {
+	segments := strings.Split(binding.Mapping.SourceArgPath, "-")
+	argDef := binding.Field.Definition.Arguments.ForName(segments[len(segments)-1])
+	if argDef == nil {
+		return nil, fmt.Errorf("argument %s of %s has no definition", segments[len(segments)-1], strings.Join(binding.Field.SchemaPath, "."))
+	}
+	typ := argDef.Type
+	if binding.Value != nil && !typ.NonNull {
+		nonNull := *typ
+		nonNull.NonNull = true
+		typ = &nonNull
+	}
+	return typ, nil
 }
 
 // addField adds the provider field at path to the operation, once.
@@ -243,24 +294,39 @@ func (f *fetch) addField(path string) {
 }
 
 // print returns the provider operation, named "Query" + the schema ID, with
-// characters that aren't valid in a GraphQL name replaced by "_".
-func (f *fetch) print() string {
+// characters that aren't valid in a GraphQL name replaced by "_", and the values
+// of its variables. Each mapped argument is a variable named after the
+// argument, with a numeric suffix when the name is already taken.
+func (f *fetch) print() (string, map[string]any) {
+	var definitions ast.VariableDefinitionList
+	var variables map[string]any
 	for _, arg := range f.args {
-		node := f.root
-		for _, name := range strings.Split(arg.path, ".") {
-			node = node.child(name)
+		name := arg.name
+		for i := 2; definitions.ForName(name) != nil; i++ {
+			name = fmt.Sprintf("%s_%d", arg.name, i)
 		}
-		node.arguments = append(node.arguments, &ast.Argument{Name: arg.name, Value: arg.value})
+		if variables == nil {
+			variables = map[string]any{}
+		}
+		variables[name] = arg.value
+		definitions = append(definitions, &ast.VariableDefinition{Variable: name, Type: arg.typ})
+
+		node := f.root
+		for segment := range strings.SplitSeq(arg.path, ".") {
+			node = node.child(segment)
+		}
+		node.arguments = append(node.arguments, &ast.Argument{Name: arg.name, Value: &ast.Value{Kind: ast.Variable, Raw: name}})
 	}
 
 	doc := &ast.QueryDocument{Operations: ast.OperationList{{
-		Operation:    ast.Query,
-		Name:         "Query" + operationName(f.schemaID),
-		SelectionSet: f.root.selectionSet(),
+		Operation:           ast.Query,
+		Name:                "Query" + operationName(f.schemaID),
+		VariableDefinitions: definitions,
+		SelectionSet:        f.root.selectionSet(),
 	}}}
 	var buf bytes.Buffer
 	formatter.NewFormatter(&buf, formatter.WithIndent("  ")).FormatQueryDocument(doc)
-	return strings.TrimSpace(buf.String())
+	return strings.TrimSpace(buf.String()), variables
 }
 
 // operationName returns id with every character that isn't valid in a GraphQL
@@ -321,72 +387,4 @@ func isPathPrefix(path, prefix string) bool {
 // hasPrefix reports whether prefix is the start of path.
 func hasPrefix(path, prefix []string) bool {
 	return len(prefix) <= len(path) && slices.Equal(path[:len(prefix)], prefix)
-}
-
-// astValue converts a coerced argument value to a GraphQL literal. typ, the
-// consumer argument's type, decides between String and Enum literals and lets
-// whole floats print as Int.
-func astValue(value any, typ *ast.Type, schema *ast.Schema) (*ast.Value, error) {
-	var named *ast.Definition
-	if typ != nil {
-		named = schema.Types[typ.Name()]
-	}
-
-	switch v := value.(type) {
-	case nil:
-		return &ast.Value{Kind: ast.NullValue, Raw: "null"}, nil
-	case string:
-		if named != nil && named.Kind == ast.Enum {
-			return &ast.Value{Kind: ast.EnumValue, Raw: v}, nil
-		}
-		return &ast.Value{Kind: ast.StringValue, Raw: v}, nil
-	case bool:
-		return &ast.Value{Kind: ast.BooleanValue, Raw: strconv.FormatBool(v)}, nil
-	case int:
-		return &ast.Value{Kind: ast.IntValue, Raw: strconv.Itoa(v)}, nil
-	case int64:
-		return &ast.Value{Kind: ast.IntValue, Raw: strconv.FormatInt(v, 10)}, nil
-	case float64:
-		if typ != nil && typ.Elem == nil && typ.NamedType == "Int" && v == math.Trunc(v) {
-			return &ast.Value{Kind: ast.IntValue, Raw: strconv.FormatFloat(v, 'f', -1, 64)}, nil
-		}
-		return &ast.Value{Kind: ast.FloatValue, Raw: strconv.FormatFloat(v, 'f', -1, 64)}, nil
-	case json.Number:
-		if _, err := v.Int64(); err == nil {
-			return &ast.Value{Kind: ast.IntValue, Raw: v.String()}, nil
-		}
-		return &ast.Value{Kind: ast.FloatValue, Raw: v.String()}, nil
-	case []any:
-		var elem *ast.Type
-		if typ != nil {
-			elem = typ.Elem
-		}
-		list := &ast.Value{Kind: ast.ListValue}
-		for _, item := range v {
-			child, err := astValue(item, elem, schema)
-			if err != nil {
-				return nil, err
-			}
-			list.Children = append(list.Children, &ast.ChildValue{Value: child})
-		}
-		return list, nil
-	case map[string]any:
-		object := &ast.Value{Kind: ast.ObjectValue}
-		for _, name := range slices.Sorted(maps.Keys(v)) {
-			var fieldType *ast.Type
-			if named != nil {
-				if def := named.Fields.ForName(name); def != nil {
-					fieldType = def.Type
-				}
-			}
-			child, err := astValue(v[name], fieldType, schema)
-			if err != nil {
-				return nil, err
-			}
-			object.Children = append(object.Children, &ast.ChildValue{Name: name, Value: child})
-		}
-		return object, nil
-	default:
-		return nil, fmt.Errorf("unsupported value of type %T", value)
-	}
 }

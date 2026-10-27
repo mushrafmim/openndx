@@ -1,0 +1,77 @@
+{
+  "response": {
+    "data": {
+      "personInfo": {
+        "ownedVehicles": [
+          {
+            "make": "Toyota",
+            "regNo": "CAB-1234"
+          },
+          {
+            "make": "Honda",
+            "regNo": "WP-5678"
+          }
+        ]
+      }
+    }
+  },
+  "policyRequests": [
+    {
+      "applicationId": "app-golden",
+      "requiredFields": [
+        {
+          "fieldName": "vehicle.getVehicleInfos.data.make",
+          "schemaId": "dmt-v1"
+        },
+        {
+          "fieldName": "vehicle.getVehicleInfos.data.registrationNumber",
+          "schemaId": "dmt-v1"
+        }
+      ]
+    }
+  ],
+  "consentRequests": [],
+  "providerRequests": {
+    "dmt-v1": [
+      {
+        "query": "query Querydmt_v1 ( $filter : VehicleFilterInput $ownerNic : String ! ) { vehicle { getVehicleInfos ( filter : $filter ownerNic : $ownerNic ) { data { registrationNumber make } } } }",
+        "variables": {
+          "filter": {
+            "makes": [
+              "Toyota",
+              "Honda"
+            ],
+            "registeredAfter": 2020
+          },
+          "ownerNic": "199012345678"
+        }
+      }
+    ]
+  },
+  "auditEvents": [
+    {
+      "eventType": "DATA_REQUEST",
+      "status": "SUCCESS",
+      "actorType": "APPLICATION",
+      "actorId": "app-golden",
+      "targetType": "SERVICE",
+      "targetId": "SERVICE"
+    },
+    {
+      "eventType": "POLICY_CHECK",
+      "status": "SUCCESS",
+      "actorType": "SERVICE",
+      "actorId": "orchestration-engine",
+      "targetType": "SERVICE",
+      "targetId": "policy-decision-point"
+    },
+    {
+      "eventType": "PROVIDER_FETCH",
+      "status": "SUCCESS",
+      "actorType": "SERVICE",
+      "actorId": "orchestration-engine",
+      "targetType": "SERVICE",
+      "targetId": "dmt-v1"
+    }
+  ]
+}

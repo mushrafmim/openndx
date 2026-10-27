@@ -310,7 +310,7 @@ func TestCommittedConfigsFederate(t *testing.T) {
 							http.Error(w, "invalid request", http.StatusBadRequest)
 							return
 						}
-						if !assert.Contains(t, request.Query, `nic: "748213"`) {
+						if !assert.Contains(t, request.Query, `(nic: $nic)`) || !assert.Equal(t, "748213", request.Variables["nic"]) {
 							http.Error(w, "missing NIC", http.StatusBadRequest)
 							return
 						}

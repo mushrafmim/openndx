@@ -50,11 +50,14 @@ providers:
         clientSecret: test_secret
 
 argMappings:
+  # Both providers declare nic as ID!; the consumer schema has String!.
   - schemaId: drp-person-v1
     targetArgName: nic
     sourceArgPath: personInfo-nic
     targetArgPath: person
+    targetArgType: "ID!"
   - schemaId: rgd-person-v1
     targetArgName: nic
     sourceArgPath: personInfo-nic
     targetArgPath: getPersonInfo
+    targetArgType: "ID!"

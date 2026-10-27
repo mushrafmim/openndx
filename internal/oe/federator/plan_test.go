@@ -1,6 +1,7 @@
 package federator
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -19,8 +20,13 @@ const planTestSchema = `
 enum Lang { EN SI }
 
 type Query {
-	personInfo(nic: String!, lang: Lang, year: Int): PersonInfo
+	personInfo(nic: String!, lang: Lang, year: Int, filter: Filter): PersonInfo
 	required(nic: String!): Required!
+}
+
+input Filter {
+	makes: [String!]
+	since: Int
 }
 
 type PersonInfo {
@@ -56,11 +62,18 @@ var planTestMappings = []*graphql.ArgMapping{
 	{SchemaID: "drp-v1", SourceArgPath: "personInfo-lang", TargetArgPath: "person", TargetArgName: "lang"},
 	{SchemaID: "drp-v1", SourceArgPath: "personInfo-year", TargetArgPath: "person", TargetArgName: "year"},
 	{SchemaID: "dmt-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "vehicle.list", TargetArgName: "ownerNic"},
+	{SchemaID: "dmt-v1", SourceArgPath: "personInfo-filter", TargetArgPath: "vehicle.list", TargetArgName: "filter", TargetArgType: "VehicleFilter"},
 	{SchemaID: "drp-v1", SourceArgPath: "required-nic", TargetArgPath: "required", TargetArgName: "nic"},
 }
 
 // planFor normalizes and plans query against planTestSchema.
 func planFor(t *testing.T, query string, variables map[string]any) (*operation.Operation, *plan) {
+	t.Helper()
+	return planWith(t, query, variables, planTestMappings)
+}
+
+// planWith is planFor with mappings in place of planTestMappings.
+func planWith(t *testing.T, query string, variables map[string]any, mappings []*graphql.ArgMapping) (*operation.Operation, *plan) {
 	t.Helper()
 	compiled, err := schema.Compile(planTestSchema)
 	require.NoError(t, err)
@@ -69,7 +82,9 @@ func planFor(t *testing.T, query string, variables map[string]any) (*operation.O
 	require.Empty(t, validator.ValidateWithRules(compiled.Schema, doc, nil), "the test query must be valid")
 	op, err := operation.Build(compiled, doc, "", variables)
 	require.NoError(t, err)
-	p, err := buildPlan(compiled.Schema, op, planTestMappings)
+	targetTypes, err := targetArgTypes(mappings)
+	require.NoError(t, err)
+	p, err := buildPlan(op, mappings, targetTypes)
 	require.NoError(t, err)
 	return op, p
 }
@@ -86,12 +101,14 @@ func TestBuildPlan(t *testing.T) {
 		require.Len(t, p.fetches, 2)
 		drp, dmt := p.fetches[0], p.fetches[1]
 		assert.Equal(t, "drp-v1", drp.schemaID)
-		assert.Equal(t, `query Querydrp_v1 { person(lang: SI, nic: "1") { fullName tags } }`, compact(drp.query))
+		assert.Equal(t, `query Querydrp_v1 ($lang: Lang!, $nic: String!) { person(lang: $lang, nic: $nic) { fullName tags } }`, compact(drp.query))
+		assert.Equal(t, map[string]any{"lang": "SI", "nic": "1"}, drp.variables)
 		assert.Equal(t, []string{"person.fullName", "person.tags"}, drp.fields)
 
 		assert.Equal(t, "dmt-v1", dmt.schemaID)
-		assert.Equal(t, `query Querydmt_v1 { vehicle { list(ownerNic: "1") { data { registrationNumber make owner { name } } } } }`, compact(dmt.query),
+		assert.Equal(t, `query Querydmt_v1 ($ownerNic: String!) { vehicle { list(ownerNic: $ownerNic) { data { registrationNumber make owner { name } } } } }`, compact(dmt.query),
 			"a list item's field declared outside the list is read by its last segment")
+		assert.Equal(t, map[string]any{"ownerNic": "1"}, dmt.variables)
 		assert.Equal(t, []string{"vehicle.list.data.registrationNumber", "vehicle.list.data.make", "vehicle.list.data.owner.name"}, dmt.fields)
 
 		assert.Equal(t, []policy.RequiredField{
@@ -107,7 +124,7 @@ func TestBuildPlan(t *testing.T) {
 		_, p := planFor(t, `{ a: personInfo(nic: "1") { fullName } b: personInfo(nic: "1") { name: fullName tags } }`, nil)
 
 		require.Len(t, p.fetches, 1)
-		assert.Equal(t, `query Querydrp_v1 { person(nic: "1") { fullName tags } }`, compact(p.fetches[0].query))
+		assert.Equal(t, `query Querydrp_v1 ($nic: String!) { person(nic: $nic) { fullName tags } }`, compact(p.fetches[0].query))
 		assert.Equal(t, []policy.RequiredField{
 			{SchemaID: "drp-v1", FieldName: "person.fullName"},
 			{SchemaID: "drp-v1", FieldName: "person.tags"},
@@ -118,17 +135,60 @@ func TestBuildPlan(t *testing.T) {
 		_, p := planFor(t, `{ a: personInfo(nic: "1", lang: EN) { fullName } b: personInfo(nic: "1", lang: SI) { fullName } }`, nil)
 
 		require.Len(t, p.fetches, 2)
-		assert.Equal(t, `query Querydrp_v1 { person(lang: EN, nic: "1") { fullName } }`, compact(p.fetches[0].query))
-		assert.Equal(t, `query Querydrp_v1 { person(lang: SI, nic: "1") { fullName } }`, compact(p.fetches[1].query))
+		assert.Equal(t, p.fetches[0].query, p.fetches[1].query, "the operation text doesn't depend on the values")
+		assert.Equal(t, map[string]any{"lang": "EN", "nic": "1"}, p.fetches[0].variables)
+		assert.Equal(t, map[string]any{"lang": "SI", "nic": "1"}, p.fetches[1].variables)
 	})
 
-	t.Run("prints variables and defaults by their consumer argument type", func(t *testing.T) {
+	t.Run("forwards variables and defaults with their consumer argument type", func(t *testing.T) {
 		_, p := planFor(t, `query ($lang: Lang = SI, $year: Int) { personInfo(nic: "1", lang: $lang, year: $year) { fullName } }`,
 			map[string]any{"year": float64(2024)})
 
 		require.Len(t, p.fetches, 1)
-		assert.Equal(t, `query Querydrp_v1 { person(lang: SI, nic: "1", year: 2024) { fullName } }`, compact(p.fetches[0].query),
-			"an enum prints as an enum, and a whole JSON number for an Int as an Int")
+		assert.Equal(t, `query Querydrp_v1 ($lang: Lang!, $nic: String!, $year: Int!) { person(lang: $lang, nic: $nic, year: $year) { fullName } }`,
+			compact(p.fetches[0].query), "a nullable consumer type is declared non-null when the value isn't null")
+		assert.Equal(t, map[string]any{"lang": "SI", "nic": "1", "year": float64(2024)}, p.fetches[0].variables,
+			"a variable's default is forwarded")
+	})
+
+	t.Run("forwards a null value with the nullable consumer type", func(t *testing.T) {
+		_, p := planFor(t, `{ personInfo(nic: "1", year: null) { fullName } }`, nil)
+
+		require.Len(t, p.fetches, 1)
+		assert.Equal(t, `query Querydrp_v1 ($nic: String!, $year: Int) { person(nic: $nic, year: $year) { fullName } }`, compact(p.fetches[0].query))
+		assert.Equal(t, map[string]any{"nic": "1", "year": nil}, p.fetches[0].variables)
+	})
+
+	t.Run("forwards an object variable with its targetArgType", func(t *testing.T) {
+		_, p := planFor(t, `query ($filter: Filter) { personInfo(nic: "1", filter: $filter) { ownedVehicles { regNo } } }`,
+			map[string]any{"filter": map[string]any{"makes": []any{"Toyota", "Honda"}, "since": float64(2020)}})
+
+		require.Len(t, p.fetches, 1)
+		assert.Equal(t, `query Querydmt_v1 ($filter: VehicleFilter, $ownerNic: String!) { vehicle { list(filter: $filter, ownerNic: $ownerNic) { data { registrationNumber } } } }`,
+			compact(p.fetches[0].query), "targetArgType is declared as given")
+		assert.Equal(t, map[string]any{
+			"filter":   map[string]any{"makes": []any{"Toyota", "Honda"}, "since": float64(2020)},
+			"ownerNic": "1",
+		}, p.fetches[0].variables)
+	})
+
+	t.Run("splits fetches when aliases map different object values", func(t *testing.T) {
+		_, p := planFor(t, `{ a: personInfo(nic: "1", filter: {makes: ["Toyota"]}) { ownedVehicles { regNo } } b: personInfo(nic: "1", filter: {makes: ["Honda"]}) { ownedVehicles { make } } }`, nil)
+
+		require.Len(t, p.fetches, 2)
+		assert.Equal(t, map[string]any{"makes": []any{"Toyota"}}, p.fetches[0].variables["filter"])
+		assert.Equal(t, map[string]any{"makes": []any{"Honda"}}, p.fetches[1].variables["filter"])
+	})
+
+	t.Run("suffixes a variable whose name is already taken", func(t *testing.T) {
+		_, p := planWith(t, `{ personInfo(nic: "1", year: 2024) { tags } }`, nil, []*graphql.ArgMapping{
+			{SchemaID: "drp-v1", SourceArgPath: "personInfo-nic", TargetArgPath: "person", TargetArgName: "id"},
+			{SchemaID: "drp-v1", SourceArgPath: "personInfo-year", TargetArgPath: "person.tags", TargetArgName: "id", TargetArgType: "ID!"},
+		})
+
+		require.Len(t, p.fetches, 1)
+		assert.Equal(t, `query Querydrp_v1 ($id: String!, $id_2: ID!) { person(id: $id) { tags(id: $id_2) } }`, compact(p.fetches[0].query))
+		assert.Equal(t, map[string]any{"id": "1", "id_2": int64(2024)}, p.fetches[0].variables)
 	})
 
 	t.Run("plans nothing for __typename and fields without @sourceInfo", func(t *testing.T) {
@@ -146,7 +206,7 @@ func TestBuildPlan(t *testing.T) {
 		op, err := operation.Build(compiled, doc, "", nil)
 		require.NoError(t, err)
 
-		_, err = buildPlan(compiled.Schema, op, planTestMappings)
+		_, err = buildPlan(op, planTestMappings, nil)
 		assert.EqualError(t, err, "list field personInfo.contacts has no @sourceInfo, so its items can't be read from a provider")
 	})
 
@@ -159,39 +219,19 @@ func TestBuildPlan(t *testing.T) {
 		op, err := operation.Build(compiled, doc, "", nil)
 		require.NoError(t, err)
 
-		_, err = buildPlan(compiled.Schema, op, planTestMappings)
+		_, err = buildPlan(op, planTestMappings, nil)
 		assert.EqualError(t, err, "introspection field __schema is not supported")
 	})
 }
 
-func TestAstValue(t *testing.T) {
-	compiled, err := schema.Compile(planTestSchema)
-	require.NoError(t, err)
-	stringType := &ast.Type{NamedType: "String"}
-	intType := &ast.Type{NamedType: "Int"}
-
-	for name, tc := range map[string]struct {
-		value any
-		typ   *ast.Type
-		want  string
-	}{
-		"string":           {value: `say "hi"`, typ: stringType, want: `"say \"hi\""`},
-		"enum":             {value: "SI", typ: &ast.Type{NamedType: "Lang"}, want: `SI`},
-		"null":             {value: nil, typ: stringType, want: `null`},
-		"boolean":          {value: true, want: `true`},
-		"int64":            {value: int64(7), typ: intType, want: `7`},
-		"whole float Int":  {value: float64(7), typ: intType, want: `7`},
-		"float":            {value: 7.5, want: `7.5`},
-		"list":             {value: []any{"a", "b"}, typ: &ast.Type{Elem: stringType}, want: `["a","b"]`},
-		"object keys sort": {value: map[string]any{"b": int64(2), "a": "x"}, want: `{a:"x",b:2}`},
-	} {
-		t.Run(name, func(t *testing.T) {
-			got, err := astValue(tc.value, tc.typ, compiled.Schema)
-			require.NoError(t, err)
-			assert.Equal(t, tc.want, got.String())
-		})
+func TestParseType(t *testing.T) {
+	for _, s := range []string{"ID", "ID!", "[String!]!", " [ String ! ] "} {
+		typ, err := parseType(s)
+		require.NoError(t, err, s)
+		assert.Equal(t, strings.Join(strings.Fields(s), ""), typ.String())
 	}
-
-	_, err = astValue(struct{}{}, nil, compiled.Schema)
-	assert.EqualError(t, err, "unsupported value of type struct {}")
+	for _, s := range []string{"", "!", "[String", "String = 1", "String) { a } query q($b: Int", "String @deprecated"} {
+		_, err := parseType(s)
+		assert.EqualError(t, err, strconv.Quote(s)+" is not a GraphQL type")
+	}
 }

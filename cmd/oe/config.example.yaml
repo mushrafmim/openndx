@@ -71,7 +71,11 @@ argMappings:
     targetArgName: nic
     sourceArgPath: personInfo-nic
     targetArgPath: person
+    # The provider argument's type, when it differs from the consumer's: both
+    # providers declare nic as ID!, and the consumer schema has String!.
+    targetArgType: "ID!"
   - schemaId: rgd-person-v1
     targetArgName: nic
     sourceArgPath: personInfo-nic
     targetArgPath: getPersonInfo
+    targetArgType: "ID!"

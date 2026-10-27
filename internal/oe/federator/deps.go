@@ -104,10 +104,14 @@ func New(deps Deps, opts Options) (*Federator, error) {
 	if opts.FoundationalIdArgName == "" {
 		return nil, fmt.Errorf("fatal configuration error: foundationalIdArgName is not configured - cannot identify the Data Owner ID argument")
 	}
+	targetTypes, err := targetArgTypes(opts.ArgMapping)
+	if err != nil {
+		return nil, fmt.Errorf("fatal configuration error: %w", err)
+	}
 	if deps.Auditor == nil {
 		deps.Auditor = noopAuditor{}
 	}
-	return &Federator{deps: deps, opts: opts}, nil
+	return &Federator{deps: deps, opts: opts, targetTypes: targetTypes}, nil
 }
 
 type noopAuditor struct{}

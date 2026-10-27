@@ -39,12 +39,18 @@
   "providerRequests": {
     "dmt-v1": [
       {
-        "query": "query Querydmt_v1 { vehicle { getVehicleInfos ( ownerNic : \"199012345678\" ) { data { registrationNumber make } } } }"
+        "query": "query Querydmt_v1 ( $ownerNic : String ! ) { vehicle { getVehicleInfos ( ownerNic : $ownerNic ) { data { registrationNumber make } } } }",
+        "variables": {
+          "ownerNic": "199012345678"
+        }
       }
     ],
     "drp-v1": [
       {
-        "query": "query Querydrp_v1 { person ( nic : \"199012345678\" ) { fullName } }"
+        "query": "query Querydrp_v1 ( $nic : String ! ) { person ( nic : $nic ) { fullName } }",
+        "variables": {
+          "nic": "199012345678"
+        }
       }
     ]
   },
