@@ -26,7 +26,7 @@ func (f *Federator) execute(ctx context.Context, appID string, fetches []*fetch)
 	for _, ft := range fetches {
 		client, ok := f.deps.Providers.Get(ft.schemaID)
 		if !ok {
-			slog.Info("Provider not found", "Schema ID", ft.schemaID)
+			slog.InfoContext(ctx, "Provider not found", "Schema ID", ft.schemaID)
 			results[ft] = fetchResult{err: fmt.Errorf("no provider is configured for schema %s", ft.schemaID)}
 			continue
 		}
@@ -43,7 +43,7 @@ func (f *Federator) execute(ctx context.Context, appID string, fetches []*fetch)
 			}
 			response, err := client.Execute(ctx, graphql.Request{Query: ft.query, Variables: ft.variables})
 			if err != nil {
-				slog.Info("Request failed to the Provider", "Schema ID", ft.schemaID, "Error", err)
+				slog.InfoContext(ctx, "Request failed to the Provider", "Schema ID", ft.schemaID, "Error", err)
 				f.deps.Auditor.ProviderFetch(ctx, audit, nil, err)
 			} else {
 				f.deps.Auditor.ProviderFetch(ctx, audit, &response, nil)

@@ -10,6 +10,7 @@ import (
 	"github.com/OpenNSW/core/configyaml"
 	"github.com/OpenNSW/core/shared/validation"
 	"github.com/openndx/openndx-core/internal/authn"
+	"github.com/openndx/openndx-core/internal/logging"
 	"github.com/openndx/openndx-core/internal/oe/pkg/graphql"
 	"github.com/openndx/openndx-core/internal/oe/provider"
 )
@@ -19,8 +20,11 @@ const defaultConfigPath = "config.yaml"
 
 // Config is the OE's configuration, loaded from a single YAML file.
 type Config struct {
-	Server  ServerConfig  `yaml:"server"`
-	Logging LoggingConfig `yaml:"logging"`
+	Server ServerConfig `yaml:"server"`
+	// Environment names the deployment (e.g. local, staging, production). Log
+	// lines carry it when it is set.
+	Environment string         `yaml:"environment"`
+	Logging     logging.Config `yaml:"logging"`
 	// SchemaPath is the consumer GraphQL schema file, read once at startup. A
 	// relative path is resolved against the directory of the config file.
 	SchemaPath string `yaml:"schemaPath"`
@@ -45,12 +49,6 @@ type ServerConfig struct {
 	Timeout time.Duration `yaml:"timeout"`
 }
 
-// LoggingConfig holds the log level (debug, info, warn, error) and format (text, json).
-type LoggingConfig struct {
-	Level  string `yaml:"level"`
-	Format string `yaml:"format"`
-}
-
 // ServiceURLConfig holds the base URL of a service the OE calls. The OE skips
 // the service's check when URL is empty.
 type ServiceURLConfig struct {
@@ -69,7 +67,7 @@ type AuditConfig struct {
 func defaultConfig() Config {
 	return Config{
 		Server:     ServerConfig{Port: 4000, Timeout: 30 * time.Second},
-		Logging:    LoggingConfig{Level: "info", Format: "text"},
+		Logging:    logging.DefaultConfig(),
 		SchemaPath: "schema.graphql",
 		Audit:      AuditConfig{ActorType: "SERVICE", ActorID: "orchestration-engine"},
 	}
@@ -114,15 +112,8 @@ func (c *Config) Validate() error {
 	if c.Server.Timeout <= 0 {
 		return fmt.Errorf("server.timeout must be positive")
 	}
-	switch c.Logging.Level {
-	case "debug", "info", "warn", "error":
-	default:
-		return fmt.Errorf("logging.level must be debug, info, warn or error")
-	}
-	switch c.Logging.Format {
-	case "text", "json":
-	default:
-		return fmt.Errorf("logging.format must be text or json")
+	if err := c.Logging.Validate(); err != nil {
+		return err
 	}
 	if c.SchemaPath == "" {
 		return fmt.Errorf("schemaPath must not be empty")

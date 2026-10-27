@@ -15,6 +15,7 @@ import (
 
 	remoteauth "github.com/OpenNSW/core/remote/auth"
 	"github.com/openndx/openndx-core/internal/authn"
+	"github.com/openndx/openndx-core/internal/logging"
 	"github.com/openndx/openndx-core/internal/oe/auth"
 	"github.com/openndx/openndx-core/internal/oe/federator"
 	"github.com/openndx/openndx-core/internal/oe/federator/schema"
@@ -49,7 +50,8 @@ func TestLoadConfigAppliesDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, ServerConfig{Port: 4000, Timeout: 30 * time.Second}, cfg.Server)
-	assert.Equal(t, LoggingConfig{Level: "info", Format: "text"}, cfg.Logging)
+	assert.Empty(t, cfg.Environment)
+	assert.Equal(t, logging.Config{Level: "info", Format: "json"}, cfg.Logging)
 	assert.Equal(t, filepath.Join(filepath.Dir(path), "schema.graphql"), cfg.SchemaPath,
 		"the schema defaults to the schema.graphql next to the config file")
 	assert.Equal(t, "nic", cfg.FoundationalIDArgName)
@@ -73,9 +75,10 @@ func TestLoadConfigReadsEverySetting(t *testing.T) {
 server:
   port: 4100
   timeout: 45s
+environment: staging
 logging:
   level: debug
-  format: json
+  format: text
 schemaPath: /etc/oe/schema.graphql
 foundationalIdArgName: nic
 idp:
@@ -118,7 +121,8 @@ argMappings:
 	require.NoError(t, err)
 
 	assert.Equal(t, ServerConfig{Port: 4100, Timeout: 45 * time.Second}, cfg.Server)
-	assert.Equal(t, LoggingConfig{Level: "debug", Format: "json"}, cfg.Logging)
+	assert.Equal(t, "staging", cfg.Environment)
+	assert.Equal(t, logging.Config{Level: "debug", Format: "text"}, cfg.Logging)
 	assert.Equal(t, "/etc/oe/schema.graphql", cfg.SchemaPath, "an absolute schemaPath is used as is")
 	assert.True(t, cfg.IDP.InsecureSkipTLSVerify)
 	assert.Equal(t, "http://pdp.internal:8082", cfg.PDP.URL)

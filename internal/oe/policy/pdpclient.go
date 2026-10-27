@@ -34,17 +34,17 @@ func (p *PdpClient) MakePdpRequest(ctx context.Context, request *PdpRequest) (*P
 	requestBody, err := json.Marshal(request)
 	if err != nil {
 		// handle error
-		slog.Error("Failed to marshal PDP request", "error", err)
+		slog.ErrorContext(ctx, "Failed to marshal PDP request", "error", err)
 		return nil, err
 	}
 
 	// log the json request body
-	slog.Info("PDP Request Body", "body", string(requestBody))
+	slog.InfoContext(ctx, "PDP Request Body", "body", string(requestBody))
 
 	// Create request with context for cancellation and timeout support
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseUrl+policyDecisionEndpointPath, bytes.NewReader(requestBody))
 	if err != nil {
-		slog.Error("Failed to create PDP request", "error", err)
+		slog.ErrorContext(ctx, "Failed to create PDP request", "error", err)
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -58,7 +58,7 @@ func (p *PdpClient) MakePdpRequest(ctx context.Context, request *PdpRequest) (*P
 	response, err := p.httpClient.Do(req)
 	if err != nil {
 		// handle error
-		slog.Error("Failed to make PDP request", "error", err)
+		slog.ErrorContext(ctx, "Failed to make PDP request", "error", err)
 		return nil, err
 	}
 	defer response.Body.Close()
@@ -66,10 +66,10 @@ func (p *PdpClient) MakePdpRequest(ctx context.Context, request *PdpRequest) (*P
 	if response.StatusCode != http.StatusOK {
 		var errorBody bytes.Buffer
 		if _, err := errorBody.ReadFrom(response.Body); err != nil {
-			slog.Error("Failed to read error response body", "error", err)
+			slog.ErrorContext(ctx, "Failed to read error response body", "error", err)
 		}
 		errorMsg := errorBody.String()
-		slog.Error("PDP request failed", "status", response.StatusCode, "response", errorMsg)
+		slog.ErrorContext(ctx, "PDP request failed", "status", response.StatusCode, "response", errorMsg)
 		return nil, fmt.Errorf("PDP request failed, status code: %d, response: %s", response.StatusCode, errorMsg)
 	}
 
@@ -77,7 +77,7 @@ func (p *PdpClient) MakePdpRequest(ctx context.Context, request *PdpRequest) (*P
 	err = json.NewDecoder(response.Body).Decode(&pdpResponse)
 	if err != nil {
 		// handle error
-		slog.Error("Failed to decode PDP response", "error", err)
+		slog.ErrorContext(ctx, "Failed to decode PDP response", "error", err)
 		return nil, err
 	}
 

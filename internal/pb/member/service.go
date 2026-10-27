@@ -47,7 +47,7 @@ func (s *Service) CreateMember(ctx context.Context, req *CreateMemberRequest) (*
 		return nil, fmt.Errorf("failed to create member in database: %w", err)
 	}
 
-	slog.Info("Created member successfully", "memberID", member.MemberID, "ouID", member.OuID)
+	slog.InfoContext(ctx, "Created member successfully", "memberID", member.MemberID, "ouID", member.OuID)
 	return s.buildMemberResponse(&member), nil
 }
 
@@ -73,7 +73,7 @@ func (s *Service) UpdateMember(ctx context.Context, memberID string, req *Update
 		return nil, fmt.Errorf("failed to update member in database: %w", err)
 	}
 
-	slog.Info("Updated member successfully", "memberID", memberID)
+	slog.InfoContext(ctx, "Updated member successfully", "memberID", memberID)
 	return s.buildMemberResponse(&member), nil
 }
 

@@ -6,9 +6,11 @@ server:
   port: 8082
   timeout: 10s
 
+environment: local
+
 logging:
-  level: debug
-  format: text
+  level: info
+  format: json
 
 database:
   driver: postgres

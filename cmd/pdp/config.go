@@ -8,6 +8,7 @@ import (
 
 	"github.com/OpenNSW/core/configyaml"
 	"github.com/OpenNSW/core/database"
+	"github.com/openndx/openndx-core/internal/logging"
 )
 
 // defaultConfigPath is used when neither -config nor CONFIG_PATH is set.
@@ -15,9 +16,12 @@ const defaultConfigPath = "config.yaml"
 
 // Config is the PDP's configuration, loaded from a single YAML file.
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Logging  LoggingConfig  `yaml:"logging"`
-	Database DatabaseConfig `yaml:"database"`
+	Server ServerConfig `yaml:"server"`
+	// Environment names the deployment (e.g. local, staging, production). Log
+	// lines carry it when it is set.
+	Environment string         `yaml:"environment"`
+	Logging     logging.Config `yaml:"logging"`
+	Database    DatabaseConfig `yaml:"database"`
 }
 
 // ServerConfig holds the HTTP server settings.
@@ -25,12 +29,6 @@ type ServerConfig struct {
 	Port int `yaml:"port"`
 	// Timeout bounds reading a request and writing its response.
 	Timeout time.Duration `yaml:"timeout"`
-}
-
-// LoggingConfig holds the log level (debug, info, warn, error) and format (text, json).
-type LoggingConfig struct {
-	Level  string `yaml:"level"`
-	Format string `yaml:"format"`
 }
 
 // DatabaseConfig is the shared database configuration plus the PDP's own settings.
@@ -44,7 +42,7 @@ type DatabaseConfig struct {
 func defaultConfig() Config {
 	return Config{
 		Server:  ServerConfig{Port: 8082, Timeout: 10 * time.Second},
-		Logging: LoggingConfig{Level: "info", Format: "text"},
+		Logging: logging.DefaultConfig(),
 		Database: DatabaseConfig{
 			Config: database.Config{
 				Driver: database.Postgres,
@@ -95,15 +93,8 @@ func (c *Config) Validate() error {
 	if c.Server.Timeout <= 0 {
 		return fmt.Errorf("server.timeout must be positive")
 	}
-	switch c.Logging.Level {
-	case "debug", "info", "warn", "error":
-	default:
-		return fmt.Errorf("logging.level must be debug, info, warn or error")
-	}
-	switch c.Logging.Format {
-	case "text", "json":
-	default:
-		return fmt.Errorf("logging.format must be text or json")
+	if err := c.Logging.Validate(); err != nil {
+		return err
 	}
 	if c.Database.Driver != database.Postgres {
 		return fmt.Errorf("database.driver must be postgres")

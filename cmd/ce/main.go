@@ -17,6 +17,7 @@ import (
 	"github.com/openndx/openndx-core/internal/ce/middleware"
 	"github.com/openndx/openndx-core/internal/ce/services"
 	"github.com/openndx/openndx-core/internal/database"
+	"github.com/openndx/openndx-core/internal/logging"
 	"github.com/openndx/openndx-core/internal/monitoring"
 	"github.com/openndx/openndx-core/internal/utils"
 )
@@ -46,12 +47,10 @@ func run() error {
 		return fmt.Errorf("load configuration: %w", err)
 	}
 
-	// Setup logging
-	utils.SetupLogging(cfg.Logging.Format, cfg.Logging.Level)
+	logging.Setup(cfg.Logging, "consent-engine", cfg.Environment, Version)
 
 	slog.Info("Starting consent engine",
 		"port", cfg.Server.Port,
-		"version", Version,
 		"build_time", BuildTime,
 		"git_commit", GitCommit)
 
@@ -129,7 +128,7 @@ func run() error {
 	httpServer := utils.CreateServer(serverConfig, handler)
 
 	// Start server with graceful shutdown
-	if err := utils.StartServerWithGracefulShutdown(httpServer, "consent-engine"); err != nil {
+	if err := utils.StartServerWithGracefulShutdown(httpServer); err != nil {
 		return fmt.Errorf("server failed: %w", err)
 	}
 	return nil

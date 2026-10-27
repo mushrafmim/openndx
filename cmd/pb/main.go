@@ -17,6 +17,7 @@ import (
 	"github.com/OpenNSW/core/cors"
 	"github.com/openndx/openndx-core/internal/authn"
 	"github.com/openndx/openndx-core/internal/database"
+	"github.com/openndx/openndx-core/internal/logging"
 	"github.com/openndx/openndx-core/internal/pb/application"
 	"github.com/openndx/openndx-core/internal/pb/caller"
 	"github.com/openndx/openndx-core/internal/pb/idp/thunderid"
@@ -43,10 +44,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	utils.SetupLogging(cfg.Logging.Format, cfg.Logging.Level)
+	logging.Setup(cfg.Logging, "portal-backend", cfg.Environment, Version)
 
 	slog.Info("Starting Portal Backend initialization",
-		"version", Version,
 		"build_time", BuildTime,
 		"git_commit", GitCommit)
 

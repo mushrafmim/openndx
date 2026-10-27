@@ -102,14 +102,14 @@ func (s *Service) CreateApplication(ctx context.Context, req *CreateApplicationR
 		if !externallyProvisioned {
 			if deleteErr := s.idp.DeleteApplication(ctx, *idpApplicationID); deleteErr != nil {
 				// Log the compensation failure - this needs monitoring
-				slog.Error("Failed to compensate application creation",
+				slog.ErrorContext(ctx, "Failed to compensate application creation",
 					"applicationID", application.ApplicationID,
 					"originalError", err,
 					"compensationError", deleteErr)
 				// Return both errors for visibility
 				return nil, fmt.Errorf("failed to create application: %w, and failed to compensate: %w", err, deleteErr)
 			}
-			slog.Info("Successfully compensated application creation", "applicationID", application.ApplicationID)
+			slog.InfoContext(ctx, "Successfully compensated application creation", "applicationID", application.ApplicationID)
 		}
 		return nil, fmt.Errorf("failed to create application: %w", err)
 	}
@@ -137,7 +137,7 @@ func (s *Service) CreateApplication(ctx context.Context, req *CreateApplicationR
 		// Attempt to delete from database
 		dbDeleteErr = s.db.Delete(&application).Error
 		if dbDeleteErr != nil {
-			slog.Error("Failed to delete application from database during compensation",
+			slog.ErrorContext(ctx, "Failed to delete application from database during compensation",
 				"applicationID", application.ApplicationID,
 				"originalError", err,
 				"compensationError", dbDeleteErr)
@@ -149,7 +149,7 @@ func (s *Service) CreateApplication(ctx context.Context, req *CreateApplicationR
 		if !externallyProvisioned {
 			idpDeleteErr = s.idp.DeleteApplication(ctx, *application.IdpApplicationID)
 			if idpDeleteErr != nil {
-				slog.Error("Failed to delete application from IDP during compensation",
+				slog.ErrorContext(ctx, "Failed to delete application from IDP during compensation",
 					"applicationID", application.ApplicationID,
 					"idpApplicationID", *application.IdpApplicationID,
 					"originalError", err,
@@ -166,7 +166,7 @@ func (s *Service) CreateApplication(ctx context.Context, req *CreateApplicationR
 			return nil, fmt.Errorf("failed to update allow list: %w, and failed to compensate IDP deletion: %w", err, idpDeleteErr)
 		}
 
-		slog.Info("Successfully compensated application creation", "applicationID", application.ApplicationID)
+		slog.InfoContext(ctx, "Successfully compensated application creation", "applicationID", application.ApplicationID)
 		return nil, fmt.Errorf("failed to update allow list: %w", err)
 	}
 
@@ -457,13 +457,13 @@ func (s *Service) UpdateApplicationSubmission(ctx context.Context, submissionID 
 			// Compensation: Update submission status back to pending
 			submission.Status = string(kernel.StatusPending)
 			if updateErr := s.db.WithContext(ctx).Save(&submission).Error; updateErr != nil {
-				slog.Error("Failed to compensate submission status after application creation failure",
+				slog.ErrorContext(ctx, "Failed to compensate submission status after application creation failure",
 					"submissionID", submission.SubmissionID,
 					"originalError", err,
 					"compensationError", updateErr)
 				return nil, fmt.Errorf("failed to create application from approved submission: %w, and failed to compensate submission status: %w", err, updateErr)
 			}
-			slog.Info("Successfully compensated submission status after application creation failure", "submissionID", submission.SubmissionID)
+			slog.InfoContext(ctx, "Successfully compensated submission status after application creation failure", "submissionID", submission.SubmissionID)
 			return nil, fmt.Errorf("failed to create application from approved submission: %w", err)
 		}
 	}

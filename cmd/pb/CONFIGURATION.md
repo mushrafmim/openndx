@@ -16,8 +16,9 @@ The last column is the environment variable each key replaces, for upgrading fro
 |---|---|---|---|
 | `server.port` | `8083` | Listen port. The server binds on all interfaces. | `PORT` |
 | `server.timeout` | `15s` | Read and write timeout. | |
+| `environment` | none | Deployment name (for example `local`, `staging`), added to every log line as `environment`. Left out of log lines when empty. | |
 | `logging.level` | `info` | `debug`, `info`, `warn` or `error`. | |
-| `logging.format` | `json` | `json` or `text`. | |
+| `logging.format` | `json` | `json` or `text`. Every line carries `service`, `version` and, when set, `environment`. | |
 
 ## CORS
 

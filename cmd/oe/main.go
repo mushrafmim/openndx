@@ -1,7 +1,9 @@
 package main
 
 import (
-	"log"
+	"errors"
+	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/LSFLK/argus/pkg/audit"
 	"github.com/openndx/openndx-core/internal/authn"
+	"github.com/openndx/openndx-core/internal/logging"
 	"github.com/openndx/openndx-core/internal/oe/consent"
 	"github.com/openndx/openndx-core/internal/oe/federator"
 	"github.com/openndx/openndx-core/internal/oe/federator/schema"
@@ -19,12 +22,36 @@ import (
 	"github.com/openndx/openndx-core/internal/utils"
 )
 
+// Build information - set during build
+var (
+	Version   = "dev"
+	BuildTime = "unknown"
+	GitCommit = "unknown"
+)
+
+// main reports startup failures after run has released its resources.
 func main() {
-	config, err := loadConfig(os.Args[1:])
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+	if err := run(); err != nil {
+		slog.Error("Orchestration engine failed", "error", err)
+		os.Exit(1)
 	}
-	utils.SetupLogging(config.Logging.Format, config.Logging.Level)
+}
+
+// run loads validated configuration and owns the orchestration engine's server.
+func run() error {
+	config, err := loadConfig(os.Args[1:])
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load configuration: %w", err)
+	}
+	logging.Setup(config.Logging, "orchestration-engine", config.Environment, Version)
+
+	slog.Info("Starting orchestration engine",
+		"port", config.Server.Port,
+		"build_time", BuildTime,
+		"git_commit", GitCommit)
 
 	auditClient := audit.NewClient(audit.Config{
 		BaseURL: config.Audit.URL,
@@ -35,7 +62,7 @@ func main() {
 	// schema file and restart, so every OE instance serves the same schema.
 	consumerSchema, err := schema.Load(config.SchemaPath)
 	if err != nil {
-		log.Fatalf("Failed to load the consumer schema (check schemaPath in the config file): %v", err)
+		return fmt.Errorf("load the consumer schema (check schemaPath in the config file): %w", err)
 	}
 	slog.Info("Loaded consumer schema", "path", config.SchemaPath)
 
@@ -43,12 +70,12 @@ func main() {
 	// whichever client requested them.
 	authnManager, err := authn.NewManager(config.IDP)
 	if err != nil {
-		log.Fatalf("Failed to initialize authentication: %v", err)
+		return fmt.Errorf("initialize authentication: %w", err)
 	}
 
 	providers, err := provider.NewRegistry(config.Providers...)
 	if err != nil {
-		log.Fatalf("Invalid provider configuration: %v", err)
+		return fmt.Errorf("invalid provider configuration: %w", err)
 	}
 
 	deps := federator.Deps{
@@ -68,7 +95,7 @@ func main() {
 		ArgMapping:            config.ArgMappings,
 	})
 	if err != nil {
-		log.Fatalf("Failed to initialize federator: %v", err)
+		return fmt.Errorf("initialize federator: %w", err)
 	}
 
 	mux := http.NewServeMux()
@@ -84,7 +111,8 @@ func main() {
 	}, mux)
 
 	// Serves until SIGINT or SIGTERM, then shuts down gracefully.
-	if err := utils.StartServerWithGracefulShutdown(httpServer, "orchestration-engine"); err != nil {
-		log.Fatalf("Server failed: %v", err)
+	if err := utils.StartServerWithGracefulShutdown(httpServer); err != nil {
+		return fmt.Errorf("server failed: %w", err)
 	}
+	return nil
 }

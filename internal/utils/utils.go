@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -54,7 +52,7 @@ func PanicRecoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				slog.Error("Handler panicked", "error", err, "path", r.URL.Path)
+				slog.ErrorContext(r.Context(), "Handler panicked", "error", err, "path", r.URL.Path)
 				RespondWithError(w, http.StatusInternalServerError, "Internal server error")
 			}
 		}()
@@ -72,32 +70,33 @@ type ServerConfig struct {
 
 // StartServerWithGracefulShutdown starts an HTTP server and blocks until it
 // stops. On SIGINT or SIGTERM it waits up to 30 seconds for active requests to
-// finish before returning.
-func StartServerWithGracefulShutdown(server *http.Server, serviceName string) error {
+// finish before returning. Log lines name the service through the logger
+// internal/logging set up.
+func StartServerWithGracefulShutdown(server *http.Server) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	serverErr := make(chan error, 1)
 	go func() {
-		slog.Info("Server starting", "service", serviceName, "address", server.Addr)
+		slog.Info("Server starting", "address", server.Addr)
 		serverErr <- server.ListenAndServe()
 	}()
 
 	select {
 	case err := <-serverErr:
 		// ListenAndServe returned before any signal, so this is always an error.
-		slog.Error("Server failed to start", "error", err, "service", serviceName)
+		slog.Error("Server failed to start", "error", err)
 		return err
 	case <-ctx.Done():
 	}
 
-	slog.Info("Shutting down server...", "service", serviceName)
+	slog.Info("Shutting down server...")
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
 	// Shutdown returns once active requests finish or shutdownCtx expires.
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		slog.Error("Server shutdown error", "error", err, "service", serviceName)
+		slog.Error("Server shutdown error", "error", err)
 		return err
 	}
 	return nil
@@ -111,39 +110,5 @@ func CreateServer(config *ServerConfig, handler http.Handler) *http.Server {
 		ReadTimeout:  config.ReadTimeout,
 		WriteTimeout: config.WriteTimeout,
 		IdleTimeout:  config.IdleTimeout,
-	}
-}
-
-// SetupLogging configures logging based on the configuration
-func SetupLogging(format, level string) {
-	var handler slog.Handler
-
-	switch format {
-	case "json":
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: getLogLevel(level),
-		})
-	default:
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: getLogLevel(level),
-		})
-	}
-
-	slog.SetDefault(slog.New(handler))
-}
-
-// getLogLevel converts string level to slog.Level
-func getLogLevel(level string) slog.Level {
-	switch strings.ToLower(level) {
-	case "debug":
-		return slog.LevelDebug
-	case "info":
-		return slog.LevelInfo
-	case "warn", "warning":
-		return slog.LevelWarn
-	case "error":
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
 	}
 }

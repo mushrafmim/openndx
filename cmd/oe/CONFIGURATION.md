@@ -16,8 +16,9 @@ A value written as `"{{env:NAME}}"` or `"{{file:/path}}"` is read from that envi
 |---|---|---|
 | `server.port` | `4000` | |
 | `server.timeout` | `30s` | Bounds reading a request and writing its response, so it must cover the PDP, consent and provider calls a query makes. |
+| `environment` | none | Deployment name (for example `local`, `staging`), added to every log line as `environment`. Left out of log lines when empty. |
 | `logging.level` | `info` | `debug`, `info`, `warn` or `error`. |
-| `logging.format` | `text` | `text` or `json`. |
+| `logging.format` | `json` | `json` or `text`. Every line carries `service`, `version` and, when set, `environment`. |
 | `schemaPath` | `schema.graphql` | The consumer schema file. A relative path is resolved against the directory of the config file. See [Schema](#schema). |
 | `foundationalIdArgName` | | **Required.** The query argument that carries the data owner's ID, matched by name (for example `nic`) on every field of the query, aliases included. If a query has none the OE returns `MISSING_IDENTIFIER`; if it has several different values, `AMBIGUOUS_IDENTIFIER`. |
 | `idp.jwksURL`, `idp.issuer`, `idp.audience` | | **Required.** Consumer token validation. See [AUTHENTICATION.md](AUTHENTICATION.md#configuration). |

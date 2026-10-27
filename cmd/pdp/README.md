@@ -52,8 +52,9 @@ A value written as `"{{env:NAME}}"` or `"{{file:/path}}"` is read from that envi
 |---|---|---|
 | `server.port` | `8082` | Listen port. The server binds on all interfaces. |
 | `server.timeout` | `10s` | Read and write timeout. |
+| `environment` | none | Deployment name (for example `local`, `staging`), added to every log line. Left out of log lines when empty. |
 | `logging.level` | `info` | `debug`, `info`, `warn` or `error`. |
-| `logging.format` | `text` | `text` or `json`. |
+| `logging.format` | `json` | `json` or `text`. Every line carries `service`, `version` and, when set, `environment`. |
 | `database.driver` | `postgres` | Only `postgres` is supported. |
 | `database.postgres.host`, `.user`, `.password` | none | **Required.** |
 | `database.postgres.port` | `5432` | |

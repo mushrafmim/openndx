@@ -11,6 +11,7 @@ import (
 
 	"github.com/OpenNSW/core/cors"
 	"github.com/openndx/openndx-core/internal/authn"
+	"github.com/openndx/openndx-core/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,8 +46,8 @@ func TestLoadConfigAppliesDefaults(t *testing.T) {
 
 	assert.Equal(t, 8081, cfg.Server.Port)
 	assert.Equal(t, 10*time.Second, cfg.Server.Timeout)
-	assert.Equal(t, "info", cfg.Logging.Level)
-	assert.Equal(t, "text", cfg.Logging.Format)
+	assert.Empty(t, cfg.Environment)
+	assert.Equal(t, logging.Config{Level: "info", Format: "json"}, cfg.Logging)
 	assert.Equal(t, "sub", cfg.IDP.SubjectClaim)
 	assert.False(t, cfg.IDP.InsecureSkipTLSVerify)
 	assert.Equal(t, 30*time.Minute, cfg.Database.IdleTimeout)
@@ -80,9 +81,10 @@ func TestLoadConfigReadsEverySetting(t *testing.T) {
 server:
   port: 9081
   timeout: 3s
+environment: staging
 logging:
   level: warn
-  format: json
+  format: text
 consentPortalURL: https://consent.example
 cors:
   allowedOrigins:
@@ -117,7 +119,8 @@ database:
 	require.NoError(t, err)
 
 	assert.Equal(t, ServerConfig{Port: 9081, Timeout: 3 * time.Second}, cfg.Server)
-	assert.Equal(t, LoggingConfig{Level: "warn", Format: "json"}, cfg.Logging)
+	assert.Equal(t, "staging", cfg.Environment)
+	assert.Equal(t, logging.Config{Level: "warn", Format: "text"}, cfg.Logging)
 	assert.Equal(t, "https://consent.example", cfg.ConsentPortalURL)
 	assert.Equal(t, cors.Config{
 		AllowedOrigins:   []string{"https://admin.example", "https://consent.example"},

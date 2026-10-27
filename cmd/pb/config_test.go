@@ -11,6 +11,7 @@ import (
 
 	"github.com/OpenNSW/core/cors"
 	"github.com/openndx/openndx-core/internal/authn"
+	"github.com/openndx/openndx-core/internal/logging"
 	"github.com/openndx/openndx-core/internal/pb/idp/thunderid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,7 +51,8 @@ func TestLoadConfigAppliesDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, ServerConfig{Port: 8083, Timeout: 15 * time.Second}, cfg.Server)
-	assert.Equal(t, LoggingConfig{Level: "info", Format: "json"}, cfg.Logging)
+	assert.Empty(t, cfg.Environment)
+	assert.Equal(t, logging.Config{Level: "info", Format: "json"}, cfg.Logging)
 	assert.Equal(t, cors.Config{
 		AllowedOrigins: []string{"http://localhost:5173"},
 		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
@@ -84,6 +86,7 @@ func TestLoadConfigReadsEverySetting(t *testing.T) {
 server:
   port: 9083
   timeout: 3s
+environment: staging
 logging:
   level: warn
   format: text
@@ -132,7 +135,8 @@ database:
 	require.NoError(t, err)
 
 	assert.Equal(t, ServerConfig{Port: 9083, Timeout: 3 * time.Second}, cfg.Server)
-	assert.Equal(t, LoggingConfig{Level: "warn", Format: "text"}, cfg.Logging)
+	assert.Equal(t, "staging", cfg.Environment)
+	assert.Equal(t, logging.Config{Level: "warn", Format: "text"}, cfg.Logging)
 	assert.Equal(t, cors.Config{
 		AllowedOrigins:   []string{"https://member.example", "https://admin.example"},
 		AllowedMethods:   []string{"GET", "PUT"},
